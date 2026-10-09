@@ -1,0 +1,75 @@
+name: Deploy VM
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polymate-team07-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out the exact commit that passed CI
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Ignore a successful run superseded by a newer main commit
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          if test "$current_sha" = "$DEPLOY_SHA"; then
+            echo 'proceed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "CI passed for $DEPLOY_SHA, but main is now $current_sha; the newer run will deploy."
+            echo 'proceed=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install the CI-only VM key and pinned host key
+        if: steps.current.outputs.proceed == 'true'
+        env:
+          VM_DEPLOY_KEY: ${{ secrets.POLYMATE_VM_DEPLOY_KEY }}
+        run: |
+          test -n "$VM_DEPLOY_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_DEPLOY_KEY" > "$HOME/.ssh/id_polymate_ci"
+          chmod 600 "$HOME/.ssh/id_polymate_ci"
+          install -m 600 .github/viscon_known_hosts "$HOME/.ssh/known_hosts"
+          ssh -i "$HOME/.ssh/id_polymate_ci" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes viscon@07-direct.viscon-hackathon.ch 'test "$(id -un)" = viscon'
+
+      - name: Transfer the verified commit and deploy it on the VM
+        if: steps.current.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          if test "$current_sha" != "$DEPLOY_SHA"; then
+            echo "Skipping superseded commit $DEPLOY_SHA."
+            exit 0
+          fi
+          bundle="$RUNNER_TEMP/polymate-$DEPLOY_SHA.bundle"
+          git bundle create "$bundle" HEAD
+          git bundle verify "$bundle"
+          vm=viscon@07-direct.viscon-hackathon.ch
+          key="$HOME/.ssh/id_polymate_ci"
+          ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes "$vm" 'umask 077; mkdir -p /home/viscon/polymate-transfer'
+          scp -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes "$bundle" "$vm:/home/viscon/polymate-transfer/polymate-$DEPLOY_SHA.bundle"
+          ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes "$vm" "set -e; cd /home/viscon/polymate; git fetch /home/viscon/polymate-transfer/polymate-$DEPLOY_SHA.bundle HEAD; test \"\$(git rev-parse FETCH_HEAD)\" = '$DEPLOY_SHA'; scripts/deploy.sh FETCH_HEAD"

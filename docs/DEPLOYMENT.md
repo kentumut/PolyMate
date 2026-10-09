@@ -53,6 +53,10 @@ Target: `https://07.hackathon.ethz.ch`; SSH: `viscon@07-direct.viscon-hackathon.
 
 ## Deploy a reviewed commit
 
+Every successful `CI` push run on the current `main` commit now triggers the `Deploy VM` workflow. It transfers a complete Git bundle over SSH, then runs `scripts/deploy.sh FETCH_HEAD` on the VM. The workflow skips an older success if a newer commit has reached `main`. It uses the repository's `POLYMATE_VM_DEPLOY_KEY` Actions secret and the pinned host key in `.github/viscon_known_hosts`. The VM's authorized key has forwarding and PTY restrictions. Review the separate deployment job result before treating a change as live.
+
+The manual commands below remain the recovery path when GitHub Actions or SSH is unavailable. The first VM checkout was made from a transferred bundle; it has no GitHub credential.
+
 For a VM checkout that has GitHub access, fetch and deploy the reviewed commit:
 
 ```bash
