@@ -13,6 +13,12 @@ export SMOKE_ORIGIN="http://127.0.0.1:$WEB_PORT"
 cleanup() { docker compose down --volumes --remove-orphans >/dev/null; }
 trap cleanup EXIT
 docker compose config --quiet
+# Shared CI runner IPs hit anonymous registry rate limits; retry the base-image pull with backoff.
+for attempt in 1 2 3 4 5; do
+  docker compose pull --quiet db && break
+  [ "$attempt" -eq 5 ] && exit 1
+  sleep $((attempt * 10))
+done
 docker compose up -d --no-build --wait --wait-timeout 120 db web
 docker compose --profile tools run --rm tooling node scripts/migrate.mjs
 docker compose --profile tools run --rm tooling node scripts/migrate.mjs
