@@ -1,11 +1,14 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { IdentityError, resolveOwner, type OwnerContext } from '@polymate/core/identity';
+import { CalendarPanel } from '@/components/calendar/calendar-panel';
 import { GoogleConnection } from '@/components/connections/google-connection';
 
 export const dynamic = 'force-dynamic';
 
-export default async function CalendarPage() {
+export default async function CalendarPage({ searchParams }: PageProps<'/calendar'>) {
+  // Sample data is a local development aid only; production always reads Google.
+  const sample = process.env.NODE_ENV === 'development' && (await searchParams).calendar === 'sample';
   let owner: OwnerContext | undefined;
   try {
     owner = resolveOwner(await headers());
@@ -27,36 +30,18 @@ export default async function CalendarPage() {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div><h1 className="text-4xl font-medium tracking-tight md:text-5xl">Make space for your week.</h1>
             <p className="mt-4 max-w-xl text-sm leading-6 text-[#617269]">Your lectures, plans, and study blocks, together in one calm place.</p></div>
-          <span className="rounded-full bg-[#e8ede5] px-4 py-2 text-xs font-medium">Foundation preview</span>
+          <span className="rounded-full bg-[#e8ede5] px-4 py-2 text-xs font-medium">Calendar preview</span>
         </div>
         <div className="mt-9 grid gap-5 lg:grid-cols-[1fr_290px]">
-          <section className="overflow-hidden rounded-2xl border border-[#dce3db] bg-white" aria-label="Calendar integration placeholder">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0eb] px-6 py-5">
-              <div><h2 className="font-semibold">Your study calendar</h2><p className="mt-1 text-xs text-[#748278]">Europe/Zurich · weekly view</p></div>
-              <span className="text-xs text-[#748278]">Google Calendar</span>
-            </div>
-            <div className="relative overflow-x-auto">
-              <div className="min-w-[620px] p-4" aria-hidden="true">
-                <div className="week-grid text-center text-[11px] text-[#748278]"><span />{['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => <span className="py-3" key={day}>{day}</span>)}</div>
-                {[9, 10, 11, 12, 13, 14].map(hour => <div className="week-grid" key={hour}><span className="pt-2 text-[10px] text-[#87928b]">{hour}:00</span>{Array.from({ length: 7 }, (_, i) => <div className="calendar-hour border-l border-[#edf0eb]" key={i} />)}</div>)}
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center bg-white/65 px-6">
-                <div className="max-w-sm rounded-2xl border border-[#dce3db] bg-white p-7 text-center shadow-sm">
-                  <span className="mb-4 inline-grid h-11 w-11 place-items-center rounded-xl bg-[#eef2e9] text-lg" aria-hidden="true">↗</span>
-                  <h3 className="text-lg font-semibold">Your calendar starts here</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#617269]">Connect your Google Calendar below. Event display and study-block controls are still being built.</p>
-                  <GoogleConnection />
-                </div>
-              </div>
-            </div>
-          </section>
+          <CalendarPanel sample={sample} />
           <aside className="space-y-5">
+            <section className="rounded-2xl border border-[#dce3db] bg-white p-6 text-center"><h2 className="text-sm font-semibold">Google Calendar</h2><GoogleConnection /></section>
             <section className="rounded-2xl bg-[#173b32] p-6 text-white"><p className="text-[11px] uppercase tracking-widest text-[#c2d5c5]">Start small</p><h2 className="mt-3 text-xl font-medium leading-7">One good study block<br />is a good start.</h2><p className="mt-4 text-sm leading-6 text-[#c2d5c5]">Once connected, your study plans will live alongside your existing commitments.</p></section>
             <section className="rounded-2xl border border-[#dce3db] bg-[#edf0e7] p-6"><h2 className="text-sm font-semibold">A week with breathing room</h2><p className="mt-3 text-sm leading-6 text-[#617269]">Keep time for friends, fresh air, and everything beyond your exercise sheets.</p></section>
             <p className="px-1 text-xs text-[#748278]">Signed in as {owner.displayName}</p>
           </aside>
         </div>
-        <p className="mt-6 text-xs text-[#7a877e]">Preview only. Calendar events and manual study-block actions are not available yet.</p>
+        <p className="mt-6 text-xs text-[#7a877e]">Your Google events are shown read-only. Creating and editing study blocks arrives with the study-block dialog.</p>
       </section>
     </main>;
 }

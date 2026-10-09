@@ -1,0 +1,57 @@
+'use client';
+
+import type { CalendarClient, CalendarEvent } from '@polymate/contracts/calendar';
+import { CalendarRequestError, HttpCalendarClient } from '@polymate/contracts/http-client';
+import { weekRange, type DateRange } from '@polymate/contracts/time';
+import { FAKE_CALENDAR_LABEL, FakeCalendarClient } from '@polymate/core/calendar/fake';
+import { useEffect, useState } from 'react';
+import { eventLabel } from './week-layout';
+import { WeekView } from './week-view';
+
+export type CalendarPanelProps = {
+  /** Use the labelled in-memory sample calendar instead of Google (local development only). */
+  sample?: boolean;
+  /** Receives the selected event, e.g. to open Catalin's study-block dialog. */
+  onSelect?: (event: CalendarEvent) => void;
+  /** Change this value to reload the visible week after a mutation. */
+  reloadKey?: string | number;
+};
+
+/** Loads the visible week through the shared CalendarClient and owns navigation/selection state. */
+export function CalendarPanel({ sample = false, onSelect, reloadKey }: CalendarPanelProps) {
+  const [client] = useState<CalendarClient>(() => sample ? new FakeCalendarClient(undefined, 250) : new HttpCalendarClient());
+  const [range, setRange] = useState<DateRange>(() => weekRange());
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [loaded, setLoaded] = useState<{ key: string; events: CalendarEvent[]; error: string | null } | null>(null);
+  const key = `${range.from}|${reloadKey ?? ''}|${attempt}`;
+  const loading = loaded?.key !== key;
+  const events = loaded?.events ?? [];
+
+  useEffect(() => {
+    let current = true;
+    client.listWeek(range)
+      .then(next => { if (current) setLoaded({ key, events: next, error: null }); })
+      .catch((reason: unknown) => {
+        if (current) setLoaded({ key, events: [], error: reason instanceof CalendarRequestError ? reason.message : 'Calendar could not be loaded.' });
+      });
+    return () => { current = false; };
+  }, [client, range, key]);
+
+  function select(id: string) {
+    setSelectedId(id);
+    const event = events.find(item => item.id === id);
+    if (event) onSelect?.(event);
+  }
+
+  const selected = events.find(event => event.id === selectedId);
+
+  return <div className="min-w-0 space-y-3">
+    <WeekView range={range} events={events} loading={loading} error={loading ? null : loaded?.error} selectedId={selectedId}
+      notice={sample ? FAKE_CALENDAR_LABEL : undefined}
+      onSelect={select} onRangeChange={setRange} onRetry={() => setAttempt(n => n + 1)} />
+    {selected && !onSelect && <p className="rounded-xl border border-[#dce3db] bg-white px-4 py-3 text-sm" role="status">
+      {eventLabel(selected)}
+    </p>}
+  </div>;
+}
