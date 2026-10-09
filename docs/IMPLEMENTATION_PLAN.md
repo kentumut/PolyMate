@@ -16,7 +16,7 @@ Ship the interactive Google-connected calendar first. The first release must con
 
 The eventual product is a proactive study companion for ETH CS bachelor's and master's students. Its full journey includes imported deadlines, automated planning, Telegram follow-ups, adaptation, and exercise tutoring. Those later capabilities do not block the first calendar release.
 
-The application foundation now exists: pnpm workspace, calendar preview, managed identity, web/db Compose, CI, and deployment/recovery scripts. See [Kent's handoff](docs/KENT_HANDOFF.md) and the executable [deployment runbook](docs/DEPLOYMENT.md) for current status. The full feature architecture below remains a plan; the VM, credentials, Google integration, and later features are not asserted to be working by this scaffold.
+The application foundation now exists: pnpm workspace, calendar preview, managed identity, web/db Compose, CI, and deployment/recovery scripts. See [Kent's handoff](KENT_HANDOFF.md) and the executable [deployment runbook](DEPLOYMENT.md) for current status. The full feature architecture below remains a plan; the VM, credentials, Google integration, and later features are not asserted to be working by this scaffold.
 
 POLYMATE_SPEC.md defines the student experience; TEAM_SCHEDULE.md defines which increment ships when. The deployment decisions here adapt the original hosting choices to the VM and credits. The broader campus discovery concept in SPEC.md is background reference, not an additional set of MVP requirements. This document contains the full technical design; implement only the parts required by the current iteration.
 

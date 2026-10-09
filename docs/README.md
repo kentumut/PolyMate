@@ -5,9 +5,9 @@ PolyMate is a proactive AI study companion for ETH CS bachelor's and master's st
 ## Project documents
 
 - **Start here:** [Five-person delivery schedule](TEAM_SCHEDULE.md): named roles, parallel tasks per iteration, branch/file ownership, and release gates.
-- [Parallel development and merging](CONTRIBUTING.md): each person's branch, file boundaries, commands, review pairs, and merge order.
-- [Kent's implementation handoff](docs/KENT_HANDOFF.md): implemented infrastructure and remaining teammate dependencies.
-- [Deployment and recovery](docs/DEPLOYMENT.md): VM setup, SHA releases, backup/restore, and rollback.
+- [Parallel development and merging](../CONTRIBUTING.md): each person's branch, file boundaries, commands, review pairs, and merge order.
+- [Kent's implementation handoff](KENT_HANDOFF.md): implemented infrastructure and remaining teammate dependencies.
+- [Deployment and recovery](DEPLOYMENT.md): VM setup, SHA releases, backup/restore, and rollback.
 - [Product specification](POLYMATE_SPEC.md): agreed student experience, hackathon scope, and success criteria.
 - [Implementation plan](IMPLEMENTATION_PLAN.md): staged VM architecture, service contracts, testing, and deployment/recovery runbook.
 - [Earlier campus companion concept](SPEC.md): background reference for broader discovery features.

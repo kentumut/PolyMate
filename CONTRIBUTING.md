@@ -88,4 +88,4 @@ This change supplies CI and the review workflow; it does not silently enable ser
 
 ## Current handoffs
 
-See [Kent's handoff](docs/KENT_HANDOFF.md) for implemented infrastructure, exact exports, and remaining integration dependencies. [TEAM_SCHEDULE.md](TEAM_SCHEDULE.md) remains the five-person schedule for later iterations.
+See [Kent's handoff](docs/KENT_HANDOFF.md) for implemented infrastructure, exact exports, and remaining integration dependencies. [TEAM_SCHEDULE.md](docs/TEAM_SCHEDULE.md) remains the five-person schedule for later iterations.
