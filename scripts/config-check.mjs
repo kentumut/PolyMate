@@ -19,6 +19,13 @@ export function validateConfiguration(env) {
     if (env.GOOGLE_REDIRECT_URI !== `${env.APP_ORIGIN}/api/integrations/google/callback`) {
       errors.push('GOOGLE_REDIRECT_URI must match the managed application origin.');
     }
+    if (env.TOKEN_ENCRYPTION_KEY && (!/^[A-Za-z0-9+/]+={0,2}$/.test(env.TOKEN_ENCRYPTION_KEY) ||
+        Buffer.from(env.TOKEN_ENCRYPTION_KEY, 'base64').length !== 32)) {
+      errors.push('TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key.');
+    }
+    if (env.OAUTH_STATE_SECRET && Buffer.byteLength(env.OAUTH_STATE_SECRET) < 32) {
+      errors.push('OAUTH_STATE_SECRET must contain at least 32 bytes.');
+    }
   }
   return errors;
 }

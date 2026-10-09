@@ -88,3 +88,30 @@ export async function exchangeAuthorizationCode(input: {
     scopes: typeof body.scope === "string" ? body.scope.split(" ").filter(Boolean) : [],
   };
 }
+
+export async function refreshAccessToken(input: {
+  refreshToken: string;
+  clientId: string;
+  clientSecret: string;
+  fetcher?: typeof fetch;
+}): Promise<{ accessToken: string; expiresAt: Date; scopes?: string[] }> {
+  const response = await (input.fetcher ?? fetch)("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      refresh_token: input.refreshToken,
+      client_id: input.clientId,
+      client_secret: input.clientSecret,
+      grant_type: "refresh_token",
+    }),
+  });
+  const body = await response.json() as Record<string, unknown>;
+  if (!response.ok || typeof body.access_token !== "string" || typeof body.expires_in !== "number") {
+    throw new Error("Google access token refresh failed");
+  }
+  return {
+    accessToken: body.access_token,
+    expiresAt: new Date(Date.now() + body.expires_in * 1000),
+    scopes: typeof body.scope === "string" ? body.scope.split(" ").filter(Boolean) : undefined,
+  };
+}

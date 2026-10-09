@@ -2,6 +2,10 @@
   "name": "@polymate/core",
   "private": true,
   "type": "module",
-  "exports": { "./identity": "./src/identity.ts" },
+  "exports": {
+    "./identity": "./src/identity.ts",
+    "./google-auth": "./integrations/google-auth/oauth.ts",
+    "./google-auth/crypto": "./integrations/google-auth/crypto.ts"
+  },
   "scripts": { "typecheck": "tsc --noEmit" }
 }

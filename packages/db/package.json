@@ -2,7 +2,10 @@
   "name": "@polymate/db",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/connection.ts" },
-  "dependencies": { "pg": "8.23.1" },
+  "exports": {
+    ".": "./src/connection.ts",
+    "./google-oauth": "./src/google-oauth.ts"
+  },
+  "dependencies": { "@polymate/core": "workspace:*", "pg": "8.23.1" },
   "scripts": { "typecheck": "tsc --noEmit" }
 }

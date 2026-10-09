@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const VERSION = "v1";
 
@@ -33,6 +33,24 @@ export function constantTimeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
   return left.length === right.length && timingSafeEqual(left, right);
+}
+
+function stateSecret(): string {
+  const secret = process.env.OAUTH_STATE_SECRET;
+  if (!secret || Buffer.byteLength(secret) < 32) throw new Error("OAUTH_STATE_SECRET must contain at least 32 bytes");
+  return secret;
+}
+
+export function sealBrowserBinding(binding: string): string {
+  const signature = createHmac("sha256", stateSecret()).update(binding).digest("base64url");
+  return `${binding}.${signature}`;
+}
+
+export function openBrowserBinding(sealed: string): string | null {
+  const [binding, signature, extra] = sealed.split(".");
+  if (!binding || !signature || extra) return null;
+  const expected = createHmac("sha256", stateSecret()).update(binding).digest("base64url");
+  return constantTimeEqual(signature, expected) ? binding : null;
 }
 
 export function randomToken(): string {
