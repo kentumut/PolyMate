@@ -12,11 +12,11 @@ PolyMate is a proactive AI study companion for ETH CS bachelor's and master's st
 - [Implementation plan](IMPLEMENTATION_PLAN.md): staged VM architecture, service contracts, testing, and deployment/recovery runbook.
 - [Earlier campus companion concept](SPEC.md): background reference for broader discovery features.
 
-**First release:** a working interactive calendar with live Google Calendar integration. Automatic backend planning follows in iteration 2; imports/adaptation, Telegram/AI, and learning/discovery come afterward.
+**First MVP:** a working interactive calendar with live Google Calendar integration. Automatic backend planning follows in iteration 2; imports/adaptation, Telegram/AI, and learning/discovery come afterward.
 
 The five positions are Yildirim (calendar interface), Dogancem (scheduling/calendar service), Kent (integration/release), Bartek (data/connections), and Catalin (student workflow/quality).
 
-The implementation targets the VIScon team 07 VM. The Next.js workspace, calendar preview, managed identity, web/database containers, CI, and deployment/recovery scripts are implemented. Google OAuth, live calendar actions, and teammate feature modules are still being integrated. This preview is not the first MVP.
+The foundation is deployed on the VIScon team 07 VM at [the managed address](https://07.hackathon.ethz.ch), running commit `31f82f1`. The Next.js workspace, calendar preview, managed identity, web/database containers, CI, and deployment/recovery scripts are implemented. Google OAuth, live calendar actions, and teammate feature modules are still being integrated. This preview is not the first MVP.
 
 ## Run locally
 

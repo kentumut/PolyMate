@@ -2,7 +2,7 @@
 
 An AI study companion for ETH students. We are shipping an interactive calendar with live Google Calendar integration first; automated planning and the proactive buddy follow in later iterations.
 
-**Current status:** Kent's application/infrastructure foundation is implemented. The calendar page is a labelled preview; Google OAuth, calendar actions, and teammate UI modules still need integration. VM deployment is prepared for the user to run after establishing SSH access.
+**Current status:** Kent's application/infrastructure foundation is live at [the managed team address](https://07.hackathon.ethz.ch), running commit `31f82f1`. The calendar page is a labelled preview; Google OAuth, calendar actions, and teammate UI modules still need integration.
 
 - [Five-person schedule](docs/TEAM_SCHEDULE.md)
 - [Branches, ownership, and parallel merging](CONTRIBUTING.md)
