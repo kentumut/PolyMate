@@ -2,9 +2,11 @@
 
 **Audience:** ETH CS bachelor's and master's students
 
-**Version:** 0.1 · 9 October 2026
+**Version:** 0.2 · 9 October 2026
 
 **Purpose:** Product and implementation specification for a three-day hackathon
+
+**Delivery order:** [TEAM_SCHEDULE.md](TEAM_SCHEDULE.md) assigns the five teammates and defines the release gates. Ship the interactive calendar with live Google Calendar integration first; automatic backend planning and the other capabilities follow in later iterations.
 
 ## 1. Product and success criteria
 
@@ -14,9 +16,11 @@ Its central behavior is:
 
 **Understand the student → notice upcoming work → schedule it → check progress → adapt the plan or help them learn.**
 
-The hackathon version will demonstrate this loop end to end using real imported academic data, Google Calendar, Telegram, and an uploaded exercise sheet. Course recommendations, opportunity matching, and wellbeing advice will be smaller working features.
+The first MVP is a live Google-connected calendar: students see existing commitments and create, move, complete, and delete PolyMate study blocks, with changes reflected in Google and preserved after reload. It requires a minimal OAuth/calendar backend, but no automatic planner, Telegram, AI, imports, or tutoring.
 
-The demo succeeds when PolyMate can:
+Later iterations add automatic planning, real academic imports, proactive conversations, and exercise tutoring. Course recommendations, opportunity matching, and wellbeing advice remain smaller, optional increments after scheduling is stable.
+
+The first demo succeeds when the interactive calendar journey works with real Google Calendar events. The expanded product demo adds these capabilities as their iterations ship:
 
 - Turn an imported deadline into realistic study blocks in Google Calendar.
 - Contact the student through Telegram while the web app is closed.
@@ -127,13 +131,13 @@ These features share the student profile and appear as contextual suggestions, r
 |---|---|
 | Web app | Next.js, TypeScript, Tailwind, shadcn/ui |
 | Agent | Vercel AI SDK `ToolLoopAgent` |
-| Model | Claude Sonnet 5.5 through the AI SDK Anthropic provider; model ID configurable |
-| Background execution | Inngest |
-| Database, authentication, files | Supabase Postgres, Auth, and private Storage |
-| Telegram | grammY with webhooks |
-| Hosting | Vercel plus managed Supabase and Inngest |
+| Model | Configurable provider using the supplied API credits, from iteration 4 |
+| Background execution | pg-boss and a Node worker, added for background features |
+| Database, authentication, files | VM PostgreSQL, managed-proxy identity, private file volume when needed |
+| Telegram | grammY long polling, from iteration 4 |
+| Hosting | VIScon VM with Docker Compose; web/db first, worker later |
 
-The [AI SDK provides the agent tool loop](https://ai-sdk.dev/docs/agents/overview); [Inngest provides durable background execution](https://www.inngest.com/docs/durable-execution). This avoids building those framework components during the hackathon. Sonnet is a default balancing speed and capability, with [documented tool support](https://platform.claude.com/docs/en/models/overview).
+The [AI SDK provides the agent tool loop](https://ai-sdk.dev/docs/agents/overview) when conversational features are introduced. The detailed VM design and provider configuration are in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Neither agent infrastructure nor model credentials are prerequisites for the first calendar release.
 
 Use one agent with focused tools and shared memory. Calendar validity, permissions, and reminder limits are enforced in application code.
 
@@ -178,25 +182,20 @@ Include a protected demo control that advances a simulated clock through the sam
 
 ## 4. Three-day delivery plan
 
-Organize five workstreams, each with one owner:
+Use five permanent positions: Yildirim owns the calendar interface; Dogancem owns calendar services and scheduling; Kent owns integration and release; Bartek owns data and connections; Catalin owns student workflow and integrated quality. [TEAM_SCHEDULE.md](TEAM_SCHEDULE.md) gives each person a parallel task and handoff in every iteration.
 
-1. Web experience and onboarding.
-2. Google Calendar, imports, and scheduling.
-3. Agent behavior and persistent memory.
-4. Telegram and background execution.
-5. Tutoring, recommendation content, and demo preparation.
-
-Additional teammates support integration testing and content verification.
-
-| Day | Work and completion gate |
+| Increment | Release gate |
 |---|---|
-| **Day 1: Prove the connections** | Deploy the skeleton; establish shared types; connect a real Google account; receive and send Telegram messages; import a real deadline; upload a PDF. **Gate: one conversation creates a real study block.** |
-| **Day 2: Complete the loop** | Add scheduled check-ins, partial progress, rescheduling, tutoring, and persistent memory. Integrate curated recommendations. **Gate: Telegram reply → calendar change → tutoring → revised study task works end to end.** |
-| **Day 3: Make it dependable** | Fix integration failures, verify permissions and retry behavior, polish the interface, and rehearse. Freeze features by midday. **Gate: three consecutive successful demo runs.** |
+| First MVP | Interactive calendar with real Google connect/read/create/move/complete/delete. Target roughly three hours after kickoff. |
+| Iteration 2 | Manual deadlines/preferences plus automatic backend planning and applied Google study blocks. |
+| Iteration 3 | Real imports, missed/partial progress, and adaptive rescheduling. |
+| Iteration 4 | Telegram and AI check-ins using the existing scheduling services. |
+| Optional iteration 5 | Verified exercise tutoring and sourced course/opportunity features. |
+| Final stabilization | Three rehearsals; Sunday 11 October 10:00 Zurich feature freeze, deploy by 11:00, submit/export by 11:30 before noon VM-access cutoff. |
 
-If behind, cut recommendation polish and advanced calendar proposals first. Preserve the deadline → study block → check-in → reschedule → tutoring loop.
+Deploy each passing increment. If behind, defer later capabilities and visual polish; keep live Google integration and its permission/reliability checks. The broader roadmap must not delay shipping a useful calendar.
 
-The planned five-minute demo:
+The expanded five-minute demo, after the relevant later increments ship:
 
 1. Introduce a student's interests and goals.
 2. Import a deadline and generate study blocks.
@@ -209,7 +208,7 @@ The planned five-minute demo:
 
 ## 5. Acceptance tests and scope defaults
 
-Before presenting, verify:
+For the first release, verify Google connect, viewing commitments, creating/moving/completing/deleting PolyMate blocks, reload persistence, conflict handling, reconnect errors, and protection of personal events. The checks below activate with their later feature iterations:
 
 - Importing the same calendar twice creates no duplicate assignments.
 - Planned blocks respect deadlines, busy events, study limits, and Zurich daylight-saving changes.
@@ -228,4 +227,4 @@ Before presenting, verify:
 
 **Outside the three-day build:** automatic ETH login, continuous Moodle synchronization, Outlook support, automated enrolment, graduation-rule certification, sending applications, native mobile apps, and comprehensive wellbeing assessment.
 
-Keep a clearly labelled fixture dataset and recorded demo as backups. The primary demonstration uses real imports, live calendar actions, and live Telegram messages.
+Keep a clearly labelled fixture dataset and recorded demo as backups. Every release demonstrates live Google calendar actions. Real imports and live Telegram messages join the demonstration only after their iterations ship.

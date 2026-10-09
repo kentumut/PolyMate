@@ -1,8 +1,10 @@
 # PolyMate implementation plan
 
-**Version:** 1.0, 9 October 2026
+**Version:** 1.1, 9 October 2026
 
 **Product source:** [POLYMATE_SPEC.md](POLYMATE_SPEC.md)
+
+**Start here:** [TEAM_SCHEDULE.md](TEAM_SCHEDULE.md) assigns Yildirim, Dogancem, Kent, Bartek, and Catalin a position and parallel tasks in every iteration. It is authoritative for delivery order and release gates.
 
 **Target:** VIScon team 07 VM, https://07.hackathon.ethz.ch
 
@@ -10,17 +12,19 @@
 
 ## 1. Outcome, scope, and governing decisions
 
-Build a working proactive study companion for ETH CS bachelor's and master's students. The release must demonstrate a real imported deadline becoming real Google Calendar study blocks, a Telegram follow-up, adaptation after a missed session, and teaching from an uploaded exercise sheet. The web app and Telegram share student memory and progress.
+Ship the interactive Google-connected calendar first. The first release must connect a student's Google Calendar, display existing commitments, and create, move, complete, and delete PolyMate study blocks with changes visible in Google and preserved after reload. Automatic backend planning is iteration 2; imported deadlines and adaptive progress are iteration 3; Telegram/AI and tutoring/discovery follow only after scheduling works.
+
+The eventual product is a proactive study companion for ETH CS bachelor's and master's students. Its full journey includes imported deadlines, automated planning, Telegram follow-ups, adaptation, and exercise tutoring. Those later capabilities do not block the first calendar release.
 
 The repository currently contains specifications, with no application scaffold. This document plans implementation; it does not assert that the VM, credentials, integrations, or application have been tested.
 
-The product scope in POLYMATE_SPEC.md remains authoritative. The deployment decisions here replace its initial Vercel, Inngest, Supabase, Telegram-webhook, and Anthropic defaults to fit the supplied VM and credits. The broader campus discovery concept in SPEC.md is background reference, not an additional set of MVP requirements.
+POLYMATE_SPEC.md defines the student experience; TEAM_SCHEDULE.md defines which increment ships when. The deployment decisions here adapt the original hosting choices to the VM and credits. The broader campus discovery concept in SPEC.md is background reference, not an additional set of MVP requirements. This document contains the full technical design; implement only the parts required by the current iteration.
 
 | Area | Implementation decision | Reason |
 |---|---|---|
 | Application | Next.js App Router, TypeScript, Tailwind, shadcn/ui | Preserve the agreed web stack and share types across frontend and backend. |
 | Agent | One Vercel AI SDK ToolLoopAgent with validated tools | Reuse an agent framework without coordinating multiple autonomous agents. |
-| Runtime | Three Docker Compose services: web, worker, db | Fit the VM and survive disconnected developer sessions. |
+| Runtime | First release: web and db; later add worker | Ship the calendar without waiting for background infrastructure. |
 | Durable work | pg-boss using the same PostgreSQL instance | Persistent delayed jobs and retries without external inbound callbacks or Redis. |
 | Telegram | grammY long polling in one worker | The managed login prevents unauthenticated external webhooks. |
 | Data | PostgreSQL 17 with Drizzle migrations | One local database for application state and job storage. |
@@ -55,11 +59,13 @@ The following facts come from the supplied VIScon portal documentation and team 
 | Access cutoff | Sunday noon | The app must be healthy and independent of SSH sessions before 12:00 on 11 October. |
 | Submission | Public code repository linked on the team page | The screenshot shows no repository linked; add the existing repository before submission. |
 
-Do not modify anything marked VIScon Admin. Plan the following checks in the first hour: managed-origin login, identity headers, SSE delivery, outgoing access to Google/Telegram/model APIs, VM disk/memory, Compose, the template's port binding, and the Google OAuth client configuration.
+Do not modify anything marked VIScon Admin. In the first hour, check managed-origin login, identity headers, outgoing Google access, VM disk/memory, Compose, the template's port binding, and the Google OAuth client configuration. Telegram/model access and SSE validation become gates in iteration 4 rather than blocking the first deployment.
 
 If browser OAuth registration for the managed domain requires organizer assistance, request it immediately. An ICS-only backup must not be described as meeting the live-calendar acceptance criterion.
 
 ## 3. Architecture, repository layout, and ownership
+
+This is the expanded architecture. Iteration 1 deploys only web and db with Google connectivity. It does not require the worker, files volume, model, Telegram, or queue. The first calendar reads event contents from Google and stores only users, OAuth connections/state, and calendar-operation recovery records locally.
 
 ```mermaid
 flowchart LR
@@ -100,17 +106,19 @@ POLYMATE_SPEC.md          Product requirements
 
 Use a pnpm workspace. Shared server packages have no React dependency and no browser exports containing credentials. Next.js uses the Node runtime and standalone output; its image includes the standalone server, public assets, and static assets. Compile the worker to JavaScript and run it with node.
 
-| Workstream | Owner deliverables | Main dependency |
+| Teammate / position | Owner deliverables | Initial dependency |
 |---|---|---|
-| A: foundation and deployment | Workspace, Compose, database migrations, identity, VM release, backups | None; start immediately. |
-| B: product UI | Onboarding, Today, chat, weekly calendar, action cards, settings | Shared contracts and fixture responses. |
-| C: imports and calendar | ICS preview/commit, assignment mapping, Google OAuth, calendar writes, deterministic planner | Database and identity. |
-| D: agent and Telegram | Agent tools, shared context, pairing, durable intake, reminders, delivery tracking | Shared domain services and queue. |
-| E: learning and discovery | PDF extraction/viewer, tutoring flow, learning notes, 15 courses and eight opportunities | File interface and profile contracts. |
+| Yildirim: calendar interface | Weekly calendar rendering, navigation, event selection, responsive behavior | Event contract and fixture data. |
+| Dogancem: scheduling and calendar service | Google operations and conflict rules first; automatic planner and agent tools later | Shared contracts and token-provider interface. |
+| Kent: integration and release | Scaffold, identity, root configuration, Compose, VM release, CI, merge coordination | None; start immediately. |
+| Bartek: data and connections | OAuth, encrypted token storage, migrations first; repositories and imports later | Google client setup; scaffold for integration. |
+| Catalin: student workflow and quality | Connection/event dialogs, progress flows, live acceptance tests and demo | Shared callbacks; fake adapter until Google is ready. |
 
-With six or more builders, assign a separate integration/QA owner. Otherwise each owner tests their subsystem and A coordinates the release. One owner approves shared-contract and migration changes to prevent collisions. Work in short-lived branches and integrate at each milestone, not only at the end.
+Each of the five has work in every iteration; see TEAM_SCHEDULE.md for task-level handoffs and branch ownership. Kent coordinates releases; Catalin owns integrated acceptance; everyone tests their own subsystem. Dogancem owns scheduling contracts, Bartek owns migrations, and Kent owns root dependencies/lockfile changes. Separate clones or worktrees prevent filesystem collisions.
 
 ## 4. Identity, authorization, and configuration
+
+Iteration 1 needs managed identity, the database, OAuth configuration, token encryption, and the Google adapter. Telegram, model, upload, and demo variables are optional until their features are enabled. Production readiness validates enabled features only.
 
 ### Managed identity
 
@@ -150,6 +158,8 @@ The VM .env lives outside version control with mode 0600. Provide the worker wit
 
 ## 5. Data model and service contracts
 
+For iteration 1, create only users, calendar_connections, oauth_states, and calendar_operations. Google stores the event contents and PolyMate extended properties store its block ID/completion state. calendar_operations records request IDs, owner, target ID/ETag, intended changes, and confirmed/uncertain results. Add the broader model below incrementally, rather than creating every table before the calendar can ship.
+
 Use UUIDs for application entities, timestamptz for instants, and IANA timezone strings for user preferences. Recurring local-time preferences are not stored as fixed UTC offsets. All mutable planning entities have an integer version. Apply owner filters in SQL, including lookup-by-ID routes.
 
 | Entity | Required fields and constraints |
@@ -174,6 +184,8 @@ pg-boss owns its separate queue schema. Domain scheduled_actions records remain 
 Assignment states are open, in_progress, completed, or cancelled. Block states are planned, in_progress, completed, missed, or cancelled. A block can end while assignment progress remains unknown. Marking a block completed does not implicitly mark the entire assignment completed.
 
 ### HTTP interfaces
+
+The first release exposes managed-identity/health endpoints, the Google connection routes, and GET /api/calendar plus POST /api/calendar/study-blocks, PATCH/DELETE /api/calendar/study-blocks/:id, and POST /api/calendar/study-blocks/:id/complete. These mutation routes require an operationId and, for existing events, an expected ETag. Completion updates PolyMate's private event metadata; personal events remain read-only. The broader endpoint inventory below activates only in its feature iteration.
 
 Validate inputs with shared Zod schemas. Errors use { error: { code, message, recoverable, details? }, requestId }. Do not expose raw upstream errors or tokens.
 
@@ -205,7 +217,7 @@ No Telegram webhook or external job-runner callback endpoint is required.
 
 ## 6. Core implementation behavior
 
-### A. Onboarding and academic imports
+### A. Onboarding and academic imports — iterations 2–3
 
 Onboarding is a short form assisted by chat: degree stage, semester, current courses, interests/goals, prior knowledge, availability, study budget, quiet hours, and study-block consent. Save an incomplete profile and resume without losing answers. Ask for missing hard constraints before scheduling.
 
@@ -215,7 +227,9 @@ Treat date-only deadlines and floating times as unresolved until the student con
 
 Manual deadline entry is a first-class fallback. Display imported-at timestamps and explain that file imports do not auto-sync. Import maximums: ICS 2 MB and 2,000 events before recurrence expansion; reject malformed or excessive input with a specific correction message.
 
-### B. Deterministic scheduling
+### B. Deterministic scheduling — iteration 2
+
+Iteration 1 is manual scheduling: the student chooses a time in an event dialog, and application code validates it against fresh Google availability before saving. No automatic time selection or assignment planner is required for that release.
 
 Implement scheduling as a pure function over assignments, effort estimates, existing blocks, busy intervals, preferences, and a supplied clock. The model interprets requests and explains results; it does not invent valid timestamps.
 
@@ -233,21 +247,23 @@ On “I met friends,” ask for a new window when none is known, mark the old se
 
 If a student edits or removes a PolyMate event directly in Google, respect that change, update local state, and ask before recreating it. OAuth failure never silently falls back to claiming a local-only block is synced.
 
-### C. Google Calendar
+### C. Google Calendar — required in iteration 1
+
+For the first release, support the primary owned calendar with calendar.events.owned scope and preserve personal events as read-only. Store PolyMate block ID and open/done state in private extended properties so the calendar can be authoritative before local study-block tables exist. Use stable client operation IDs and calendar_operations for uncertain-write recovery. Multi-calendar selection and additional read/list scopes are iteration 3 additions, requested through an explicit scope upgrade if needed.
 
 Use googleapis for OAuth and Calendar requests. Register the exact managed-origin callback and a localhost callback in the Google web client. Configure an External testing app with designated demo Google accounts. Obtain offline access, store refresh tokens encrypted, and preserve an existing refresh token if a later token response omits it.
 
-Request calendar.events.readonly for selected-calendar visibility, calendar.events.owned for writing owned calendars, and calendar.calendarlist.readonly for selection. Prefix scopes with https://www.googleapis.com/auth/. Use the primary owned calendar for PolyMate blocks in v1 rather than adding calendar-creation permissions. Explicit application policy still restricts writes despite the granted API scopes. [Google scope reference](https://developers.google.com/workspace/calendar/api/auth).
+For multi-calendar support in iteration 3, request calendar.events.readonly for selected-calendar visibility and calendar.calendarlist.readonly for selection, alongside calendar.events.owned. Prefix scopes with https://www.googleapis.com/auth/. Use the primary owned calendar for PolyMate blocks rather than adding calendar-creation permissions. Explicit application policy still restricts writes despite the granted API scopes. [Google scope reference](https://developers.google.com/workspace/calendar/api/auth).
 
-Fetch events for the planning horizon on connect, every five minutes while connected, and immediately before changes. Expand recurring events for conflict checks. Treat transparent and declined events as non-blocking; mark all-day busy events as busy for their actual day interval. Never request full-calendar administrator scopes.
+In iteration 1, fetch the visible week on connect, navigation, browser focus, and after mutations; fetch fresh availability immediately before changes. Add periodic/background refresh when the worker is introduced. Expand recurring events for conflict checks. Treat transparent and declined events as non-blocking; mark all-day busy events as busy for their actual day interval. Never request full-calendar administrator scopes.
 
 Use a deterministic, Google-valid event ID derived from the study-block UUID and private extended properties containing the internal block ID. Store external IDs and ETags. A timed-out insertion is reconciled by reading that ID before retrying; Google documents client-provided IDs for this purpose. [Event creation reference](https://developers.google.com/workspace/calendar/api/guides/create-events).
 
-Write flow: persist a pending external action, apply/reconcile it at Google, then persist confirmed external state and follow-up jobs. If the process crashes between steps, a recovery task reconciles the pending action. The UI displays syncing/failed/synced rather than claiming an atomic transaction across Google and Postgres.
+Write flow: persist a pending calendar operation, apply/reconcile it at Google, then persist the confirmed result. In iteration 1, a retried request or explicit Refresh action reconciles an uncertain operation; durable recovery tasks and follow-up jobs join the flow when background features are introduced. The UI displays syncing/failed/synced/uncertain rather than claiming an atomic transaction across Google and Postgres.
 
 Automatic writes are limited to PolyMate blocks with current consent. Other owned, editable, single-occurrence events require a proposal containing exact old/new times, target ETag, and a 15-minute expiry. Confirmation is single-use and must come from the same student. Attendee or recurring-series changes remain Google handoffs. Undo restores the prior state only after checking current versions and conflicts.
 
-### D. Agent and shared memory
+### D. Agent and shared memory — iteration 4
 
 Configure one ToolLoopAgent with at most six steps per turn and a 60-second total generation timeout. Select tools by capability: profile, planning, learning, and discovery. These are tool groups, not separately deployed agents. One bounded repair attempt is permitted for invalid structured output.
 
@@ -259,7 +275,7 @@ Serialize conversational turns per student across web and Telegram using a queue
 
 Use AI SDK streaming for web responses; Today and Calendar refresh on completion, on focus, and every five seconds while visible. Telegram receives one final response, split at safe message boundaries. Stream errors leave the message recoverable and do not repeat completed tool actions.
 
-### E. Proactive jobs and Telegram
+### E. Proactive jobs and Telegram — iteration 4
 
 Use pg-boss for durable job claiming, backoff, and worker recovery. It integrates with PostgreSQL and avoids building queue infrastructure from scratch. Do not assume queue semantics make external network effects exactly-once. [pg-boss documentation](https://pgboss.io/).
 
@@ -281,7 +297,7 @@ Track deliveries as pending, sending, sent, failed, skipped, or unknown. Success
 
 Quick actions carry short opaque server-side action IDs, not long mutable payloads. Recheck ownership, expiry, and versions on every callback. /pause, /resume, /status, and /help work without an LLM call. A blocked bot disables further Telegram attempts and surfaces a reconnect notice in the web app.
 
-### F. Exercise tutoring and opportunity matching
+### F. Exercise tutoring and opportunity matching — optional iteration 5
 
 Accept PDF uploads up to 10 MB and 30 pages. Validate file signature and content type, generate the storage filename server-side, and store outside the public directory. The worker uses pdfjs-dist to extract text per page. Handle password-protected, unreadable, or empty documents with a paste-question fallback. No OCR service is required for v1.
 
@@ -294,6 +310,8 @@ Curate 15 real courses and eight real lab/project/assistantship pages. Records i
 Break/social suggestions use reported effort or an explicitly planned dense study day. They are optional, count toward proactive limits, and never override protected commitments or create a health assessment.
 
 ## 7. Model adapter, evaluation, and budget
+
+This section applies from iteration 4. The first Google-calendar MVP must build, start, pass readiness checks, and remain usable without a model key or model-provider account.
 
 Implement a single provider factory with explicit protocol selection:
 
@@ -310,6 +328,8 @@ Create a dedicated application project/key with the designated participant's cre
 
 ## 8. UI implementation and integration contracts
 
+Iteration 1 includes the interactive weekly Calendar, connection controls, event dialog, and operation feedback only. Yildirim owns the calendar component, Catalin owns forms/connections, and Kent composes the page. Today/preferences expand in iteration 2; progress/import flows in iteration 3; Conversation in iteration 4; PDF/Explore in optional iteration 5. Do not build all screens before deploying the calendar.
+
 | Surface | Required behavior |
 |---|---|
 | Onboarding | Resume incomplete setup, edit preferences, show consent and timezone, connect Google/Telegram. |
@@ -325,27 +345,27 @@ Each workstream first implements fixture-driven screens or services against shar
 
 ## 9. Build sequence and milestone gates
 
-The event spans three calendar days, but the supplied screenshot is already Friday evening and VM access ends Sunday noon. Do not schedule three full working days or postpone integration to Sunday. Protect sleep and hand over unfinished tasks explicitly.
+The complete five-person task matrix, branch ownership, and handoffs are in [TEAM_SCHEDULE.md](TEAM_SCHEDULE.md). Use these release gates in order:
 
-| Time | Work across the five owners | Gate |
+| Iteration | Timebox | Shippable increment |
 |---|---|---|
-| Friday 20:00–21:00, or first working hour | Inspect VM; establish workspace/contracts/schema; configure Google client, bot, and model key; validate managed ingress. UI starts against fixtures; E checks an actual sheet. | /health works through managed origin; one model tool round-trip works; OAuth registration is viable. |
-| Friday 21:00–23:30 | Identity/profile persistence; Compose deployment; Google connect/read/write; durable Telegram intake; ICS preview and PDF extraction baseline. | A real student can create one study block and exchange a Telegram message. |
-| Saturday 09:00–12:00 | Complete import confirmation, planner, canonical conversation, study-block policy, and pending-action contracts. | Deadline → confirmed effort → conflict-free Google blocks works. |
-| Saturday 13:00–17:00 | Implement reminders, missed/partial progress, rescheduling, tutoring hints, and memory updates. | Full adaptive loop works across web and Telegram with the app closed. |
-| Saturday 17:00–20:00 | Integrate course/opportunity recommendations, action cards, undo, protected demo control, and integration states. | One coherent live journey; all P0 surfaces integrated. |
-| Saturday 20:00–22:00 | Run acceptance scenarios, fix bugs, prepare content and slide/demo script, capture a backup recording. | Release candidate deployed; no new product scope afterward. |
-| Sunday 08:30–10:00 | Recovery/restart tests, OAuth refresh, delivery deduplication, source verification, clean demo rehearsal. | Three successful consecutive rehearsals. |
-| Sunday 10:00 | Feature and deployment freeze; only release-blocking fixes. | Known-good commit and container images retained. |
-| Sunday 10:00–11:00 | Final deployment, database/files backup, detached health checks, public repo/team-page link, documentation. | Running release independent of developer sessions. |
-| Sunday 11:00–11:30 | Complete submission items; export evidence and backups off VM; verify judge access. | No dependence on a last-minute SSH fix. |
-| Sunday 12:00 | Organizer VM-access cutoff. | App continues under Compose; no hotfix assumptions. |
+| 0 | First 20 minutes | Kent's scaffold plus shared contracts; all five begin separate tasks. |
+| 1 | Next 2–3 hours | v0.1-calendar: live Google connect/read/create/move/complete/delete; minimum backend only. |
+| 2 | 3 hours | v0.2-planner: manual deadlines, effort/preferences, automatic backend planning, applied Google blocks. |
+| 3 | 3 hours | v0.3-adaptive: real ICS imports, partial/missed progress, safe rescheduling and undo. |
+| 4 | 3–4 hours | v0.4-buddy: Telegram, durable reminders, natural-language scheduling through existing services. |
+| 5 | Optional 2 hours | Verified tutoring and small sourced opportunity features. |
+| Stabilize | Sunday 08:30–11:30 | Three rehearsals; feature freeze 10:00, final deployment by 11:00, submission/export by 11:30. |
 
-If the first gate is late, prioritize working connections over visual polish. If the adaptive loop is incomplete Saturday afternoon, cut advanced personal-event proposals, memory-summary polish, and Explore presentation first. Preserve actual source-based recommendations as basic cards. Do not cut identity isolation, write permissions, or truthful sync states.
+Timeboxes are parallel team working time, not sequential hours per person. Reserve integration time inside each iteration and deploy each passing increment. Do not begin the next feature iteration while the current gate is broken. Sunday noon remains the VM-access cutoff; protect sleep and do not assume three full working days.
+
+If behind, remove optional UI polish and later iterations. Google integration, ownership checks, and truthful operation states remain mandatory for the first MVP. Present the last stable release honestly rather than treating the full roadmap as a condition for shipping anything.
 
 ## 10. VM deployment and recovery runbook
 
 These are implementation-time steps, not actions already performed. The release owner executes them with private credentials.
+
+For iteration 1, apply this runbook to web and db only. There is no worker, pg-boss initialization, file volume, model smoke test, Telegram check, or worker-heartbeat readiness requirement until its iteration. Enable each dependency only when the deployed feature uses it.
 
 ### First deployment
 
@@ -386,6 +406,8 @@ The team must confirm how long the VM and managed address remain available after
 
 ## 11. Test plan, release criteria, and demonstration
 
+First-release acceptance is the live Google journey in TEAM_SCHEDULE.md: connect, view existing events, create/move/complete/reload/delete a PolyMate block, reject a personal-event mutation, handle overlap and revoked access, and preserve state across web-container restart. Google integration is not replaced by fixtures or local storage. The remaining scenarios below become release gates when their subsystem is added.
+
 Use Vitest for deterministic domain and service tests, a disposable PostgreSQL database for integration tests, and Playwright for browser journeys. Mock Google, Telegram, and the model in repeatable automated tests. Run a separate small live smoke suite against dedicated demo accounts and test events.
 
 | Area | Required scenarios |
@@ -407,7 +429,7 @@ The complete demo uses one student account, one verified exercise sheet, two ass
 
 Five-minute presentation sequence: explain the student's goal; show the imported deadline and real study plan; receive a Telegram check-in; report a missed session and see the real calendar change; report difficulty and get an exercise-grounded hint plus understanding check; show the adjusted next task, one research opportunity, and an optional break suggestion.
 
-Release acceptance requires the core journey, correct isolation/permissions, recovery after a worker restart, three successful rehearsals, a verified backup, source links, and a clean repository with no credentials or private student materials. A backup video and labelled fixture mode support presentation failures but do not replace live-integration acceptance.
+Expanded-release acceptance requires the journeys for the features actually enabled, correct isolation/permissions, recovery of enabled services, three successful final rehearsals, a verified backup, source links where relevant, and a clean repository with no credentials or private student materials. The complete demo sequence above applies only after those later iterations ship. For v0.1, demonstrate live calendar operations; for v0.2/v0.3, add planning/adaptation. A backup video and labelled fixture mode do not replace live Google integration.
 
 ## 12. Sources, assumptions, and remaining external inputs
 
@@ -428,6 +450,6 @@ Additional implementation references:
 - [OpenAI model capabilities](https://developers.openai.com/api/docs/models/gpt-5.4-mini)
 - [AI SDK compatible providers](https://ai-sdk.dev/providers/openai-compatible-providers)
 
-External inputs needed at kickoff: private SSH access, one Google Cloud project/client and demo account, one production Telegram bot plus a separate development bot, a redeemed model-provider key, and permitted actual Moodle/myStudies exports and a readable exercise sheet. These are setup gates; masked screenshot fields are not usable credentials.
+Inputs needed at kickoff: private SSH access and one Google Cloud project/client with a demo account. Iteration 3 adds permitted Moodle/myStudies exports; iteration 4 adds production/development Telegram bots and a model-provider key; optional iteration 5 adds a readable exercise sheet. Later credentials and materials do not block the Google-calendar MVP. Masked screenshot fields are not usable credentials.
 
 Defaults not yet confirmed by a live deployment: managed domain callback acceptance, outgoing provider access, template health/port ownership, exact installed Compose version, available LiteLLM model/tool capabilities, and post-event VM lifetime. Resolve them in the first validation pass; preserve the product acceptance criteria when reporting any limitation.
