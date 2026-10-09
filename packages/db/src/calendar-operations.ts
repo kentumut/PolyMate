@@ -1,5 +1,5 @@
 import type { OperationResult } from '@polymate/contracts/calendar';
-import type { OperationKind, OperationRecord, OperationStore } from '@polymate/core/calendar/operations';
+import { CalendarBusyError, type OperationKind, type OperationRecord, type OperationStore } from '@polymate/core/calendar/operations';
 import { getPool } from './connection';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { PoolClient } from 'pg';
@@ -28,7 +28,7 @@ export const calendarOperationStore: OperationStore = {
         'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS locked', [ownerId],
       );
       locked = result.rows[0].locked;
-      if (!locked) throw new Error('Another calendar change is in progress.');
+      if (!locked) throw new CalendarBusyError();
       // Autocommit the pending record BEFORE Google is called. Reuse this connection
       // for log queries so parallel requests cannot exhaust the pool while holding locks.
       return await session.run(client, run);

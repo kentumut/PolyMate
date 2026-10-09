@@ -5,11 +5,12 @@ import { GET, POST } from '../apps/web/app/api/calendar/events/route';
 import { PATCH, DELETE } from '../apps/web/app/api/calendar/events/[id]/route';
 import { POST as complete } from '../apps/web/app/api/calendar/events/[id]/complete/route';
 import { GET as csrf } from '../apps/web/app/api/calendar/csrf/route';
+import { CalendarBusyError } from '../packages/core/calendar/operations';
 
-const mocks = vi.hoisted(() => ({ token: vi.fn(), begin: vi.fn(), finish: vi.fn() }));
+const mocks = vi.hoisted(() => ({ token: vi.fn(), begin: vi.fn(), finish: vi.fn(), lock: vi.fn() }));
 vi.mock('../packages/db/src/google-oauth', () => ({ getValidAccessToken: mocks.token }));
 vi.mock('../packages/db/src/calendar-operations', () => ({ calendarOperationStore: {
-  withOwnerLock: async (_owner: string, run: () => Promise<unknown>) => run(),
+  withOwnerLock: (owner: string, run: () => Promise<unknown>) => mocks.lock(owner, run),
   begin: mocks.begin, finish: mocks.finish,
 } }));
 
@@ -32,6 +33,7 @@ beforeEach(() => {
   mocks.token.mockReset().mockResolvedValue('owner-access-token');
   mocks.begin.mockReset().mockResolvedValue(null);
   mocks.finish.mockReset().mockResolvedValue(undefined);
+  mocks.lock.mockReset().mockImplementation((_owner: string, run: () => Promise<unknown>) => run());
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
@@ -86,6 +88,17 @@ describe('authenticated calendar API', () => {
     }
     expect(fetcher).toHaveBeenCalledTimes(3);
     for (const call of fetcher.mock.calls as unknown as [URL, RequestInit][]) expect(call[1].method).toBe('GET');
+  });
+
+  it('reports a held owner lock as a retryable 409 without logging or writing', async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    mocks.lock.mockRejectedValue(new CalendarBusyError());
+    const response = await POST(request('POST', { operationId, block }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: 'busy' } });
+    expect(mocks.begin).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it('returns 202 when a write is uncertain, with no-store headers', async () => {

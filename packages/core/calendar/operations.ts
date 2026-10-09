@@ -11,6 +11,14 @@ export type OperationRecord = Readonly<{
   intendedChange: Record<string, unknown>;
 }>;
 
+/** Another change for this owner holds the lock. Nothing was recorded or sent; retry shortly. */
+export class CalendarBusyError extends Error {
+  constructor() {
+    super('Another calendar change is still in progress. Try again in a moment.');
+    this.name = 'CalendarBusyError';
+  }
+}
+
 /** Durable log of calendar writes, so retries and uncertain outcomes can be reconciled. */
 export interface OperationStore {
   /** Serialize the availability check and write across requests for this owner. */
