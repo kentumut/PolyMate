@@ -8,6 +8,7 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@polymate/contracts": "workspace:*",
     "@polymate/core": "workspace:*",
     "@polymate/db": "workspace:*",
     "next": "16.4.0",

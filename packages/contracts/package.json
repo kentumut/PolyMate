@@ -1,0 +1,11 @@
+{
+  "name": "@polymate/contracts",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./calendar": "./src/calendar.ts",
+    "./time": "./src/time.ts",
+    "./http-client": "./src/http-client.ts"
+  },
+  "scripts": { "typecheck": "tsc --noEmit" }
+}

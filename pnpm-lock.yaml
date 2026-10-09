@@ -42,6 +42,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@polymate/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@polymate/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -65,10 +68,19 @@ importers:
         specifier: 4.3.3
         version: 4.3.3
 
-  packages/core: {}
+  packages/contracts: {}
+
+  packages/core:
+    dependencies:
+      '@polymate/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/db:
     dependencies:
+      '@polymate/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@polymate/core':
         specifier: workspace:*
         version: link:../core

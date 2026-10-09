@@ -4,7 +4,7 @@ import path from 'node:path';
 const nextConfig: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: path.join(process.cwd(), '../..'),
-  transpilePackages: ['@polymate/core', '@polymate/db'],
+  transpilePackages: ['@polymate/contracts', '@polymate/core', '@polymate/db'],
   poweredByHeader: false,
   async headers() {
     return [{
