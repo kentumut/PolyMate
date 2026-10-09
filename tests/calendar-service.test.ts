@@ -96,7 +96,7 @@ describe('CalendarService against Google', () => {
     expect(google.events.has(id)).toBe(false);
   });
 
-  it('rejects overlaps with busy time but ignores free and all-day events', async () => {
+  it('rejects overlaps with busy time but ignores transparent events', async () => {
     const overlap = await service.createStudyBlock({ ...block, startAt: '2026-10-12T09:30:00.000Z' }, op(1));
     expect(overlap).toMatchObject({ status: 'failed', error: { code: 'overlap' } });
     expect(overlap.error?.message).toContain('Analysis I');
@@ -146,12 +146,12 @@ describe('CalendarService against Google', () => {
     expect(google.events.size).toBe(4);
   });
 
-  it('reports a create that never reached Google as retryable, and the retry does not duplicate', async () => {
+  it('keeps an unconfirmed create unknown and reconciles without resending it', async () => {
     google.dropReply = { method: 'POST', apply: false };
-    expect(await service.createStudyBlock(block, op(1))).toMatchObject({ status: 'failed', error: { code: 'google_unavailable' } });
-    // A failed result is final for that operation ID; the UI retries with a new one.
-    expect(await service.createStudyBlock(block, op(2))).toMatchObject({ status: 'synced' });
-    expect(google.events.size).toBe(4);
+    expect(await service.createStudyBlock(block, op(1))).toMatchObject({ status: 'unknown' });
+    expect(await service.createStudyBlock(block, op(1))).toMatchObject({ status: 'unknown' });
+    expect(google.calls.filter(c => c.startsWith('POST'))).toHaveLength(1);
+    expect(google.events.size).toBe(3);
   });
 
   it('reconciles a move whose reply was lost, and an unknown verification stays unknown', async () => {
@@ -180,6 +180,66 @@ describe('CalendarService against Google', () => {
     }), new MemoryOperationStore());
     expect(await disconnected.createStudyBlock(block, op(1))).toMatchObject({ status: 'failed', error: { code: 'not_connected' } });
   });
+
+  it('rejects reuse of an operation ID with a changed payload or etag', async () => {
+    const created = await service.createStudyBlock(block, op(1));
+    expect(await service.createStudyBlock({ ...block, title: 'Different' }, op(1)))
+      .toMatchObject({ status: 'failed', error: { code: 'validation' } });
+    await service.completeStudyBlock(created.event!.id, created.event!.etag, op(2));
+    expect(await service.completeStudyBlock(created.event!.id, 'different-etag', op(2)))
+      .toMatchObject({ status: 'failed', error: { code: 'validation' } });
+  });
+
+  it('serializes concurrent availability checks for the same owner', async () => {
+    const results = await Promise.all([service.createStudyBlock(block, op(1)), service.createStudyBlock(block, op(2))]);
+    expect(results.map(r => r.status)).toEqual(['synced', 'failed']);
+    expect(results[1].error?.code).toBe('overlap');
+    expect(google.calls.filter(c => c.startsWith('POST'))).toHaveLength(1);
+  });
+
+  it('blocks opaque all-day commitments using Zurich midnight boundaries', async () => {
+    expect(await service.createStudyBlock({ ...block, startAt: '2026-10-13T10:00:00Z', endAt: '2026-10-13T10:50:00Z' }, op(1)))
+      .toMatchObject({ status: 'failed', error: { code: 'overlap' } });
+    expect(google.calls.some(c => c.startsWith('POST'))).toBe(false);
+  });
+
+  it('checks stale etags even if the requested values already match', async () => {
+    const created = await service.createStudyBlock(block, op(1));
+    const done = await service.completeStudyBlock(created.event!.id, created.event!.etag, op(2));
+    expect(await service.completeStudyBlock(created.event!.id, created.event!.etag, op(3)))
+      .toMatchObject({ status: 'failed', error: { code: 'conflict' } });
+    expect(await service.updateStudyBlock(created.event!.id, { title: block.title }, created.event!.etag, op(4)))
+      .toMatchObject({ status: 'failed', error: { code: 'conflict' } });
+    expect(done.event!.etag).not.toBe(created.event!.etag);
+  });
+
+  it('rejects invalid direct service inputs before calling Google', () => {
+    expect(() => service.createStudyBlock({ ...block, endAt: block.startAt }, op(1))).toThrow();
+    expect(() => service.updateStudyBlock('lecture1', { startAt: block.startAt }, 'etag', op(2))).toThrow();
+    expect(() => service.deleteStudyBlock('lecture1', 'etag', 'invalid-id')).toThrow();
+    expect(google.calls).toHaveLength(0);
+  });
+
+  it('does not rewrite a later edit when retrying an uncertain move', async () => {
+    const created = await service.createStudyBlock(block, op(1));
+    google.dropReply = { method: 'PATCH', apply: false };
+    const changes = { title: 'Uncertain title' };
+    expect(await service.updateStudyBlock(created.event!.id, changes, created.event!.etag, op(2)))
+      .toMatchObject({ status: 'unknown' });
+    google.seed({ ...google.events.get(created.event!.id)!, summary: 'Edited later in Google' });
+    expect(await service.updateStudyBlock(created.event!.id, changes, created.event!.etag, op(2)))
+      .toMatchObject({ status: 'unknown' });
+    expect(google.events.get(created.event!.id)?.summary).toBe('Edited later in Google');
+    expect(google.calls.filter(c => c.startsWith('PATCH'))).toHaveLength(1);
+  });
+
+  it('reports availability read failure as failed before attempting a write', async () => {
+    const unavailable = new CalendarService(OWNER, new GoogleCalendarApi({
+      accessToken: async () => 'token', fetcher: async () => { throw new TypeError('down'); },
+    }), new MemoryOperationStore());
+    expect(await unavailable.createStudyBlock(block, op(1)))
+      .toMatchObject({ status: 'failed', error: { code: 'google_unavailable' } });
+  });
 });
 
 describe('FakeCalendarClient', () => {
@@ -190,6 +250,6 @@ describe('FakeCalendarClient', () => {
     const personal = events.find(e => !e.editable)!;
     expect((await client.deleteStudyBlock(personal.id, personal.etag, op(1))).error?.code).toBe('forbidden');
     expect((await client.createStudyBlock({ title: 'x', startAt: personal.startAt, endAt: personal.endAt }, op(2))).error?.code)
-      .toBe(personal.allDay ? undefined : 'overlap');
+      .toBe('overlap');
   });
 });

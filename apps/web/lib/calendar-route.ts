@@ -3,6 +3,7 @@ import { CalendarService } from '@polymate/core/calendar';
 import { GoogleApiError, GoogleCalendarApi, GoogleNotConnectedError, GoogleTransportError } from '@polymate/core/calendar/google-api';
 import { constantTimeEqual } from '@polymate/core/google-auth/crypto';
 import { assertSameOrigin, IdentityError, resolveOwner, type OwnerContext } from '@polymate/core/identity';
+import { CalendarBusyError } from '@polymate/core/calendar/operations';
 import { calendarOperationStore } from '@polymate/db/calendar-operations';
 import { getValidAccessToken } from '@polymate/db/google-oauth';
 import type { NextRequest, NextResponse } from 'next/server';
@@ -49,6 +50,7 @@ export function calendarError(error: unknown): Response {
   let message = 'Calendar request failed.';
   if (error instanceof CsrfError) [status, code, message] = [403, 'csrf', error.message];
   else if (error instanceof IdentityError) [status, code, message] = [error.status, 'identity', error.message];
+  else if (error instanceof CalendarBusyError) [status, code, message] = [409, 'busy', error.message];
   else if (error instanceof ContractError) [status, code, message] = [422, 'validation', error.message];
   else if (error instanceof GoogleNotConnectedError) [status, code, message] = [409, 'not_connected', 'Connect Google Calendar to see your week.'];
   else if (error instanceof GoogleApiError || error instanceof GoogleTransportError) {
