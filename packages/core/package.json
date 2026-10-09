@@ -1,0 +1,7 @@
+{
+  "name": "@polymate/core",
+  "private": true,
+  "type": "module",
+  "exports": { "./identity": "./src/identity.ts" },
+  "scripts": { "typecheck": "tsc --noEmit" }
+}

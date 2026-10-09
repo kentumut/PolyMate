@@ -1,0 +1,11 @@
+[Unit]
+Description=Private PolyMate database snapshot
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=viscon
+WorkingDirectory=/home/viscon/polymate
+ExecStart=/home/viscon/polymate/scripts/backup.sh
+UMask=0077
