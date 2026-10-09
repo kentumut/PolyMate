@@ -1,0 +1,5 @@
+# Only for local development: docker compose -f compose.yaml -f compose.dev.yaml up -d db
+services:
+  db:
+    ports:
+      - '127.0.0.1:5432:5432'

@@ -1,0 +1,75 @@
+name: polymate
+
+x-app-env: &app-env
+  NODE_ENV: production
+  APP_ORIGIN: ${APP_ORIGIN:-https://07.hackathon.ethz.ch}
+  AUTH_MODE: ${AUTH_MODE:-managed-proxy}
+  MANAGED_PROXY_ONLY: ${MANAGED_PROXY_ONLY:-true}
+  DATABASE_URL: postgresql://${POSTGRES_USER:-polymate}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-polymate}
+  RELEASE_SHA: ${RELEASE_SHA:-development}
+  GOOGLE_ENABLED: ${GOOGLE_ENABLED:-false}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+  TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
+  OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET:-}
+
+x-logs: &logs
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+
+services:
+  db:
+    image: postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-polymate}
+      POSTGRES_DB: ${POSTGRES_DB:-polymate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 2g
+    logging: *logs
+
+  web:
+    image: polymate-web:${RELEASE_SHA:-development}
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - '${WEB_BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-8080}:3000'
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    mem_limit: 2g
+    logging: *logs
+
+  tooling:
+    image: polymate-tooling:${RELEASE_SHA:-development}
+    build:
+      context: .
+      target: tooling
+    profiles: [tools]
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *logs
+
+volumes:
+  pgdata:

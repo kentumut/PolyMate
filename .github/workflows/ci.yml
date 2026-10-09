@@ -1,0 +1,42 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+  containers:
+    name: containers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production Compose
+        env:
+          POSTGRES_PASSWORD: ci-only-not-a-real-secret-12345678
+        run: docker compose config --quiet
+      - name: Build web and tooling images
+        run: docker build --target web -t polymate-web:ci . && docker build --target tooling -t polymate-tooling:ci .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Exercise isolated production containers and backup restore
+        run: bash scripts/container-check.sh
