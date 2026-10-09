@@ -5,6 +5,7 @@ coverage/
 .env
 .env.*
 !.env.example
+client_secret_*.apps.googleusercontent.com.json
 .DS_Store
 *.tsbuildinfo
 backups/

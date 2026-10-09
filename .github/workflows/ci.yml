@@ -27,8 +27,24 @@ jobs:
   containers:
     name: containers
     runs-on: ubuntu-latest
+    env:
+      POSTGRES_IMAGE: mirror.gcr.io/library/postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
     steps:
       - uses: actions/checkout@v4
+      - name: Use cached Docker Hub images when available
+        run: |
+          sudo python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('/etc/docker/daemon.json')
+          config = json.loads(path.read_text()) if path.exists() else {}
+          mirror = 'https://mirror.gcr.io'
+          config['registry-mirrors'] = [mirror, *(item for item in config.get('registry-mirrors', []) if item != mirror)]
+          path.write_text(json.dumps(config))
+          PY
+          sudo systemctl restart docker
+          docker info >/dev/null
       - name: Validate production Compose
         env:
           POSTGRES_PASSWORD: ci-only-not-a-real-secret-12345678
