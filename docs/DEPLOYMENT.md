@@ -1,6 +1,6 @@
 # Team 07 deployment and recovery
 
-Target: `https://07.hackathon.ethz.ch`; SSH: `viscon@07-direct.viscon-hackathon.ch`. The foundation is live at commit `31f82f1c8da4b7bcb75b0d4b896268cf46bfd0a7` (9 October 2026). The user confirmed the calendar preview after organizer SSO sign-in. Both containers passed health checks; direct public access to port 8080 was blocked; backup creation, isolated restore, and the six-hour backup schedule were tested. Google Calendar is not yet implemented.
+Target: `https://07.hackathon.ethz.ch`; SSH: `viscon@07-direct.viscon-hackathon.ch`. The foundation was live at commit `31f82f1c8da4b7bcb75b0d4b896268cf46bfd0a7` (9 October 2026). The user confirmed the calendar preview after organizer SSO sign-in. Both containers passed health checks; direct public access to port 8080 was blocked; backup creation, isolated restore, and the six-hour backup schedule were tested. Google Calendar was not included in that foundation release.
 
 ## One-time VM setup
 
@@ -28,7 +28,7 @@ Target: `https://07.hackathon.ethz.ch`; SSH: `viscon@07-direct.viscon-hackathon.
    openssl rand -hex 32
    ```
 
-   The live VM already has a private `.env` with a generated database password and `GOOGLE_ENABLED=false`. To enable Google connection, register the exact callback `https://07.hackathon.ethz.ch/api/integrations/google/callback` in the Google web OAuth client, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, generate `TOKEN_ENCRYPTION_KEY` with `openssl rand -base64 32` and `OAUTH_STATE_SECRET` with `openssl rand -base64 48`, then set `GOOGLE_ENABLED=true`. Keep both keys stable across deploys and back them up separately from the database. Add each test student's account to the Google OAuth test-user list as needed. Never put working credentials in GitHub, browser bundles, screenshots, or PR text.
+   The live VM already has a private `.env` with a generated database password and `GOOGLE_ENABLED=false`. Register the exact callback `https://07.hackathon.ethz.ch/api/integrations/google/callback` in a Google web OAuth client. Before merging a Google-enabled release, add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY`, and `OAUTH_STATE_SECRET` as GitHub Actions repository secrets. Generate `TOKEN_ENCRYPTION_KEY` with `openssl rand -base64 32` and `OAUTH_STATE_SECRET` with `openssl rand -base64 48`. The deploy job sends these values over SSH to the VM's private `.env`, sets the callback and `GOOGLE_ENABLED=true`, and keeps the database settings. It refuses to replace an existing client ID or either stable key; reconcile mismatches privately. Keep both keys stable across deploys and back them up separately from the database. Add each test student's account to the Google OAuth test-user list as needed. Never put working credentials in Git, browser bundles, screenshots, or PR text.
 
 4. Validate without printing secrets. Avoid bare `docker compose config`, which expands credentials:
 
@@ -54,6 +54,10 @@ Target: `https://07.hackathon.ethz.ch`; SSH: `viscon@07-direct.viscon-hackathon.
 ## Deploy a reviewed commit
 
 Every successful `CI` push run on the current `main` commit now triggers the `Deploy VM` workflow. It transfers a complete Git bundle over SSH, then runs `scripts/deploy.sh FETCH_HEAD` on the VM. The workflow skips an older success if a newer commit has reached `main`. It uses the repository's `POLYMATE_VM_DEPLOY_KEY` Actions secret and the pinned host key in `.github/viscon_known_hosts`. The VM's authorized key has forwarding and PTY restrictions. Review the separate deployment job result before treating a change as live.
+
+The deploy job requires all four Google Actions secrets before it can release a Google-enabled commit. It passes them through SSH standard input, installs them atomically in the private `.env`, and then runs the usual configuration check and deployment. If any secret is missing or conflicts with an existing stable key, deployment fails before replacing the running web container. Add the secrets before merging this workflow change.
+
+The CI container job checks Google's Docker Hub cache before Docker Hub so public runner rate limits do not interrupt builds when the pinned Node and PostgreSQL images are cached. Docker still falls back to Docker Hub if the cache lacks an image.
 
 The manual commands below remain the recovery path when GitHub Actions or SSH is unavailable. The first VM checkout was made from a transferred bundle; it has no GitHub credential.
 
