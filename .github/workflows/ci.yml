@@ -27,6 +27,8 @@ jobs:
   containers:
     name: containers
     runs-on: ubuntu-latest
+    env:
+      POSTGRES_IMAGE: mirror.gcr.io/library/postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
     steps:
       - uses: actions/checkout@v4
       - name: Use cached Docker Hub images when available
