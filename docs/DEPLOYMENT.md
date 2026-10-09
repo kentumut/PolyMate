@@ -57,6 +57,8 @@ Every successful `CI` push run on the current `main` commit now triggers the `De
 
 The deploy job requires all four Google Actions secrets before it can release a Google-enabled commit. It passes them through SSH standard input, installs them atomically in the private `.env`, and then runs the usual configuration check and deployment. If any secret is missing or conflicts with an existing stable key, deployment fails before replacing the running web container. Add the secrets before merging this workflow change.
 
+The CI container job checks Google's Docker Hub cache before Docker Hub so public runner rate limits do not interrupt builds when the pinned Node and PostgreSQL images are cached. Docker still falls back to Docker Hub if the cache lacks an image.
+
 The manual commands below remain the recovery path when GitHub Actions or SSH is unavailable. The first VM checkout was made from a transferred bundle; it has no GitHub credential.
 
 For a VM checkout that has GitHub access, fetch and deploy the reviewed commit:
