@@ -1,13 +1,13 @@
 # Kent's implementation handoff
 
-The iteration 0 / independent iteration 1 infrastructure is implemented. Deployment is prepared for the user to run after SSH access is established. The calendar page is explicitly a preview; the interactive Google-connected MVP still requires the four feature handoffs below.
+The iteration 0 / independent iteration 1 infrastructure is deployed on the team 07 VM at commit `31f82f1`. The user confirmed the preview after managed SSO sign-in. The interactive Google-connected MVP still requires the four feature handoffs below.
 
 | Kent assignment | Result | Remaining external dependency |
 |---|---|---|
-| Shared scaffold and app shell | Next.js/React/TypeScript/Tailwind pnpm workspace; local preview; production standalone image. | Bootstrap PR review/merge before teammates branch. |
-| Identity boundary | Server-only normalized managed identity; fixed development identity forbidden in production; same-origin mutation helper. | VM proxy/firewall verification by the user. |
-| Compose / health / database | Web on host 8080, private PostgreSQL volume/network, limits, rotated logs, restart policy, liveness and database readiness. | User establishes SSH and runs prepared deployment. |
-| Migration and recovery tooling | Locked/checksummed ordered SQL runner, SHA releases, backup/restore, automatic image recovery attempt, six-hour backup timer. | Bartek supplies additive schema migrations; user enables timer on VM. |
+| Shared scaffold and app shell | Next.js/React/TypeScript/Tailwind pnpm workspace; local preview; production standalone image. Bootstrap PR merged. | Teammates branch from current `main`. |
+| Identity boundary | Server-only normalized managed identity; fixed development identity forbidden in production; same-origin mutation helper. Managed SSO and blocked direct port verified. | Verify isolation again when student data arrives. |
+| Compose / health / database | Web on host 8080, private PostgreSQL volume/network, limits, rotated logs, restart policy, liveness and database readiness. Both VM containers healthy. | Google-connected feature handoffs. |
+| Migration and recovery tooling | Locked/checksummed ordered SQL runner, SHA releases, backup/restore, automatic image recovery attempt. A six-hour user cron backup is installed and tested; a backup was restored and copied off the VM. | Bartek supplies additive schema migrations. |
 | CI and parallel merges | Typecheck/lint/tests/build plus isolated container/identity/migration/restore checks, PR template, ownership and merge instructions. | Peer review; configure GitHub branch rule as described in CONTRIBUTING. |
 | Calendar composition / first live release | Shared page location and app imports are ready. | Yildirim's view, Catalin's forms, Dogancem's CalendarClient, Bartek's OAuth/token provider. Integrate these before claiming CAL-07 or tagging an MVP. |
 
@@ -23,7 +23,7 @@ The iteration 0 / independent iteration 1 infrastructure is implemented. Deploym
 
 ## Kent's next integration sequence
 
-1. Merge the scaffold after Bartek's review and green CI; everyone branches from the new `main`.
+1. Done: scaffold merged after review and green CI; everyone branches from the new `main`.
 2. Merge Dogancem's shared contracts and Bartek's minimum user/OAuth schema. Coordinate dependencies and lockfile changes in one small PR.
 3. Merge OAuth/token provider and Google calendar service; independently merge the view and dialogs once contracts are stable.
 4. Replace the preview composition with real connection/query/mutation state. Run Catalin's create/move/complete/reload/delete journey against Google, including overlap, revoked connection, and rejected personal-event edits.

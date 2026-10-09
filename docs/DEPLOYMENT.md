@@ -1,6 +1,6 @@
 # Team 07 deployment and recovery
 
-Target: `https://07.hackathon.ethz.ch`; SSH: `viscon@07-direct.viscon-hackathon.ch`. This is a prepared runbook. The user will establish SSH trust/access; no VM deployment has been performed by this change.
+Target: `https://07.hackathon.ethz.ch`; SSH: `viscon@07-direct.viscon-hackathon.ch`. The foundation is live at commit `31f82f1c8da4b7bcb75b0d4b896268cf46bfd0a7` (9 October 2026). The user confirmed the calendar preview after organizer SSO sign-in. Both containers passed health checks; direct public access to port 8080 was blocked; backup creation, isolated restore, and the six-hour backup schedule were tested. Google Calendar is not yet implemented.
 
 ## One-time VM setup
 
@@ -17,7 +17,7 @@ Target: `https://07.hackathon.ethz.ch`; SSH: `viscon@07-direct.viscon-hackathon.
    ss -ltnp
    ```
 
-3. Clone to the path used by the supplied backup service. For a private repository, configure your own GitHub SSH key or read-only deploy key; do not embed tokens in clone URLs:
+3. The first release was transferred as a Git bundle and cloned to `/home/viscon/polymate`, avoiding a GitHub credential on the VM. For a fresh VM or a checkout with a GitHub deploy key, the alternative clone path is:
 
    ```bash
    git clone git@github.com:kentumut/viscon-26.git ~/polymate
@@ -28,7 +28,7 @@ Target: `https://07.hackathon.ethz.ch`; SSH: `viscon@07-direct.viscon-hackathon.
    openssl rand -hex 32
    ```
 
-   Put the generated database password in `.env` using a private editor. Leave `GOOGLE_ENABLED=false` for this infrastructure preview. Once Bartek's OAuth routes land, provide the Google client ID/secret, stable token-encryption key and OAuth-state secret in the formats that his implementation requires, set the exact callback `https://07.hackathon.ethz.ch/api/integrations/google/callback`, and enable Google. Add each test student's account to the Google OAuth test-user list as needed. Never put working credentials in GitHub, browser bundles, screenshots, or PR text.
+   The live VM already has a private `.env` with a generated database password and `GOOGLE_ENABLED=false`. Once Bartek's OAuth routes land, provide the Google client ID/secret, stable token-encryption key and OAuth-state secret in the formats that his implementation requires, set the exact callback `https://07.hackathon.ethz.ch/api/integrations/google/callback`, and enable Google. Add each test student's account to the Google OAuth test-user list as needed. Never put working credentials in GitHub, browser bundles, screenshots, or PR text.
 
 4. Validate without printing secrets. Avoid bare `docker compose config`, which expands credentials:
 
@@ -53,13 +53,31 @@ Target: `https://07.hackathon.ethz.ch`; SSH: `viscon@07-direct.viscon-hackathon.
 
 ## Deploy a reviewed commit
 
-On the clean VM checkout:
+For a VM checkout that has GitHub access, fetch and deploy the reviewed commit:
 
 ```bash
 cd ~/polymate
 git fetch origin --tags
 scripts/deploy.sh origin/main
 ```
+
+**Current VM:** Its `origin` is the original local Git bundle, so `git fetch origin` cannot retrieve later GitHub commits. For each future reviewed release, make a fresh bundle on Kent's local checkout after updating `main`, transfer it privately, then fetch that bundle on the VM:
+
+```bash
+# Kent's local checkout (with the dedicated deployment SSH key):
+git switch main
+git pull --ff-only origin main
+mkdir -p .release
+git bundle create .release/polymate-next.bundle main
+scp -i ~/.ssh/polymate_viscon_2026 .release/polymate-next.bundle viscon@07-direct.viscon-hackathon.ch:/home/viscon/polymate-transfer/
+
+# VM checkout:
+cd ~/polymate
+git fetch /home/viscon/polymate-transfer/polymate-next.bundle main
+scripts/deploy.sh FETCH_HEAD
+```
+
+Keep each transferred bundle private. The deployment script resolves `FETCH_HEAD` to an exact commit SHA and records the passing release. The VM has the reviewed commit's history and keeps its `.env`, backups, and database outside Git.
 
 The script resolves an exact SHA, locks deployments with `flock`, checks production configuration, builds SHA-tagged images, starts/checks the database, takes a private backup, applies ordered migrations, starts web detached, and checks readiness, release SHA, and rejection of requests missing proxy identity. It records the healthy SHA in `.release/current` and retains `.release/previous`. Build/migration failure leaves the existing web process running. A readiness/smoke failure attempts to restore the recorded previous web image. A first deployment has no previous PolyMate image to restore; inspect and retry or restore the organizer template manually.
 
@@ -86,7 +104,7 @@ scripts/restore-check.sh backups/<snapshot>/database.dump
 
 Each private snapshot contains a PostgreSQL custom-format dump, running release/version metadata, and SHA-256 checksums. The three newest completed snapshots are retained. Incomplete snapshots and unrelated files are not pruned. Copy the newest backup off the VM privately before cutoff. The restore check verifies checksums, restores into a random temporary database, reports table count, and removes only that temporary database. It never replaces the live database. Token-encryption keys must be copied separately to a private team location.
 
-For a persistent six-hour schedule on the VM (adjust the unit paths if the clone directory differs):
+The current VM uses the `viscon` user's crontab at 00:00, 06:00, 12:00 and 18:00 UTC. `crontab -l` shows the job. It runs with an explicit Node 24 path, a private umask, and writes logs under `~/polymate/backups/backup.log`. It was tested with cron's minimal environment. If replacing it with the supplied systemd timer, first remove the cron entry to avoid duplicate backups; adjust the unit paths if the clone directory differs:
 
 ```bash
 sudo install -m 644 ops/polymate-backup.service ops/polymate-backup.timer /etc/systemd/system/

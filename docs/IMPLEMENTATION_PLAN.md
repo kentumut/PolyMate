@@ -16,7 +16,7 @@ Ship the interactive Google-connected calendar first. The first release must con
 
 The eventual product is a proactive study companion for ETH CS bachelor's and master's students. Its full journey includes imported deadlines, automated planning, Telegram follow-ups, adaptation, and exercise tutoring. Those later capabilities do not block the first calendar release.
 
-The application foundation now exists: pnpm workspace, calendar preview, managed identity, web/db Compose, CI, and deployment/recovery scripts. See [Kent's handoff](KENT_HANDOFF.md) and the executable [deployment runbook](DEPLOYMENT.md) for current status. The full feature architecture below remains a plan; the VM, credentials, Google integration, and later features are not asserted to be working by this scaffold.
+The application foundation is deployed on the team 07 VM: pnpm workspace, calendar preview, managed identity, web/db Compose, CI, and deployment/recovery scripts. See [Kent's handoff](KENT_HANDOFF.md) and the executable [deployment runbook](DEPLOYMENT.md) for current status. The full feature architecture below remains a plan; Google integration and later features are not asserted to be working by this scaffold.
 
 POLYMATE_SPEC.md defines the student experience; TEAM_SCHEDULE.md defines which increment ships when. The deployment decisions here adapt the original hosting choices to the VM and credits. The broader campus discovery concept in SPEC.md is background reference, not an additional set of MVP requirements. This document contains the full technical design; implement only the parts required by the current iteration.
 
@@ -452,4 +452,4 @@ Additional implementation references:
 
 Inputs needed at kickoff: private SSH access and one Google Cloud project/client with a demo account. Iteration 3 adds permitted Moodle/myStudies exports; iteration 4 adds production/development Telegram bots and a model-provider key; optional iteration 5 adds a readable exercise sheet. Later credentials and materials do not block the Google-calendar MVP. Masked screenshot fields are not usable credentials.
 
-Defaults not yet confirmed by a live deployment: managed domain callback acceptance, outgoing provider access, template health/port ownership, exact installed Compose version, available LiteLLM model/tool capabilities, and post-event VM lifetime. Resolve them in the first validation pass; preserve the product acceptance criteria when reporting any limitation.
+The foundation deployment confirmed the template's former port ownership, Node 24, Docker Compose, PostgreSQL readiness, managed-address SSO and the calendar preview. Still unconfirmed: Google OAuth callback acceptance, outgoing provider access, available LiteLLM model/tool capabilities, and post-event VM lifetime. Resolve these with their feature iterations; preserve the product acceptance criteria when reporting any limitation.
