@@ -21,7 +21,7 @@ A labelled in-memory `FakeCalendarClient` for local development lives in `@polym
 - Availability includes opaque all-day events at Zurich midnight, and expanded recurring commitments. Transparent or declined events do not block time.
 - The server serializes each owner's availability check and write with a database advisory lock. Google-side edits can still race with a create; availability checking is not an atomic Google reservation.
 
-See [issue #8 handoff](../../../docs/CALENDAR_SERVICE_HANDOFF.md) for validation and live acceptance steps.
+See [issue #8 handoff](../../docs/CALENDAR_SERVICE_HANDOFF.md) for validation and live acceptance steps.
 
 ## HTTP routes
 
