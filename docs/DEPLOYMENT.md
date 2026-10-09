@@ -28,7 +28,7 @@ Target: `https://07.hackathon.ethz.ch`; SSH: `viscon@07-direct.viscon-hackathon.
    openssl rand -hex 32
    ```
 
-   The live VM already has a private `.env` with a generated database password and `GOOGLE_ENABLED=false`. Once Bartek's OAuth routes land, provide the Google client ID/secret, stable token-encryption key and OAuth-state secret in the formats that his implementation requires, set the exact callback `https://07.hackathon.ethz.ch/api/integrations/google/callback`, and enable Google. Add each test student's account to the Google OAuth test-user list as needed. Never put working credentials in GitHub, browser bundles, screenshots, or PR text.
+   The live VM already has a private `.env` with a generated database password and `GOOGLE_ENABLED=false`. To enable Google connection, register the exact callback `https://07.hackathon.ethz.ch/api/integrations/google/callback` in the Google web OAuth client, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, generate `TOKEN_ENCRYPTION_KEY` with `openssl rand -base64 32` and `OAUTH_STATE_SECRET` with `openssl rand -base64 48`, then set `GOOGLE_ENABLED=true`. Keep both keys stable across deploys and back them up separately from the database. Add each test student's account to the Google OAuth test-user list as needed. Never put working credentials in GitHub, browser bundles, screenshots, or PR text.
 
 4. Validate without printing secrets. Avoid bare `docker compose config`, which expands credentials:
 

@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { IdentityError, resolveOwner, type OwnerContext } from '@polymate/core/identity';
+import { GoogleConnection } from '@/components/connections/google-connection';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +33,7 @@ export default async function CalendarPage() {
           <section className="overflow-hidden rounded-2xl border border-[#dce3db] bg-white" aria-label="Calendar integration placeholder">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0eb] px-6 py-5">
               <div><h2 className="font-semibold">Your study calendar</h2><p className="mt-1 text-xs text-[#748278]">Europe/Zurich · weekly view</p></div>
-              <span className="flex items-center gap-2 text-xs text-[#748278]"><span className="h-2 w-2 rounded-full bg-[#dba86a]" />Google not connected</span>
+              <span className="text-xs text-[#748278]">Google Calendar</span>
             </div>
             <div className="relative overflow-x-auto">
               <div className="min-w-[620px] p-4" aria-hidden="true">
@@ -43,7 +44,8 @@ export default async function CalendarPage() {
                 <div className="max-w-sm rounded-2xl border border-[#dce3db] bg-white p-7 text-center shadow-sm">
                   <span className="mb-4 inline-grid h-11 w-11 place-items-center rounded-xl bg-[#eef2e9] text-lg" aria-hidden="true">↗</span>
                   <h3 className="text-lg font-semibold">Your calendar starts here</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#617269]">Google Calendar connection and study-block controls are being integrated. No events have been loaded or saved.</p>
+                  <p className="mt-3 text-sm leading-6 text-[#617269]">Connect your Google Calendar below. Event display and study-block controls are still being built.</p>
+                  <GoogleConnection />
                 </div>
               </div>
             </div>
@@ -54,7 +56,7 @@ export default async function CalendarPage() {
             <p className="px-1 text-xs text-[#748278]">Signed in as {owner.displayName}</p>
           </aside>
         </div>
-        <p className="mt-6 text-xs text-[#7a877e]">Preview only. Google Calendar and manual study-block actions ship in the first MVP.</p>
+        <p className="mt-6 text-xs text-[#7a877e]">Preview only. Calendar events and manual study-block actions are not available yet.</p>
       </section>
     </main>;
 }
