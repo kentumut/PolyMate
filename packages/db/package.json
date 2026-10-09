@@ -4,8 +4,9 @@
   "type": "module",
   "exports": {
     ".": "./src/connection.ts",
-    "./google-oauth": "./src/google-oauth.ts"
+    "./google-oauth": "./src/google-oauth.ts",
+    "./calendar-operations": "./src/calendar-operations.ts"
   },
-  "dependencies": { "@polymate/core": "workspace:*", "pg": "8.23.1" },
+  "dependencies": { "@polymate/contracts": "workspace:*", "@polymate/core": "workspace:*", "pg": "8.23.1" },
   "scripts": { "typecheck": "tsc --noEmit" }
 }

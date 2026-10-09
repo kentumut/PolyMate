@@ -5,6 +5,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm install --global pnpm@11.1.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY apps/web/package.json ./apps/web/package.json
+COPY packages/contracts/package.json ./packages/contracts/package.json
 COPY packages/core/package.json ./packages/core/package.json
 COPY packages/db/package.json ./packages/db/package.json
 RUN pnpm install --frozen-lockfile
