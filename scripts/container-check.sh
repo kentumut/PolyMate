@@ -49,7 +49,7 @@ if (owner.displayName !== 'Test Student' || !owner.userId || owner.externalId) {
   throw new Error('Unexpected identity response.');
 }
 const page = await fetch(`${base}/calendar`, { headers: { 'X-User-Id': 'test-student@ethz.ch' } });
-if (!page.ok || !(await page.text()).includes('Your study calendar')) throw new Error('Calendar shell failed.');
+if (!page.ok || !(await page.text()).includes('aria-label="Weekly calendar"')) throw new Error('Calendar shell failed.');
 NODE
 BACKUP_DIR="/tmp/$COMPOSE_PROJECT_NAME-backups" scripts/backup.sh
 snapshot="$(find "/tmp/$COMPOSE_PROJECT_NAME-backups" -name database.dump -print -quit)"
