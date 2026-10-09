@@ -73,6 +73,9 @@ export class GoogleCalendarApi {
       };
       if (pageToken) query.pageToken = pageToken;
       const body = await this.request<{ items?: GoogleEvent[]; nextPageToken?: string }>('GET', '', { query });
+      if (!body || typeof body !== 'object' || (body.items !== undefined && !Array.isArray(body.items)) ||
+          (body.nextPageToken !== undefined && typeof body.nextPageToken !== 'string')) throw new GoogleTransportError();
+      for (const event of body.items ?? []) assertEvent(event);
       events.push(...(body?.items ?? []));
       pageToken = body?.nextPageToken;
       if (!pageToken) return events;
@@ -84,6 +87,7 @@ export class GoogleCalendarApi {
   async get(id: string): Promise<GoogleEvent | null> {
     try {
       const event = await this.request<GoogleEvent>('GET', `/${encodeURIComponent(id)}`);
+      assertEvent(event);
       return event && event.status !== 'cancelled' ? event : null;
     } catch (error) {
       if (error instanceof GoogleApiError && (error.status === 404 || error.status === 410)) return null;
@@ -92,11 +96,15 @@ export class GoogleCalendarApi {
   }
 
   async insert(event: GoogleEventWrite & { id: string }): Promise<GoogleEvent> {
-    return (await this.request<GoogleEvent>('POST', '', { body: event }))!;
+    const result = await this.request<GoogleEvent>('POST', '', { body: event });
+    assertEvent(result);
+    return result;
   }
 
   async patch(id: string, changes: GoogleEventWrite, ifMatch: string): Promise<GoogleEvent> {
-    return (await this.request<GoogleEvent>('PATCH', `/${encodeURIComponent(id)}`, { body: changes, ifMatch }))!;
+    const result = await this.request<GoogleEvent>('PATCH', `/${encodeURIComponent(id)}`, { body: changes, ifMatch });
+    assertEvent(result);
+    return result;
   }
 
   async delete(id: string, ifMatch: string): Promise<void> {
@@ -145,4 +153,18 @@ export class GoogleCalendarApi {
     }
     return body as T;
   }
+}
+
+function assertEvent(event: unknown): asserts event is GoogleEvent {
+  if (!event || typeof event !== 'object') throw new GoogleTransportError();
+  const value = event as GoogleEvent;
+  if (typeof value.id !== 'string' || !value.id || typeof value.etag !== 'string' || !value.etag) throw new GoogleTransportError();
+  if (value.status === 'cancelled') return;
+  const time = (value: GoogleEventTime | undefined) => {
+    if (value?.dateTime) return Number.isFinite(Date.parse(value.dateTime));
+    if (typeof value?.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) return false;
+    const parsed = Date.parse(value.date + 'T00:00:00Z');
+    return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value.date;
+  };
+  if (!time(value.start) || !time(value.end)) throw new GoogleTransportError();
 }

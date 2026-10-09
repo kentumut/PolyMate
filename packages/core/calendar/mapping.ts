@@ -6,6 +6,7 @@ import type { GoogleEvent, GoogleEventTime, GoogleEventWrite } from './google-ap
 export const PROP_KIND = 'polymateKind';
 export const PROP_OWNER = 'polymateOwner';
 export const PROP_COMPLETION = 'polymateCompletion';
+export const PROP_OPERATION = 'polymateOperation';
 export const STUDY_BLOCK_KIND = 'study-block';
 export const DONE_PREFIX = '✓ ';
 const STUDY_COLOR_ID = '2';
@@ -57,7 +58,7 @@ export function toCalendarEvent(event: GoogleEvent, ownerId: string): CalendarEv
 /** Whether an event makes the student unavailable for a study block. */
 export function blocksTime(event: GoogleEvent): boolean {
   if (event.status === 'cancelled' || event.transparency === 'transparent') return false;
-  if (!event.start?.dateTime || !event.end?.dateTime) return false;
+  if (!event.start || !event.end) return false;
   return !event.attendees?.some(attendee => attendee.self && attendee.responseStatus === 'declined');
 }
 
@@ -74,6 +75,6 @@ export function newStudyBlockEvent(input: StudyBlockInput, ownerId: string, oper
     end: { dateTime: input.endAt, timeZone: CALENDAR_TIMEZONE },
     transparency: 'opaque',
     colorId: STUDY_COLOR_ID,
-    extendedProperties: { private: { [PROP_KIND]: STUDY_BLOCK_KIND, [PROP_OWNER]: ownerId, [PROP_COMPLETION]: 'open' } },
+    extendedProperties: { private: { [PROP_KIND]: STUDY_BLOCK_KIND, [PROP_OWNER]: ownerId, [PROP_COMPLETION]: 'open', [PROP_OPERATION]: operationId } },
   };
 }

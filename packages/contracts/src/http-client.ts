@@ -73,10 +73,10 @@ export class HttpCalendarClient implements CalendarClient {
     if (response.status === 403 && parsed.error?.code === 'csrf' && !retried) {
       return this.mutate(method, path, operationId, body, true);
     }
-    if (parsed.operationId === operationId && parsed.status) return parsed as OperationResult;
+    if (parsed.operationId === operationId && ['pending', 'synced', 'failed', 'unknown'].includes(parsed.status ?? '')) return parsed as OperationResult;
     return {
       operationId,
-      status: response.status >= 500 ? 'unknown' : 'failed',
+      status: response.ok || response.status >= 500 ? 'unknown' : 'failed',
       error: { code: (parsed.error?.code ?? 'unknown') as OperationErrorCode, message: parsed.error?.message ?? 'Calendar request failed.' },
     };
   }

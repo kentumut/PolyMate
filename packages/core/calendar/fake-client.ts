@@ -124,7 +124,7 @@ export class FakeCalendarClient implements CalendarClient {
   }
 
   private assertFree(candidate: { startAt: string; endAt: string }, ownId: string | null): void {
-    const busy = [...this.events.values()].filter(event => event.id !== ownId && !event.allDay);
+    const busy = [...this.events.values()].filter(event => event.id !== ownId);
     const [first] = findConflicts(candidate, busy);
     if (first) throw new FakeError('overlap', `This time overlaps “${first.title}”.`);
   }
