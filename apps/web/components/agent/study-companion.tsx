@@ -1,5 +1,7 @@
 'use client';
 
+import { MessageContent } from './message-content';
+
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
 import { useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -223,7 +225,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
             </div>
           </div>}
           {messages.map(message => <article key={message.id} className={`max-w-[96%] rounded-2xl px-4 py-3 ${message.role === 'user' ? 'ml-auto bg-[#173b32] text-white' : 'bg-[#f1f4ee] text-[#21362d]'}`}>
-            <p className="whitespace-pre-wrap text-sm leading-6">{message.text}</p>
+            {message.role === 'assistant' ? <MessageContent text={message.text} /> : <p className="whitespace-pre-wrap text-sm leading-6">{message.text}</p>}
             {message.role === 'assistant' && <OtherCards cards={message.cards} busy={busy} confirmed={confirmedProgress} onConfirm={(draftToken, confirmAssignmentFinished) => void sendMessage(undefined, { draftToken, confirmAssignmentFinished })} />}
           </article>)}
           {busy && <p className="text-sm text-[#617269]" role="status">PolyMate is checking your study space…</p>}
