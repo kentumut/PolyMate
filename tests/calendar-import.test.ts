@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
-import { parseCalendarImport, IMPORT_MAX_BYTES } from '../packages/core/calendar/import';
+import { parseCalendarImport, IMPORT_MAX_BYTES, IMPORT_MAX_PREVIEW_ROWS, IMPORT_RECURRENCE_DAYS } from '../packages/core/calendar/import';
 
 const now = new Date('2026-10-10T08:00:00Z');
 const calendar = (...events: string[]) => ['BEGIN:VCALENDAR', 'VERSION:2.0', ...events, 'END:VCALENDAR'].join('\n');
@@ -41,7 +41,7 @@ describe('ICS preview parser', () => {
     expect(before.events).toHaveLength(2); expect(after.events).toHaveLength(2);
     const old = before.events.find(item => item.startAt === '2026-10-30T14:00:00.000Z')!;
     expect(after.events.find(item => item.startAt === '2026-10-31T16:00:00.000Z')).toMatchObject({ key: old.key, recurrenceId: old.recurrenceId });
-    expect(after.warnings.join(' ')).toContain('365 days');
+    expect(after.warnings.join(' ')).toContain('140 days');
   });
   it('skips cancelled events and high-frequency series, and keeps source text inert', async () => {
     const result = await parseCalendarImport(calendar(event('STATUS:CANCELLED'), event('RRULE:FREQ=MINUTELY;COUNT=999', 'bad-rule'), event('DESCRIPTION:<script>evil</script>https://moodle.test/?authtoken=secret', 'safe')), 'moodle', now);
@@ -71,5 +71,22 @@ describe('ICS preview parser', () => {
     expect(moodle.events).toHaveLength(2); expect(moodle.events[1].allDay).toBe(true);
     expect(timetable.events).toHaveLength(4); expect(new Set(timetable.events.map(item => item.key)).size).toBe(4);
     expect(timetable.warnings.join(' ')).toContain('Floating times');
+  });
+  it('imports a timetable of open-ended weekly series instead of rejecting the whole file', async () => {
+    const lectures = Array.from({ length: 12 }, (_, index) => ['BEGIN:VEVENT', `UID:lecture-${index}@mystudies`, `DTSTART;TZID=Europe/Zurich:20261012T${String(8 + index).padStart(2, '0')}1500`,
+      `DTEND;TZID=Europe/Zurich:20261012T${String(9 + index).padStart(2, '0')}0000`, `SUMMARY:Lecture ${index}`, 'RRULE:FREQ=WEEKLY', 'END:VEVENT'].join('\n'));
+    const result = await parseCalendarImport(calendar(...lectures), 'mystudies', now);
+    // 12 series x 20 weekly occurrences in the 140-day window: well below the preview cap, nothing rejected or truncated.
+    expect(result.events.length).toBeGreaterThan(200); expect(result.events.length).toBeLessThanOrEqual(IMPORT_MAX_PREVIEW_ROWS);
+    expect(result.warnings.join(' ')).toContain(`${IMPORT_RECURRENCE_DAYS} days`); expect(result.warnings.join(' ')).not.toContain('Only the earliest');
+    expect(Date.parse(result.events.at(-1)!.startAt)).toBeLessThan(Date.parse(result.recurrenceWindow.to));
+    expect(new Set(result.events.map(item => item.key)).size).toBe(result.events.length);
+  });
+  it('keeps the earliest rows and warns, rather than failing, when an export exceeds the preview cap', async () => {
+    const daily = Array.from({ length: 5 }, (_, index) => ['BEGIN:VEVENT', `UID:daily-${index}@mystudies`, 'DTSTART:20261012T080000Z', 'DTEND:20261012T083000Z', `SUMMARY:Daily ${index}`, 'RRULE:FREQ=DAILY', 'END:VEVENT'].join('\n'));
+    const result = await parseCalendarImport(calendar(...daily), 'mystudies', now);
+    expect(result.events).toHaveLength(IMPORT_MAX_PREVIEW_ROWS);
+    expect(result.warnings.join(' ')).toContain(`Only the earliest ${IMPORT_MAX_PREVIEW_ROWS}`);
+    expect(result.events.map(item => item.startAt)).toEqual([...result.events.map(item => item.startAt)].sort());
   });
 });

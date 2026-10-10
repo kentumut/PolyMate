@@ -37,7 +37,7 @@ This is a fixture contract, not an authoritative persistence API. Before connect
 ## Parsing boundaries
 
 - Non-recurring entries retain their dates without the Moodle subscription's 60-day cutoff.
-- Recurrence expands only from the preview clock through the following 365 Zurich calendar days; the UI shows this window. At most 1,000 source VEVENTs, 100 recurrence rules and 500 preview rows.
+- Recurrence expands only from the preview clock through the following 140 Zurich calendar days (about one semester), so open-ended weekly timetable series are previewed rather than rejected; the UI shows this window. At most 1,000 source VEVENTs and 100 recurrence rules. A preview shows at most 500 rows: a larger export keeps the earliest 500 and warns, and only an extreme expansion (over 20,000 occurrences) is rejected.
 - Floating times explicitly mean Zurich and produce a warning. All-day dates are converted using Zurich rather than the server's timezone. Impossible calendar fields are skipped rather than normalized silently.
 - UTC and IANA timezones are supported. Custom/non-IANA timezone definitions are rejected with an actionable message; file-level VTIMEZONE components are not imported.
 - Nonexistent DST wall-clock times are skipped with a warning. Additional `RDATE` occurrence lists are not supported and are explicitly warned/skipped instead of silently dropping dates.

@@ -4,6 +4,11 @@ import { addZonedDays, zonedParts, zonedTimeToInstant } from '@polymate/contract
 import type { ImportSource, ImportEvent, ImportPreview } from '@polymate/contracts/imports';
 export type { ImportSource, ImportEvent, ImportPreview } from '@polymate/contracts/imports';
 export const IMPORT_MAX_BYTES = 1_000_000;
+/** About one ETH semester including the exam session; open-ended weekly series stop here. */
+export const IMPORT_RECURRENCE_DAYS = 140;
+export const IMPORT_MAX_PREVIEW_ROWS = 500;
+/** Work guard only: far above the preview cap, so ordinary files are truncated with a warning, never rejected. */
+const IMPORT_MAX_EXPANDED_ROWS = 20_000;
 export class CalendarImportError extends Error {
   constructor(message: string) { super(message); this.name = 'CalendarImportError'; }
 }
@@ -75,7 +80,7 @@ export async function parseCalendarImport(raw: string, source: ImportSource, now
   let parsed: Awaited<ReturnType<typeof ical.async.parseICS>>;
   try { parsed = await ical.async.parseICS(normalized); }
   catch { throw new CalendarImportError('The calendar could not be read. Export a fresh .ics file.'); }
-  const from = new Date(now); const to = addZonedDays(now, 365);
+  const from = new Date(now); const to = addZonedDays(now, IMPORT_RECURRENCE_DAYS);
   const events: ImportEvent[] = [];
   for (const component of Object.values(parsed)) {
     if (!component || component.type !== 'VEVENT') continue;
@@ -85,7 +90,7 @@ export async function parseCalendarImport(raw: string, source: ImportSource, now
     if (event.rrule && (!/FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(?:;|\r?\n|$)/i.test(event.rrule.toString()) || /(?:^|[;:])BY(?:SECOND|MINUTE|HOUR)=/i.test(event.rrule.toString()))) {
       warnings.add('Unsupported high-frequency recurring events were skipped.'); continue;
     }
-    if (event.rrule) warnings.add('Recurring series are previewed only within the next 365 days. Dates outside that window are not imported.');
+    if (event.rrule) warnings.add(`Recurring series are previewed only within the next ${IMPORT_RECURRENCE_DAYS} days (about one semester). Dates outside that window are not imported.`);
     try {
       const instances = event.rrule ? ical.expandRecurringEvent(event, { from, to, expandOngoing: true }) : [{ event, start: event.start, end: event.end ?? event.start, summary: event.summary, isFullDay: Boolean(event.start.dateOnly) }];
       for (const instance of instances) {
@@ -95,7 +100,7 @@ export async function parseCalendarImport(raw: string, source: ImportSource, now
         const recurrenceId = instance.event.recurrenceid?.toISOString() ?? (event.rrule ? instance.start.toISOString() : null);
         const key = createHash('sha256').update(JSON.stringify([source, event.uid, recurrenceId])).digest('hex');
         events.push({ key, uid: event.uid, recurrenceId, title: text(instance.summary) || 'Untitled calendar event', description: text(instance.event.description, 4000), startAt: start.toISOString(), endAt: end.toISOString(), allDay: instance.isFullDay });
-        if (events.length > 500) throw new CalendarImportError('Too many occurrences. Export a smaller calendar (at most 500 preview rows).');
+        if (events.length > IMPORT_MAX_EXPANDED_ROWS) throw new CalendarImportError('This calendar expands to too many occurrences. Export a smaller date range.');
       }
     } catch (error) {
       if (error instanceof CalendarImportError) throw error;
@@ -103,5 +108,10 @@ export async function parseCalendarImport(raw: string, source: ImportSource, now
     }
   }
   if (events.some(event => event.allDay)) warnings.add('All-day events have no deadline time. Choose a deadline explicitly before preparing an assignment.');
-  return { source, previewedAt: now.toISOString(), events: events.sort((a, b) => a.startAt.localeCompare(b.startAt) || a.key.localeCompare(b.key)), warnings: [...warnings], duplicateCount, recurrenceWindow: { from: from.toISOString(), to: to.toISOString() } };
+  events.sort((a, b) => a.startAt.localeCompare(b.startAt) || a.key.localeCompare(b.key));
+  if (events.length > IMPORT_MAX_PREVIEW_ROWS) {
+    warnings.add(`This export has ${events.length} occurrences. Only the earliest ${IMPORT_MAX_PREVIEW_ROWS} are shown; export a smaller date range to review the rest.`);
+    events.length = IMPORT_MAX_PREVIEW_ROWS;
+  }
+  return { source, previewedAt: now.toISOString(), events, warnings: [...warnings], duplicateCount, recurrenceWindow: { from: from.toISOString(), to: to.toISOString() } };
 }
