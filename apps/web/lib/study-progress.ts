@@ -3,7 +3,7 @@ import { StudyProgressService } from '@polymate/core/progress';
 import { studyProgressStore, observeStudyCalendarChange } from '@polymate/db/study-progress';
 import { constantTimeEqual } from '@polymate/core/google-auth/crypto';
 import { assertSameOrigin, IdentityError } from '@polymate/core/identity';
-import { ContractError, parseEtag, parseEventId, parseOperationId, parseStudyBlockChanges } from '@polymate/contracts/calendar';
+import { ContractError, parseEtag, parseEventId, parseOperationId, parseStudyBlockChanges, type OperationResult } from '@polymate/contracts/calendar';
 import { positiveVersion } from '@polymate/contracts/study-progress';
 import { ProgressError } from '@polymate/core/progress';
 import { CalendarServiceError } from '@polymate/core/calendar';
@@ -11,6 +11,21 @@ import type { NextRequest, NextResponse } from 'next/server';
 import { calendarError, calendarServiceFor } from './calendar-route';
 
 const COOKIE = 'polymate_progress_csrf';
+
+export type ProgressSyncStatus = 'synced' | 'pending' | 'not_attempted';
+
+/** Google has already recorded its outcome. A secondary metadata failure cannot change it. */
+export async function observeStudyMoveFor(owner: OwnerContext, eventId: string, result: OperationResult): Promise<ProgressSyncStatus> {
+  if (result.status !== 'synced') return 'not_attempted';
+  try {
+    await observeStudyCalendarChange(owner.userId, 'update', eventId, result);
+    return 'synced';
+  } catch (error) {
+    console.error('Study move metadata sync pending.', error instanceof Error ? error.name : 'unknown error');
+    // The confirmed calendar ledger remains available to repairCalendarEffects on the next state read.
+    return 'pending';
+  }
+}
 
 /** Runtime adapter supplies an authenticated OwnerContext, not model-selected IDs. */
 export function studyProgressServiceFor(owner: OwnerContext) {
@@ -33,8 +48,7 @@ export async function rescheduleStudySessionFor(owner: OwnerContext, value: unkn
   const prior = await findCalendarOperation(owner.userId, operationId);
   if (!prior && link.sessionRevision !== revision) throw new ProgressError('version_conflict', 'This session changed. Refresh before moving it.');
   const result = await calendarServiceFor(owner).updateStudyBlock(eventId, changes, expectedEtag, operationId);
-  await observeStudyCalendarChange(owner.userId, 'update', eventId, result);
-  return result;
+  return { ...result, progressSync: await observeStudyMoveFor(owner, eventId, result) };
 }
 export function setProgressCookie(response: NextResponse, token: string) {
   response.cookies.set(COOKIE, token, { httpOnly: true, secure: process.env.NODE_ENV !== 'development', sameSite: 'strict', path: '/api/study-progress', maxAge: 8 * 60 * 60 });

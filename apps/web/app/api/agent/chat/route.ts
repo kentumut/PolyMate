@@ -1,9 +1,10 @@
 import type { NextRequest } from 'next/server';
 import { assertSameOrigin, resolveOwner } from '@polymate/core/identity';
-import { AgentRequestError, agentResponseBody, beginAgentTurn, callOpenClawAgent, endAgentTurn, scheduleCurrentPlan, publicPendingPlan } from '@/lib/agent-runtime';
+import { AgentRequestError, agentResponseBody, beginAgentTurn, callOpenClawAgent, endAgentTurn, scheduleCurrentPlan, publicPendingPlan, confirmCurrentProgress } from '@/lib/agent-runtime';
 import { readBoundedText } from '@polymate/core/agent/http';
 import { calendarError } from '@/lib/calendar-route';
 import { moodleError } from '@/lib/moodle';
+import { assertAgentCsrf } from '@/lib/agent-csrf';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -28,6 +29,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     owner = resolveOwner(request.headers);
     assertSameOrigin(request);
     const body = await readBody(request);
+    if (body && typeof body === 'object' && !Array.isArray(body) && (body as Record<string, unknown>).action === 'confirm_progress') {
+      const action = body as Record<string, unknown>;
+      if (Object.keys(action).some(key => !['action', 'draftToken', 'confirmAssignmentFinished'].includes(key)) || typeof action.draftToken !== 'string' || action.draftToken.length > 12_000 || (action.confirmAssignmentFinished !== undefined && typeof action.confirmAssignmentFinished !== 'boolean')) throw new AgentRequestError('Confirm the exact progress card supplied by PolyMate.');
+      assertAgentCsrf(request);
+      const result = await confirmCurrentProgress(owner, action.draftToken, action.confirmAssignmentFinished === true);
+      return Response.json({ ...result, pendingPlan: publicPendingPlan(owner.userId) }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     if (body && typeof body === 'object' && !Array.isArray(body) && (body as Record<string, unknown>).action === 'schedule_current_plan') {
       const action = body as Record<string, unknown>;
       if (Object.keys(action).some(key => !['action', 'allowPartial', 'timelineId'].includes(key)) || typeof action.allowPartial !== 'boolean' || typeof action.timelineId !== 'string' || action.timelineId.length > 128) {

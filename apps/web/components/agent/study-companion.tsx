@@ -9,11 +9,14 @@ import { GoogleConnection } from '@/components/connections/google-connection';
 import { MoodleConnection } from '@/components/connections/moodle-connection';
 import { MoodleCalendarPreview } from '@/components/connections/moodle-calendar-preview';
 import { WorkspaceSidebar, type WorkspaceView } from './workspace-sidebar';
+import { ProgressCardView } from './progress-cards';
+import { useStudyWorkspace } from '@/components/study/study-workspace-context';
+import type { ProgressReceipt } from '@polymate/contracts/study-progress';
 
-type AgentCard = { kind: 'assignments' | 'timeline' | 'schedule' | 'connections'; data: unknown };
+type AgentCard = { kind: 'assignments' | 'timeline' | 'schedule' | 'connections' | 'progress'; data: unknown };
 type PendingPlan = { timeline: AssignmentTimeline; expiresAt: string };
 type ChatMessage = { id: number; role: 'user' | 'assistant'; text: string; cards: AgentCard[] };
-type ChatResponse = { reply: string; cards?: AgentCard[]; pendingPlan?: PendingPlan | null; reloadCalendar?: boolean; error?: { message?: string } };
+type ChatResponse = { reply: string; cards?: AgentCard[]; pendingPlan?: PendingPlan | null; reloadCalendar?: boolean; reloadProgress?: boolean; error?: { message?: string } };
 
 const dateTime = (value: string) => {
   const date = new Date(value);
@@ -52,7 +55,7 @@ function AssignmentCards({ data }: { data: unknown }) {
 
 function ScheduleCard({ data }: { data: unknown }) {
   if (!data || typeof data !== 'object') return null;
-  const value = data as { timeline?: AssignmentTimeline; movedBlock?: { title: string; startAt: string; endAt: string }; result?: { complete?: boolean; results?: Array<{ operationId: string; status: string; error?: { message?: string } }> } };
+  const value = data as { timeline?: AssignmentTimeline; progressSync?: string; movedBlock?: { title: string; startAt: string; endAt: string }; result?: { complete?: boolean; results?: Array<{ operationId: string; status: string; error?: { message?: string } }> } };
   const results = Array.isArray(value.result?.results) ? value.result.results : [];
   const attempted = new Set(results.map(item => item.operationId));
   const unattempted = value.timeline?.blocks.filter(block => !attempted.has(block.operationId)) ?? [];
@@ -67,12 +70,14 @@ function ScheduleCard({ data }: { data: unknown }) {
     </li>)}</ul> : <p className="mt-2 text-sm text-[#617269]">No calendar writes were confirmed.</p>}
     {unattempted.length > 0 && <ul className="mt-3 space-y-1 text-sm text-[#8a5a26]">{unattempted.map(block => <li key={block.operationId}>{block.title} · {dateTime(block.startAt)} — not attempted</li>)}</ul>}
     {value.result?.complete && <p className="mt-3 text-sm font-medium text-[#173b32]">{value.movedBlock ? 'The move was confirmed by Google Calendar.' : 'All planned blocks were confirmed by Google Calendar.'}</p>}
+    {value.progressSync === 'pending' && <p className="mt-3 text-sm text-[#8a5a26]">Local progress history could not be refreshed yet. Refresh progress to retry synchronization; the confirmed Google move does not need to be repeated.</p>}
   </section>;
 }
 
-function OtherCards({ cards }: { cards: AgentCard[] }) {
+function OtherCards({ cards, busy, confirmed, onConfirm }: { cards: AgentCard[]; busy: boolean; confirmed: ReadonlySet<string>; onConfirm: (token: string, wholeAssignment: boolean) => void }) {
   return <>
     {cards.map((card, index) => {
+      if (card.kind === 'progress') return <ProgressCardView key={`progress-${index}`} data={card.data} busy={busy} confirmed={confirmed} onConfirm={onConfirm} />;
       if (card.kind === 'assignments') return <AssignmentCards key={`assignments-${index}`} data={card.data} />;
       if (card.kind === 'schedule') return <ScheduleCard key={`schedule-${index}`} data={card.data} />;
       if (card.kind === 'connections' && card.data && typeof card.data === 'object') {
@@ -113,6 +118,7 @@ function TimelinePreview({ plan, onSchedule, busy }: { plan: PendingPlan; onSche
 }
 
 export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerName: string }) {
+  const workspace = useStudyWorkspace();
   const searchParams = useSearchParams();
   const requestedView = searchParams.get('view');
   const view: WorkspaceView = requestedView === 'chat' || requestedView === 'settings' ? requestedView
@@ -123,6 +129,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [confirmedProgress, setConfirmedProgress] = useState<ReadonlySet<string>>(new Set());
   const nextId = useRef(0);
 
   function hrefFor(nextView: WorkspaceView) {
@@ -140,23 +147,37 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     }
   }
 
-  async function sendMessage(event?: FormEvent, action?: { allowPartial: boolean }) {
+  async function sendMessage(event?: FormEvent, action?: { allowPartial: boolean } | { draftToken: string; confirmAssignmentFinished: boolean }) {
     event?.preventDefault();
-    if (busy || (!action && !input.trim())) return;
-    const text = action ? (action.allowPartial ? 'Add only the blocks that fit to my calendar.' : 'Add this timeline to my calendar.') : input.trim();
+    if (busy || sample || (!action && !input.trim())) return;
+    const text = action ? ('draftToken' in action ? 'Confirm this progress change.' : action.allowPartial ? 'Add only the blocks that fit to my calendar.' : 'Add this timeline to my calendar.') : input.trim();
     const id = ++nextId.current;
     setMessages(previous => [...previous, { id, role: 'user', text, cards: [] }].slice(-40) as ChatMessage[]);
     setInput(''); setBusy(true); setError('');
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (action && 'draftToken' in action) {
+        const csrf = await fetch('/api/agent/csrf', { credentials: 'same-origin', cache: 'no-store' });
+        const csrfBody = await csrf.json().catch(() => ({})) as { csrfToken?: unknown };
+        if (!csrf.ok || typeof csrfBody.csrfToken !== 'string') throw new Error('Chat session unavailable. Refresh and retry.');
+        headers['x-csrf-token'] = csrfBody.csrfToken;
+      }
       const response = await fetch('/api/agent/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
-        body: JSON.stringify(action ? { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : { message: text }),
+        method: 'POST', headers, credentials: 'same-origin', cache: 'no-store',
+        body: JSON.stringify(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : { message: text }),
       });
       const body = await response.json() as ChatResponse;
       if (!response.ok) throw new Error(body.error?.message ?? 'PolyMate could not answer. Try again.');
       setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: body.reply, cards: body.cards ?? [] }].slice(-40) as ChatMessage[]);
       setPendingPlan(body.pendingPlan ?? null);
+      if (action && 'draftToken' in action) {
+        const result = body.cards?.find(card => card.kind === 'progress')?.data as { receipt?: ProgressReceipt } | undefined;
+        if (!result?.receipt?.calendarOperation || ['synced', 'failed'].includes(result.receipt.calendarOperation.status)) {
+          setConfirmedProgress(previous => new Set([...previous, action.draftToken]));
+        }
+      }
       if (body.reloadCalendar) setReloadKey(value => value + 1);
+      if (body.reloadProgress) await workspace?.refresh();
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : 'PolyMate could not answer. Try again.';
       setError(message);
@@ -203,7 +224,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
           </div>}
           {messages.map(message => <article key={message.id} className={`max-w-[96%] rounded-2xl px-4 py-3 ${message.role === 'user' ? 'ml-auto bg-[#173b32] text-white' : 'bg-[#f1f4ee] text-[#21362d]'}`}>
             <p className="whitespace-pre-wrap text-sm leading-6">{message.text}</p>
-            {message.role === 'assistant' && <OtherCards cards={message.cards} />}
+            {message.role === 'assistant' && <OtherCards cards={message.cards} busy={busy} confirmed={confirmedProgress} onConfirm={(draftToken, confirmAssignmentFinished) => void sendMessage(undefined, { draftToken, confirmAssignmentFinished })} />}
           </article>)}
           {busy && <p className="text-sm text-[#617269]" role="status">PolyMate is checking your study space…</p>}
           {pendingPlan && <TimelinePreview plan={pendingPlan} onSchedule={allowPartial => void sendMessage(undefined, { allowPartial })} busy={busy} />}
@@ -215,10 +236,10 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
             if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
             event.preventDefault();
             void sendMessage();
-          }} maxLength={4000} rows={2} disabled={busy} placeholder="Ask about course dates, effort, or when you are free…" className="min-h-12 flex-1 resize-y rounded-xl border border-[#cbd7ce] px-3 py-2 text-sm outline-none focus:border-[#658071] disabled:opacity-60" />
-          <button disabled={busy || !input.trim()} className="rounded-xl bg-[#173b32] px-4 py-3 text-sm font-medium text-white disabled:opacity-50">Send</button>
+          }} maxLength={4000} rows={2} disabled={busy || sample} placeholder="Ask about course dates, progress, or when you are free…" className="min-h-12 flex-1 resize-y rounded-xl border border-[#cbd7ce] px-3 py-2 text-sm outline-none focus:border-[#658071] disabled:opacity-60" />
+          <button disabled={busy || sample || !input.trim()} className="rounded-xl bg-[#173b32] px-4 py-3 text-sm font-medium text-white disabled:opacity-50">Send</button>
         </form>
-        <p className="mt-3 text-center text-xs text-[#748278]">Your plan. Your approval. Your calendar.</p>
+        <p className="mt-3 text-center text-xs text-[#748278]">{sample ? 'AI chat uses the connected workspace and is unavailable in development sample mode.' : 'Your plan. Your progress. Your approval.'}</p>
       </section>
 
         <section aria-label="Settings" className={view === 'settings' ? 'grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]' : 'hidden'}>
