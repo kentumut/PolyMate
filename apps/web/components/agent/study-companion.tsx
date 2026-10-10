@@ -1,12 +1,14 @@
 'use client';
 
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
-import { useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { CalendarStudyWorkflow } from '@/components/study/calendar-study-workflow';
 import { AssignmentsPanel } from '@/components/study/assignments-panel';
 import { GoogleConnection } from '@/components/connections/google-connection';
 import { MoodleConnection } from '@/components/connections/moodle-connection';
 import { MoodleCalendarPreview } from '@/components/connections/moodle-calendar-preview';
+import { WorkspaceSidebar, type WorkspaceView } from './workspace-sidebar';
 
 type AgentCard = { kind: 'assignments' | 'timeline' | 'schedule' | 'connections'; data: unknown };
 type PendingPlan = { timeline: AssignmentTimeline; expiresAt: string };
@@ -111,6 +113,10 @@ function TimelinePreview({ plan, onSchedule, busy }: { plan: PendingPlan; onSche
 }
 
 export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerName: string }) {
+  const searchParams = useSearchParams();
+  const requestedView = searchParams.get('view');
+  const view: WorkspaceView = requestedView === 'chat' || requestedView === 'settings' ? requestedView
+    : requestedView === 'calendar' ? 'calendar' : searchParams.has('google') ? 'settings' : 'calendar';
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
   const [input, setInput] = useState('');
@@ -118,6 +124,21 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const nextId = useRef(0);
+
+  function hrefFor(nextView: WorkspaceView) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('view', nextView);
+    return `/calendar?${params.toString()}`;
+  }
+
+  function navigate(event: MouseEvent<HTMLAnchorElement>, nextView: WorkspaceView) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (nextView !== view) {
+      window.history.pushState(null, '', hrefFor(nextView));
+      window.scrollTo({ top: 0 });
+    }
+  }
 
   async function sendMessage(event?: FormEvent, action?: { allowPartial: boolean }) {
     event?.preventDefault();
@@ -143,19 +164,40 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     } finally { setBusy(false); }
   }
 
-  return <div className="grid gap-5 xl:grid-cols-[minmax(340px,0.88fr)_minmax(0,1.12fr)]">
-    <section className="min-w-0 space-y-5">
-      <MoodleConnection />
-      <section className="rounded-2xl border border-[#dce3db] bg-white p-5 text-center"><h2 className="text-sm font-semibold">Google Calendar</h2><GoogleConnection /></section>
-      <AssignmentsPanel sample={sample} />
-      <section className="flex min-h-[500px] flex-col rounded-2xl border border-[#dce3db] bg-white p-5 md:p-6" aria-labelledby="study-chat-title">
-        <header className="border-b border-[#e5eae4] pb-4"><p className="text-[11px] font-semibold uppercase tracking-widest text-[#658071]">Your study companion</p>
-          <h2 id="study-chat-title" className="mt-1 text-xl font-medium">Plan with PolyMate</h2>
-          <p className="mt-2 text-sm text-[#617269]">Signed in as {ownerName}. Moodle content stays grounded in your connected account.</p></header>
-        <div className="flex-1 space-y-4 overflow-y-auto py-4" aria-live="polite" aria-relevant="additions text">
-          {!messages.length && <div className="rounded-xl bg-[#f5f8f2] p-4 text-sm leading-6 text-[#43584c]">
-            <p>Choose which Moodle calendar entries need work. Share an effort estimate and when you are free to build a study plan.</p>
-            <div className="mt-3 flex flex-wrap gap-2">
+  return <div className="min-h-dvh md:flex md:items-start">
+    <WorkspaceSidebar view={view} ownerName={ownerName} hrefFor={hrefFor} onNavigate={navigate} />
+    <main className="min-w-0 flex-1 px-4 py-7 sm:px-7 md:px-10 md:py-10 lg:px-12">
+      <div className={`mx-auto ${view === 'chat' ? 'max-w-4xl' : 'max-w-7xl'}`}>
+        <header className="mb-7 flex items-start justify-between gap-4">
+          <div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#748278]">{view === 'settings' ? 'Make it yours' : 'A little structure. More room to learn.'}</p>
+            <h1 className="mt-2 text-3xl font-medium tracking-tight">{view === 'calendar' ? 'Your calendar' : view === 'chat' ? 'Chat with PolyMate' : 'Settings'}</h1>
+            <p className="mt-2 text-sm text-[#617269]">{view === 'calendar' ? 'See your week and make time for what matters.' : view === 'chat' ? 'Turn course dates and available time into a study plan.' : 'Connect your calendars and keep your study space up to date.'}</p></div>
+          <span className="mt-6 hidden rounded-full border border-[#dce3db] px-3 py-1.5 text-xs text-[#617269] sm:block">{view === 'settings' ? 'Your connections' : 'Europe/Zurich'}</span>
+        </header>
+
+        {/* Keep panels mounted so navigation preserves drafts, forms, and calendar state. */}
+        <section aria-label="Calendar" className={view === 'calendar' ? 'space-y-5' : 'hidden'}>
+          <div className="min-w-0 rounded-2xl border border-[#dce3db] bg-white p-4 sm:p-6">
+            <CalendarStudyWorkflow sample={sample} externalReloadKey={reloadKey} />
+          </div>
+          <details className="group rounded-2xl border border-[#dce3db] bg-white">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 text-sm font-medium [&::-webkit-details-marker]:hidden">
+              <span>Assignments <span className="ml-2 hidden font-normal text-[#748278] sm:inline">Deadlines and effort estimates</span></span>
+              <span className="text-xl leading-none text-[#748278] transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+            </summary>
+            <div className="border-t border-[#e5eae4] [&>section]:border-0 [&>section]:bg-transparent"><AssignmentsPanel sample={sample} /></div>
+          </details>
+          {sample && <p className="text-xs text-[#8a5a26]">Development sample calendar. Changes stay in memory.</p>}
+        </section>
+
+        <section aria-labelledby="study-chat-title" className={view === 'chat' ? 'flex h-[calc(100dvh-13rem)] min-h-[32rem] flex-col rounded-2xl border border-[#dce3db] bg-white p-5 md:p-6' : 'hidden'}>
+          <h2 id="study-chat-title" className="sr-only">Plan with PolyMate</h2>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4" aria-live="polite" aria-relevant="additions text">
+          {!messages.length && <div className="flex h-full min-h-64 flex-col items-center justify-center px-2 py-8 text-center">
+            <span className="mb-5 grid h-12 w-12 place-items-center rounded-2xl bg-[#eef2eb] text-2xl font-medium" aria-hidden="true">p.</span>
+            <h3 className="text-xl font-medium">What would you like to work on?</h3>
+            <p className="mt-3 max-w-md text-sm leading-6 text-[#617269]">Choose your course dates, estimate the effort, and find time to focus. You approve each plan before it reaches your calendar.</p>
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
               {['Show my Moodle calendar dates', 'Help me plan my week', 'What connections do I need?'].map(prompt => <button key={prompt} type="button" disabled={busy} onClick={() => { setInput(prompt); document.getElementById('agent-message')?.focus(); }} className="rounded-full border border-[#cbd7ce] bg-white px-3 py-1.5 text-xs disabled:opacity-50">{prompt}</button>)}
             </div>
           </div>}
@@ -164,21 +206,29 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
             {message.role === 'assistant' && <OtherCards cards={message.cards} />}
           </article>)}
           {busy && <p className="text-sm text-[#617269]" role="status">PolyMate is checking your study space…</p>}
+          {pendingPlan && <TimelinePreview plan={pendingPlan} onSchedule={allowPartial => void sendMessage(undefined, { allowPartial })} busy={busy} />}
         </div>
-        {pendingPlan && <div className="mb-4"><TimelinePreview plan={pendingPlan} onSchedule={allowPartial => void sendMessage(undefined, { allowPartial })} busy={busy} /></div>}
         {error && <p className="mb-3 text-sm text-[#9e3e38]" role="alert">{error}</p>}
         <form onSubmit={event => void sendMessage(event)} className="flex items-end gap-2 border-t border-[#e5eae4] pt-4">
           <label htmlFor="agent-message" className="sr-only">Message PolyMate</label>
           <textarea id="agent-message" value={input} onChange={event => setInput(event.target.value)} maxLength={4000} rows={2} disabled={busy} placeholder="Ask about course dates, effort, or when you are free…" className="min-h-12 flex-1 resize-y rounded-xl border border-[#cbd7ce] px-3 py-2 text-sm outline-none focus:border-[#658071] disabled:opacity-60" />
           <button disabled={busy || !input.trim()} className="rounded-xl bg-[#173b32] px-4 py-3 text-sm font-medium text-white disabled:opacity-50">Send</button>
         </form>
-        <p className="mt-2 text-xs text-[#748278]">Calendar dates help guide planning. Calendar changes happen only after you approve the draft.</p>
+        <p className="mt-3 text-center text-xs text-[#748278]">Your plan. Your approval. Your calendar.</p>
       </section>
-    </section>
-    <section className="min-w-0 rounded-2xl border border-[#dce3db] bg-white p-4 md:p-5" aria-label="Weekly calendar">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-lg font-medium">Your week</h2><span className="text-xs text-[#748278]">Europe/Zurich</span></div>
-      <CalendarStudyWorkflow sample={sample} externalReloadKey={reloadKey} />
-      {sample && <p className="mt-3 text-xs text-[#8a5a26]">Development sample mode is on; Google writes appear only in a connected Google calendar.</p>}
-    </section>
+
+        <section aria-label="Settings" className={view === 'settings' ? 'grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]' : 'hidden'}>
+          <MoodleConnection />
+          <div className="space-y-5">
+            <section className="rounded-2xl border border-[#dce3db] bg-white p-6"><h2 className="text-lg font-medium">Google Calendar</h2>
+              <p className="mt-2 text-sm leading-6 text-[#617269]">See your existing events and add the study blocks you approve.</p><GoogleConnection /></section>
+            <section className="rounded-2xl border border-[#dce3db] p-6"><h2 className="text-sm font-medium">Your study space</h2>
+              <dl className="mt-4 space-y-4 text-sm"><div><dt className="text-xs text-[#748278]">Signed in as</dt><dd className="mt-1 break-words">{ownerName}</dd></div>
+                <div><dt className="text-xs text-[#748278]">Calendar timezone</dt><dd className="mt-1">Europe/Zurich</dd></div></dl>
+            </section>
+          </div>
+        </section>
+      </div>
+    </main>
   </div>;
 }

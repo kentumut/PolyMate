@@ -54,7 +54,7 @@ export function GoogleConnection() {
     <p className="text-sm font-medium text-[#173b32]" role="status">
       {!status ? 'Checking Google connection…' : status.connected ? 'Google Calendar connected' : 'Google Calendar not connected'}
     </p>
-    {status?.enabled && <div className="flex flex-wrap justify-center gap-2">
+    {status?.enabled && <div className="flex flex-wrap gap-2">
       <button type="button" disabled={busy} onClick={() => changeConnection('start')}
         className="rounded-xl bg-[#173b32] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
         {status.connected ? 'Reconnect Google' : 'Connect Google'}
