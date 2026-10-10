@@ -12,7 +12,7 @@ import { createStudyCalendarClient } from './study-calendar-client';
 import { useStudyWorkspace } from './study-workspace-context';
 import { StudyProgressPanel } from './study-progress-panel';
 
-export function CalendarStudyWorkflow({ sample = false }: { sample?: boolean }) {
+export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }: { sample?: boolean; externalReloadKey?: number }) {
   const workspace = useStudyWorkspace();
   const [readClient] = useState(() => workspace?.calendarClient ?? (sample ? new FakeCalendarClient(undefined, 250) : new HttpCalendarClient()));
   const [client] = useState(() => createStudyCalendarClient(sample ? { calendarClient: readClient } : {}));
@@ -48,6 +48,11 @@ export function CalendarStudyWorkflow({ sample = false }: { sample?: boolean }) 
     window.addEventListener('focus', refresh);
     return () => window.removeEventListener('focus', refresh);
   }, []);
+
+  const refreshProgress = workspace?.refresh;
+  useEffect(() => {
+    if (externalReloadKey) void Promise.resolve().then(() => refreshProgress?.());
+  }, [externalReloadKey, refreshProgress]);
 
   async function retryRecovery() {
     if (checking) return;
@@ -135,7 +140,7 @@ export function CalendarStudyWorkflow({ sample = false }: { sample?: boolean }) 
     {pendingReport && !open && <p role="status" className="rounded-lg border border-[#c8d3c8] bg-white p-3 text-sm">A progress report is unconfirmed. <button type="button" disabled={progressBusy} onClick={retryReport} className="underline">Retry the original report</button></p>}
     {progressNotice && !open && <p role="status" className="text-sm">{progressNotice}</p>}
     {!open && result && !blocking && <p role="status" className="text-sm text-[#617269]">{result.status === 'synced' ? sample ? 'Sample calendar change confirmed.' : 'Google Calendar change confirmed.' : result.error?.message}</p>}
-    <CalendarPanel client={readClient} sample={sample} onSelect={event => show(event)} onRangeChange={setRange} reloadKey={reloadKey} />
+    <CalendarPanel client={readClient} sample={sample} onSelect={event => show(event)} onRangeChange={setRange} reloadKey={reloadKey + externalReloadKey} />
     <StudyBlockDialog open={open} selectedEvent={selectedEvent} initialStartAt={initialStartAt}
       onClose={() => setOpen(false)} onCreate={input => perform(async () => {
         if (assignmentSelection && workspace) {

@@ -1,10 +1,10 @@
 # Catalin — session progress and missed-session recovery
 
-Branch: `feat/catalin-progress-recovery`, based on `main` at `08303e4`.
+Branch: `feat/catalin-progress-recovery`, originally based on `08303e4` and updated with `main` at `c39aae9` (OpenClaw/Moodle integration and sidebar navigation).
 
 ## Student-facing behavior
 
-The calendar and assignments now share a study workspace. Students can select an assignment when creating a PolyMate block, or link an existing owned block. A linked block offers **Done**, **Partly done**, **Missed it**, and **Stuck**.
+The calendar and assignments now share a study workspace within the existing Calendar / Chat / Settings layout. Students can select an assignment when creating a PolyMate block, or link an existing owned block. A linked block offers **Done**, **Partly done**, **Missed it**, and **Stuck**. Chat-driven calendar reloads also refresh linked progress data.
 
 - **Done:** saves the student's session report and attempts Google session completion. The whole assignment is completed only if the student explicitly checks that it is finished.
 - **Partly done:** requires a positive remaining-effort estimate for the entire assignment. Elapsed calendar time is never automatically subtracted. Revised estimates may be larger than the original estimate.
@@ -107,10 +107,10 @@ Sample calendar, assignment, and progress clients share one in-memory workspace 
 
 ## Verification
 
-- `pnpm check` passes typecheck, lint, **171 tests**, and production build.
+- `pnpm check` passes typecheck, lint, **239 tests**, and production build after integrating the latest main.
 - New tests cover explicit progress semantics, concurrent report deduplication, larger revised estimates, session revisions, stale versions/ETags, personal-event protection, authenticated API/CSRF, original-request retries, and restored pending completion.
 - `tests/integration/study-progress.db.mjs` executes real repository SQL and all three migrations against a temporary PGlite database (embedded PostgreSQL 18). It passed link creation, duplicate-safe reports, transactional rollback, student isolation, missed/moved session revisions, activity deduplication, close/reopen persistence, crashed-Done recovery, explicit assignment completion, deletion/history preservation, and stale-read protection. Deployment targets PostgreSQL 17.
 - To rerun this optional SQL check, install PGlite separately, set `PGLITE_MODULE` to its `dist/index.js` and `PGCRYPTO_MODULE` to `dist/contrib/pgcrypto.js`, then run `node --import tsx tests/integration/study-progress.db.mjs`. It uses and deletes only its own temporary database. No root dependency/lockfile change is required.
-- Browser verification remains paused at the user's request. No new live Google or managed-site acceptance is claimed. OpenClaw, Moodle, Telegram delivery, automatic slot selection/replanning, and notification policy remain integration work outside this progress increment.
+- Browser verification remains paused at the user's request. No new live Google or managed-site acceptance is claimed. The existing OpenClaw/Moodle integration is preserved. Registering progress tools and check-in jobs with that runtime, Telegram delivery, automatic replanning, and notification policy remain follow-up integration work. Moodle-created blocks can be linked to local assignments through the UI; automatic Moodle-to-local assignment association is not added here.
 
-The feature is implemented locally on the branch; it has not been committed, pushed, merged, or deployed by this step.
+The feature is prepared for a focused progress/recovery PR. Live acceptance and deployment of this increment remain pending.

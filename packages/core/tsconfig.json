@@ -1,4 +1,4 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/**/*.ts", "integrations/**/*.ts", "calendar/**/*.ts", "scheduling/**/*.ts"]
+  "include": ["src/**/*.ts", "integrations/**/*.ts", "calendar/**/*.ts", "scheduling/**/*.ts", "agent/**/*.ts"]
 }

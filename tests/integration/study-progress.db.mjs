@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, readdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAssignment } from '../../packages/db/src/assignments.ts';
@@ -34,8 +34,9 @@ const other = { userId: '00000000-0000-4000-8000-000000000011', externalId: 'oth
 const sql = (text, params) => db.query(text, params);
 
 try {
-  for (const file of ['0001_google_oauth.sql','0002_assignments.sql','0003_study_progress.sql']) {
-    await db.exec(await readFile(new URL(`../../packages/db/migrations/${file}`, import.meta.url), 'utf8'));
+  const migrations = new URL('../../packages/db/migrations/', import.meta.url);
+  for (const file of (await readdir(migrations)).filter(name => /^\d{4}_[a-z0-9_]+\.sql$/.test(name)).sort()) {
+    await db.exec(await readFile(new URL(file, migrations), 'utf8'));
   }
   const input = { title: 'Sheet 4', dueAt: '2026-10-16T16:00:00Z', estimatedMinutes: 150, clientRequestId: crypto.randomUUID() };
   const assignment = (await createAssignment(owner, input)).assignment;
