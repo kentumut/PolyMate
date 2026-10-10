@@ -6,7 +6,7 @@ import { weekRange, type DateRange } from '@polymate/contracts/time';
 import { FAKE_CALENDAR_LABEL, FakeCalendarClient } from '@polymate/core/calendar/fake';
 import { useEffect, useState } from 'react';
 import { eventLabel } from './week-layout';
-import { WeekView } from './week-view';
+import { WeekView, type WeekViewProps } from './week-view';
 
 export type CalendarPanelProps = {
   /** Share the read client with the study workflow, especially for in-memory samples. */
@@ -19,10 +19,10 @@ export type CalendarPanelProps = {
   reloadKey?: string | number;
   onRangeChange?: (range: DateRange) => void;
   onTimeRangeSelect?: (startAt: string, endAt: string) => void;
-};
+} & Pick<WeekViewProps, 'proposed' | 'assignmentLabels' | 'unscheduled'>;
 
 /** Loads the visible week through the shared CalendarClient and owns navigation/selection state. */
-export function CalendarPanel({ client: suppliedClient, sample = false, onSelect, reloadKey, onRangeChange, onTimeRangeSelect }: CalendarPanelProps) {
+export function CalendarPanel({ client: suppliedClient, sample = false, onSelect, reloadKey, onRangeChange, onTimeRangeSelect, ...overlay }: CalendarPanelProps) {
   const [defaultClient] = useState<CalendarClient>(() => suppliedClient ?? (sample ? new FakeCalendarClient(undefined, 250) : new HttpCalendarClient()));
   const client = suppliedClient ?? defaultClient;
   const [range, setRange] = useState<DateRange>(() => weekRange());
@@ -52,12 +52,12 @@ export function CalendarPanel({ client: suppliedClient, sample = false, onSelect
   const selected = events.find(event => event.id === selectedId);
 
   return <div className="min-w-0 space-y-3">
-    <WeekView range={range} events={events} loading={loading} error={loading ? null : loaded?.error} selectedId={selectedId}
+    <WeekView {...overlay} range={range} events={events} loading={loading} error={loading ? null : loaded?.error} selectedId={selectedId}
       notice={sample ? FAKE_CALENDAR_LABEL : undefined}
       onSelect={select} onRangeChange={next => { setRange(next); onRangeChange?.(next); }} onRetry={() => setAttempt(n => n + 1)}
       onTimeRangeSelect={onTimeRangeSelect} />
     {selected && !onSelect && <p className="rounded-xl border border-[#dce3db] bg-white px-4 py-3 text-sm" role="status">
-      {eventLabel(selected)}
+      {eventLabel(selected, overlay.assignmentLabels?.get(selected.id))}
     </p>}
   </div>;
 }

@@ -1,5 +1,8 @@
 'use client';
 
+import { MessageContent } from './message-content';
+import { currentPlanApproval } from '@polymate/core/agent/contracts';
+
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
 import { useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -152,6 +155,12 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     event?.preventDefault();
     if (busy || sample || (!action && !input.trim())) return;
     const text = action ? ('draftToken' in action ? 'Confirm this progress change.' : action.allowPartial ? 'Add only the blocks that fit to my calendar.' : 'Add this timeline to my calendar.') : input.trim();
+    // Bind explicit chat approval to the displayed draft, just like its button.
+    // The model never needs to reproduce the sealed scheduling payload.
+    const approval = currentPlanApproval(text);
+    const scheduleAction = !action && pendingPlan && approval
+      ? { action: 'schedule_current_plan', allowPartial: approval.allowPartial, timelineId: pendingPlan.timeline.id }
+      : undefined;
     const id = ++nextId.current;
     setMessages(previous => [...previous, { id, role: 'user', text, cards: [] }].slice(-40) as ChatMessage[]);
     setInput(''); setBusy(true); setError('');
@@ -165,7 +174,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       }
       const response = await fetch('/api/agent/chat', {
         method: 'POST', headers, credentials: 'same-origin', cache: 'no-store',
-        body: JSON.stringify(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : { message: text }),
+        body: JSON.stringify(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text }),
       });
       const body = await response.json() as ChatResponse;
       if (!response.ok) throw new Error(body.error?.message ?? 'PolyMate could not answer. Try again.');
@@ -210,7 +219,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
               <span>Assignments <span className="ml-2 hidden font-normal text-[#748278] sm:inline">Deadlines and effort estimates</span></span>
               <span className="text-xl leading-none text-[#748278] transition-transform group-open:rotate-45" aria-hidden="true">+</span>
             </summary>
-            <div className="border-t border-[#e5eae4] [&>section]:border-0 [&>section]:bg-transparent"><AssignmentsPanel sample={sample} /></div>
+            <div className="border-t border-[#e5eae4] [&>section]:border-0 [&>section]:bg-transparent"><AssignmentsPanel sample={sample} onCalendarChange={() => setReloadKey(value => value + 1)} /></div>
           </details>
           {sample && <p className="text-xs text-[#8a5a26]">Development sample calendar. Changes stay in memory.</p>}
         </section>
@@ -227,7 +236,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
             </div>
           </div>}
           {messages.map(message => <article key={message.id} className={`max-w-[96%] rounded-2xl px-4 py-3 ${message.role === 'user' ? 'ml-auto bg-[#173b32] text-white' : 'bg-[#f1f4ee] text-[#21362d]'}`}>
-            <p className="whitespace-pre-wrap text-sm leading-6">{message.text}</p>
+            {message.role === 'assistant' ? <MessageContent text={message.text} /> : <p className="whitespace-pre-wrap text-sm leading-6">{message.text}</p>}
             {message.role === 'assistant' && <OtherCards cards={message.cards} busy={busy} confirmed={confirmedProgress} onConfirm={(draftToken, confirmAssignmentFinished) => void sendMessage(undefined, { draftToken, confirmAssignmentFinished })} />}
           </article>)}
           {busy && <p className="text-sm text-[#617269]" role="status">PolyMate is checking your study space…</p>}

@@ -24,4 +24,11 @@ describe('release configuration', () => {
     expect(validateConfiguration(config)).toContain('TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key.');
     expect(validateConfiguration(config)).toContain('OAUTH_STATE_SECRET must contain at least 32 bytes.');
   });
+  it('requires the complete private gateway configuration when enabled', () => {
+    expect(validateConfiguration({ ...valid, OPENCLAW_ENABLED: 'true' })).toHaveLength(4);
+    const configured = { ...valid, OPENCLAW_ENABLED: 'true', OPENAI_API_KEY: 'a'.repeat(40),
+      OPENCLAW_GATEWAY_TOKEN: 'b'.repeat(40), AGENT_CONTEXT_SECRET: 'c'.repeat(40), OPENCLAW_AGENT_BRIDGE_SECRET: 'd'.repeat(40) };
+    expect(validateConfiguration(configured)).toEqual([]);
+    expect(validateConfiguration({ ...configured, POLYMATE_LLM_MODEL: 'invalid' })).toContain('POLYMATE_LLM_MODEL must be openai/<model-id>.');
+  });
 });

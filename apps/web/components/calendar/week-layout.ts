@@ -3,8 +3,11 @@ import { addZonedDays, CALENDAR_TIMEZONE, zonedDateKey, zonedParts, zonedTimeToI
 
 export type WeekDay = Readonly<{ key: string; start: string; end: string; weekday: string; dayOfMonth: number }>;
 
-export type PlacedEvent = Readonly<{
-  event: CalendarEvent;
+/** Anything with a time span: Google events and proposed plan blocks share one layout. */
+export type TimedItem = Readonly<{ id: string; startAt: string; endAt: string; allDay: boolean }>;
+
+export type PlacedEvent<T extends TimedItem = CalendarEvent> = Readonly<{
+  event: T;
   /** Percentages of the visible hour span and of the day column. */
   top: number;
   height: number;
@@ -54,14 +57,24 @@ export function formatWeekLabel(range: DateRange): string {
   return `${start} – ${dayMonthFormat.format(last)} ${b.year}`;
 }
 
-export function eventLabel(event: CalendarEvent): string {
+function whenLabel(item: TimedItem): string {
+  return item.allDay ? `all day ${formatDay(item.startAt)}` : `${formatDay(item.startAt)}, ${formatTime(item.startAt)} to ${formatTime(item.endAt)}`;
+}
+
+export function eventLabel(event: CalendarEvent, assignmentTitle?: string): string {
   const kind = event.source === 'polymate' ? 'Study block' : 'Personal event, read-only';
-  const when = event.allDay ? `all day ${formatDay(event.startAt)}` : `${formatDay(event.startAt)}, ${formatTime(event.startAt)} to ${formatTime(event.endAt)}`;
-  return `${kind}: ${event.title}, ${when}${event.completion === 'done' ? ', done' : ''}`;
+  const assignment = assignmentTitle ? `, for ${assignmentTitle}` : '';
+  return `${kind}: ${event.title}${assignment}, ${whenLabel(event)}${event.completion === 'done' ? ', done' : ''}`;
+}
+
+const proposedStatus = { proposed: 'not in Google Calendar yet', unknown: 'apply uncertain, check the plan', failed: 'could not be added' } as const;
+
+export function proposedLabel(block: Readonly<TimedItem & { title: string; status: keyof typeof proposedStatus }>): string {
+  return `Proposed study block: ${block.title}, ${whenLabel(block)}, ${proposedStatus[block.status]}`;
 }
 
 /** Visible hours: the default working day, widened to fit every timed event this week. */
-export function visibleHours(events: readonly CalendarEvent[], days: readonly WeekDay[]): { start: number; end: number } {
+export function visibleHours(events: readonly TimedItem[], days: readonly WeekDay[]): { start: number; end: number } {
   let start: number = DEFAULT_HOURS.start;
   let end: number = DEFAULT_HOURS.end;
   for (const event of events) {
@@ -88,7 +101,7 @@ function minutesIntoDay(instant: number, day: WeekDay): number {
 }
 
 /** Positions timed events in one day column; overlapping events share the width side by side. */
-export function placeDayEvents(events: readonly CalendarEvent[], day: WeekDay, hours: { start: number; end: number }): PlacedEvent[] {
+export function placeDayEvents<T extends TimedItem>(events: readonly T[], day: WeekDay, hours: { start: number; end: number }): PlacedEvent<T>[] {
   const dayStart = Date.parse(day.start);
   const dayEnd = Date.parse(day.end);
   const span = (hours.end - hours.start) * 60;
@@ -134,7 +147,7 @@ export function placeDayEvents(events: readonly CalendarEvent[], day: WeekDay, h
   }));
 }
 
-export function allDayEventsFor(events: readonly CalendarEvent[], day: WeekDay): CalendarEvent[] {
+export function allDayEventsFor<T extends TimedItem>(events: readonly T[], day: WeekDay): T[] {
   return events.filter(event => event.allDay && Date.parse(event.startAt) < Date.parse(day.end) && Date.parse(event.endAt) > Date.parse(day.start));
 }
 
@@ -147,7 +160,7 @@ export function nowOffset(now: Date, day: WeekDay, hours: { start: number; end: 
   return minutes < 0 || minutes > span ? null : (minutes / span) * 100;
 }
 
-export function durationMinutes(event: CalendarEvent): number {
+export function durationMinutes(event: TimedItem): number {
   return Math.round((Date.parse(event.endAt) - Date.parse(event.startAt)) / MINUTE);
 }
 

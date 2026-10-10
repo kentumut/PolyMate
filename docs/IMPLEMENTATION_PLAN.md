@@ -229,6 +229,8 @@ Manual deadline entry is a first-class fallback. Display imported-at timestamps 
 
 ### B. Deterministic scheduling — iteration 2
 
+Implementation update: the manual assignment planner and durable preview/apply path are described in [the iteration 2 handoff](ITERATION_2_HANDOFF.md). OpenClaw already runs the model/tool loop; the foreground planner does not require a separate worker. Live iteration 2 acceptance remains outstanding.
+
 Iteration 1 is manual scheduling: the student chooses a time in an event dialog, and application code validates it against fresh Google availability before saving. No automatic time selection or assignment planner is required for that release.
 
 Implement scheduling as a pure function over assignments, effort estimates, existing blocks, busy intervals, preferences, and a supplied clock. The model interprets requests and explains results; it does not invent valid timestamps.
@@ -264,6 +266,8 @@ Write flow: persist a pending calendar operation, apply/reconcile it at Google, 
 Automatic writes are limited to PolyMate blocks with current consent. Other owned, editable, single-occurrence events require a proposal containing exact old/new times, target ETag, and a 15-minute expiry. Confirmation is single-use and must come from the same student. Attendee or recurring-series changes remain Google handoffs. Undo restores the prior state only after checking current versions and conflicts.
 
 ### D. Agent and shared memory — iteration 4
+
+Runtime update: [the OpenClaw integration](AI_AGENT_HANDOFF.md) supersedes the custom ToolLoopAgent proposal below. Extend its owner-bound PolyMate tools rather than introducing another model loop. The context, authorization, and durable memory requirements below remain design targets.
 
 Configure one ToolLoopAgent with at most six steps per turn and a 60-second total generation timeout. Select tools by capability: profile, planning, learning, and discovery. These are tool groups, not separately deployed agents. One bounded repair attempt is permitted for invalid structured output.
 

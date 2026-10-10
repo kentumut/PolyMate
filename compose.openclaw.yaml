@@ -1,0 +1,31 @@
+# Optional production gateway. No host ports: only the web container calls it.
+services:
+  openclaw:
+    image: polymate-openclaw:${RELEASE_SHA:-development}
+    build:
+      context: .
+      dockerfile: integrations/openclaw-agent-plugin/Dockerfile
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY privately in .env}
+      POLYMATE_LLM_MODEL: ${POLYMATE_LLM_MODEL:-openai/gpt-5.6-terra}
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?Set OPENCLAW_GATEWAY_TOKEN}
+      OPENCLAW_AGENT_BRIDGE_SECRET: ${OPENCLAW_AGENT_BRIDGE_SECRET:?Set OPENCLAW_AGENT_BRIDGE_SECRET}
+      POLYMATE_AGENT_TOOL_URL: http://web:3000/api/internal/agent/tools
+    volumes:
+      - openclaw-state:/home/node/.openclaw
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:18789/readyz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 10
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+  web:
+    environment:
+      OPENCLAW_GATEWAY_HTTP_URL: http://openclaw:18789
+volumes:
+  openclaw-state:

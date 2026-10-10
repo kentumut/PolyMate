@@ -8,6 +8,7 @@ import { MemoryStudyProgressStore } from '@polymate/core/progress/memory';
 import type { StudyProgressState } from '@polymate/contracts/study-progress';
 import type { Assignment } from '@polymate/contracts/assignments';
 import type { CalendarClient, OperationResult } from '@polymate/contracts/calendar';
+import type { PlanningState } from '@polymate/contracts/planning';
 import { createAssignmentClient, createSampleAssignmentClient, type AssignmentClient, type AssignmentFixtureOutcome } from './assignment-client';
 import { createProgressClient } from './progress-client';
 
@@ -18,6 +19,8 @@ type Workspace = {
   observe: (kind: 'create' | 'update' | 'complete' | 'delete', eventId: string | null, result: OperationResult) => void;
   data: StudyProgressState | null; error: string; revision: number;
   refresh: () => Promise<void>; assignmentSaved: (assignment: Assignment) => void;
+  /** Latest planner preview and apply outcomes, shared so the calendar can overlay them. */
+  planning: PlanningState | null; planningChanged: (state: PlanningState) => void;
 };
 const Context = createContext<Workspace | null>(null);
 export const useStudyWorkspace = () => useContext(Context);
@@ -38,6 +41,7 @@ export function StudyWorkspaceProvider({ sample, children }: { sample: boolean; 
   const [data, setData] = useState<StudyProgressState | null>(null);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
+  const [planning, planningChanged] = useState<PlanningState | null>(null);
   const epoch = useRef(0);
   const refresh = useCallback(async () => {
     const request = ++epoch.current;
@@ -56,5 +60,5 @@ export function StudyWorkspaceProvider({ sample, children }: { sample: boolean; 
     setData(previous => previous ? { ...previous, assignments: [...previous.assignments.filter(item => item.id !== assignment.id), assignment] } : previous);
     void refresh();
   };
-  return <Context.Provider value={{ ...services, data, error, revision, refresh, assignmentSaved }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ ...services, data, error, revision, refresh, assignmentSaved, planning, planningChanged }}>{children}</Context.Provider>;
 }

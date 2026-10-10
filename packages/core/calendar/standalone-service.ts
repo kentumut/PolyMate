@@ -55,6 +55,15 @@ export class StandaloneCalendarService implements CalendarClient {
     return this.owned(parseEventId(id));
   }
 
+  async getStudyBlock(id: string): Promise<CalendarEvent | null> {
+    const event = await this.events.find(this.owner.userId, parseEventId(id));
+    return event?.source === 'polymate' && event.editable ? event : null;
+  }
+
+  listBusy(range: DateRange): Promise<CalendarEvent[]> {
+    return this.listWeek(range);
+  }
+
   async createStudyBlock(input: StudyBlockInput, operationId: string): Promise<OperationResult> {
     input = parseStudyBlockInput(input);
     operationId = parseOperationId(operationId);

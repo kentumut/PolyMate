@@ -46,6 +46,8 @@ describe('standalone calendar service', () => {
     expect(moved).toMatchObject({ status: 'synced', event: { startAt: '2026-10-12T12:00:00.000Z' } });
     const done = await service.completeStudyBlock(moved.event!.id, moved.event!.etag, operation(3));
     expect(done.event?.completion).toBe('done');
+    expect(await service.getStudyBlock(done.event!.id)).toEqual(done.event);
+    expect(await service.listBusy({ from: '2026-10-12T00:00:00.000Z', to: '2026-10-13T00:00:00.000Z' })).toContainEqual(done.event);
     expect(await service.deleteStudyBlock(done.event!.id, done.event!.etag, operation(4))).toMatchObject({ status: 'synced' });
     expect(events.events.size).toBe(0);
   });

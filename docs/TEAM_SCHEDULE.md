@@ -82,11 +82,13 @@ If time slips, remove animation, fancy onboarding, multi-calendar selection, and
 
 Start from the deployed calendar release. This is the first iteration requiring an assignment model and automatic scheduling.
 
+The [iteration 2 implementation handoff](ITERATION_2_HANDOFF.md) records the current manual planner/preview/apply slice and remaining live acceptance. OpenClaw already provides the agent runtime and a read-only automation adapter; reuse those integrations and assess worker needs for specific durable jobs.
+
 | Teammate | Parallel task | Acceptance / handoff |
 |---|---|---|
 | Yildirim | Add assignment-linked block labels, a proposed-plan preview, and unscheduled-work indicators to the existing calendar. | Proposed versus synced blocks remain visually distinct. |
 | Dogancem | Build the deterministic seven-day planner: deadlines, remaining effort, busy intervals, study windows, 50-minute blocks, breaks, and capacity limits. | Known scenarios produce feasible slots or an explicit shortfall; no LLM required. |
-| Kent | Add the worker deployment profile and CI planner checks; integrate the planner into the working calendar without changing the existing interaction contract. | `v0.2-planner` deploys while existing manual scheduling still works. |
+| Kent | Deploy the planner API and additive migrations, add CI planner checks, and integrate preview/apply into the working calendar. Reuse OpenClaw for agent execution; add a worker only for identified jobs it does not cover. | `v0.2-planner` deploys while existing manual scheduling still works. |
 | Bartek | Add assignment/study-block/preference repositories and additive migrations; map existing Google PolyMate events into local records without recreating them. | Existing v0.1 blocks survive migration with the same external IDs and completion state. |
 | Catalin | Build manual assignment/deadline/effort entry, study-preference controls, Generate Plan / Apply Plan actions, and shortfall tests. | One manually entered deadline creates a preview, then real Google study blocks after approval. |
 

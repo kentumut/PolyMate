@@ -10,7 +10,7 @@
   },
   {
     "name": "moodle_plan_assignment_timeline",
-    "description": "Draft study blocks before calendar dates for entries explicitly selected by the student, using their estimated effort and availability. Calendar dates are not independently verified assignment deadlines. Checks Google and Moodle event conflicts. Returns a sealed planToken.",
+    "description": "Draft study blocks before calendar dates for entries explicitly selected by the student, using their estimated effort and availability. Calendar dates are not independently verified assignment deadlines. Checks Google and Moodle event conflicts. Returns a planToken draft reference; copy it exactly when scheduling.",
     "parameters": {
       "type": "object",
       "properties": {

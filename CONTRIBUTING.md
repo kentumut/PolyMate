@@ -55,7 +55,7 @@ The web app runs at http://127.0.0.1:3000/calendar with a fixed local identity. 
    ```
 
 3. Pair reviews: Yildirim ↔ Catalin; Dogancem ↔ Bartek; Bartek reviews Kent's infrastructure. Kent handles root/configuration conflicts. The author and affected owner resolve conflicts together.
-4. Merge independent PRs when both CI jobs, `checks` and `containers`, pass against current `main`. Use **squash merge** to retain one understandable commit per handoff. A stale branch must incorporate `main` and rerun CI before merging. Kent coordinates merges touching shared dependencies or contracts.
+4. Merge independent PRs when the CI jobs `checks`, `planner` and `containers` pass against current `main`. Use **squash merge** to retain one understandable commit per handoff. A stale branch must incorporate `main` and rerun CI before merging. Kent coordinates merges touching shared dependencies or contracts.
 5. After each merge, everyone updates their own branch. At the iteration checkpoint, stop adding features and run Catalin's integrated acceptance journey together. Kent deploys the passing commit SHA.
 
 ```bash

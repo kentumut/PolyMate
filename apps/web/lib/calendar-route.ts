@@ -1,5 +1,6 @@
-import { ContractError, parseOperationId, type OperationResult, type StudyBlockChanges, type StudyBlockInput } from '@polymate/contracts/calendar';
+import { ContractError, parseOperationId, type CalendarEvent, type OperationResult, type StudyBlockChanges, type StudyBlockInput } from '@polymate/contracts/calendar';
 import type { CalendarClient } from '@polymate/contracts/calendar';
+import type { DateRange } from '@polymate/contracts/time';
 import { GoogleApiError, GoogleCalendarApi, GoogleNotConnectedError, GoogleTransportError } from '@polymate/core/calendar/google-api';
 import { toCalendarEvent } from '@polymate/core/calendar/mapping';
 import { StandaloneCalendarService, type StandaloneEventStore } from '@polymate/core/calendar/standalone';
@@ -48,7 +49,12 @@ const standaloneEvents: StandaloneEventStore = {
 };
 
 /** Always provides the PolyMate calendar; Google is an optional read-only overlay. */
-export function calendarServiceFor(owner: OwnerContext): CalendarClient & ProgressCalendar {
+export type OwnerCalendar = CalendarClient & ProgressCalendar & {
+  getStudyBlock(id: string): Promise<CalendarEvent | null>;
+  listBusy(range: DateRange): Promise<CalendarEvent[]>;
+};
+
+export function calendarServiceFor(owner: OwnerContext): OwnerCalendar {
   const googleEvents = process.env.GOOGLE_ENABLED === 'true' ? async (range: { from: string; to: string }) => {
     if (!(await getConnectionStatus(owner.userId)).connected) return [];
     const api = new GoogleCalendarApi({ accessToken: () => getValidAccessToken(owner) });

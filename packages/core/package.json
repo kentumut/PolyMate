@@ -22,7 +22,8 @@
     "./agent/http": "./agent/http.ts",
     "./agent/contracts": "./agent/contracts.ts",
     "./agent/tools": "./agent/tool-definitions.ts",
-    "./agent/automations": "./agent/automations.ts"
+    "./agent/automations": "./agent/automations.ts",
+    "./scheduling/planner": "./scheduling/planner.ts"
   },
   "dependencies": {
     "@polymate/contracts": "workspace:*",

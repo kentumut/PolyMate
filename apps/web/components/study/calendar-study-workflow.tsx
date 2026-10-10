@@ -4,8 +4,9 @@ import type { CalendarEvent } from '@polymate/contracts/calendar';
 import { HttpCalendarClient } from '@polymate/contracts/http-client';
 import { weekRange, zonedParts, zonedTimeToInstant } from '@polymate/contracts/time';
 import { FakeCalendarClient } from '@polymate/core/calendar/fake';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarPanel } from '@/components/calendar/calendar-panel';
+import { assignmentLabels, proposedBlocks, unscheduledWork } from '@/components/calendar/plan-overlay';
 import { StudyBlockDialog } from './study-block-dialog';
 import type { StudyBlockOperationResult } from './study-block-form';
 import { createStudyCalendarClient } from './study-calendar-client';
@@ -36,6 +37,19 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
   const blocking = client.getBlockingOperation();
   const pendingReport = workspace?.progressClient.getPendingReport();
   const disabled = !ready || busy || progressBusy || checking || Boolean(blocking) || Boolean(pendingReport);
+  // A minute clock is enough to retire expired previews from the overlay.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const planning = workspace?.planning;
+  const progress = workspace?.data;
+  const overlay = useMemo(() => ({
+    proposed: proposedBlocks(planning?.plan, planning?.results ?? [], now),
+    assignmentLabels: assignmentLabels(progress?.links ?? [], progress?.assignments ?? []),
+    unscheduled: progress ? unscheduledWork({ assignments: progress.assignments, links: progress.links, reports: progress.reports, plan: planning?.plan, now }) : [],
+  }), [planning, progress, now]);
 
   useEffect(() => {
     let current = true;
@@ -152,7 +166,7 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
     {pendingReport && !open && <p role="status" className="rounded-lg border border-[#c8d3c8] bg-white p-3 text-sm">A progress report is unconfirmed. <button type="button" disabled={progressBusy} onClick={retryReport} className="underline">Retry the original report</button></p>}
     {progressNotice && !open && <p role="status" className="text-sm">{progressNotice}</p>}
     {!open && result && !blocking && <p role="status" className="text-sm text-[#617269]">{result.status === 'synced' ? sample ? 'Sample calendar change confirmed.' : 'Calendar change saved.' : result.error?.message}</p>}
-    <CalendarPanel client={readClient} sample={sample} onSelect={event => show(event)} onRangeChange={setRange}
+    <CalendarPanel {...overlay} client={readClient} sample={sample} onSelect={event => show(event)} onRangeChange={setRange}
       onTimeRangeSelect={disabled ? undefined : showRange} reloadKey={reloadKey + externalReloadKey} />
     <StudyBlockDialog open={open} selectedEvent={selectedEvent} initialStartAt={initialStartAt} initialEndAt={initialEndAt}
       onClose={() => setOpen(false)} onCreate={input => perform(async () => {
