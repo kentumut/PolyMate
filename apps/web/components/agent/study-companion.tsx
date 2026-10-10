@@ -176,7 +176,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   const workspace = useStudyWorkspace();
   const searchParams = useSearchParams();
   const requestedView = searchParams.get('view');
-  const view: WorkspaceView = requestedView === 'calendar' || requestedView === 'courses' || requestedView === 'planner' || requestedView === 'settings' ? requestedView
+  const view: WorkspaceView = requestedView === 'calendar' || requestedView === 'courses' || requestedView === 'planner' || requestedView === 'settings' || requestedView === 'chat' ? requestedView
     : searchParams.has('google') ? 'settings' : 'chat';
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
@@ -214,6 +214,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   function hrefFor(nextView: WorkspaceView) {
     const params = new URLSearchParams(searchParams.toString());
     params.set('view', nextView);
+    params.delete('google');
     return `/calendar?${params.toString()}`;
   }
 
