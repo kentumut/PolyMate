@@ -5,6 +5,7 @@ import { assertPlanCurrent, type PlanningRequest, type PlanningState, type Store
 import { assertStudyPlanFits, planStudyWeek, type LinkedStudyEvent } from '@polymate/core/scheduling/planner';
 import type { OwnerContext } from '@polymate/core/identity';
 import { listAssignments } from '@polymate/db/assignments';
+import { listImportedCommitments } from '@polymate/db/imports';
 import { findCalendarOperation, listUnresolvedCalendarOperations } from '@polymate/db/calendar-operations';
 import { getStudyPlan, getStudyPreferences, linkedStudyBlocks, saveStudyPlan, updateStudyPlan, withPlanningLock } from '@polymate/db/planning';
 import { calendarServiceFor, type OwnerCalendar } from './calendar-route';
@@ -48,7 +49,7 @@ export async function executePlanning(owner: OwnerContext, input: PlanningReques
       const linkedEvents = await currentLinkedEvents(owner.userId, calendar);
       // Ask the pure planner for the horizon before fetching actual busy intervals.
       const draft = planStudyWeek({ assignments: [], events: [], linkedEvents: [], preferences: input.preferences, now, planId: randomUUID(), operationId: () => randomUUID() });
-      const events = await calendar.listBusy(draft.horizon);
+      const events = [...await calendar.listBusy(draft.horizon), ...await listImportedCommitments(owner.userId, draft.horizon)];
       const plan = planStudyWeek({ assignments, events, linkedEvents, preferences: input.preferences, now, planId: draft.id, operationId: () => randomUUID() });
       const snapshot: StoredStudyPlan = { plan, assignments, linkedEvents: fingerprint(linkedEvents), approved: false, results: [] };
       await saveStudyPlan(owner, snapshot);
@@ -73,7 +74,7 @@ export async function executePlanning(owner: OwnerContext, input: PlanningReques
         if (!isDeepStrictEqual(snapshot.assignments, assignments)) throw new ContractError('Assignments changed. Generate a fresh plan.');
         const linkedEvents = await currentLinkedEvents(owner.userId, calendar, plan.id);
         if (!isDeepStrictEqual(snapshot.linkedEvents, fingerprint(linkedEvents))) throw new ContractError('Existing study blocks changed. Generate a fresh plan.');
-        const busy = await calendar.listBusy(plan.horizon);
+        const busy = [...await calendar.listBusy(plan.horizon), ...await listImportedCommitments(owner.userId, plan.horizon)];
         assertStudyPlanFits(plan, busy, plan.blocks.filter((_, index) => !operations[index]));
       } catch (error) {
         if (!operations.some(Boolean)) throw error;
