@@ -13,10 +13,14 @@ const mocks = vi.hoisted(() => ({
   listWeek: vi.fn(),
   createStudyBlock: vi.fn(),
   updateStudyBlock: vi.fn(),
+  progressState: vi.fn(),
+  syncStudyCalendarRead: vi.fn(),
+  observeStudyCalendarChange: vi.fn(),
 }));
 vi.mock('../apps/web/lib/moodle', () => ({ executeMoodleTool: mocks.executeMoodleTool, moodleConnectionAvailable: mocks.moodleConnectionAvailable, calendarSnapshotForOwner: mocks.calendarSnapshotForOwner }));
 vi.mock('../packages/db/src/google-oauth', () => ({ getConnectionStatus: mocks.getConnectionStatus }));
 vi.mock('../packages/db/src/agent-automations', () => ({ findAutomationForGatewayJob: mocks.findAutomationForGatewayJob }));
+vi.mock('../packages/db/src/study-progress', () => ({ studyProgressStore: { state: mocks.progressState }, syncStudyCalendarRead: mocks.syncStudyCalendarRead, observeStudyCalendarChange: mocks.observeStudyCalendarChange }));
 vi.mock('../apps/web/lib/calendar-route', () => ({ calendarServiceFor: () => mocks, calendarError: () => Response.json({ error: { message: 'Calendar unavailable.' } }, { status: 502 }) }));
 
 import { AGENT_SYSTEM_INSTRUCTIONS, agentResponseBody, beginAgentTurn, callOpenClawAgent, dispatchOpenClawTool, endAgentTurn, parseAgentToolArguments, publicPendingPlan, scheduleCurrentPlan } from '../apps/web/lib/agent-runtime';
@@ -55,6 +59,9 @@ describe('PolyMate agent tool routing', () => {
     mocks.listWeek.mockReset();
     mocks.createStudyBlock.mockReset();
     mocks.updateStudyBlock.mockReset();
+    mocks.progressState.mockReset().mockResolvedValue({ assignments: [], links: [], reports: [], pendingCompletions: [] });
+    mocks.syncStudyCalendarRead.mockReset().mockResolvedValue(undefined);
+    mocks.observeStudyCalendarChange.mockReset().mockResolvedValue(undefined);
   });
   afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 

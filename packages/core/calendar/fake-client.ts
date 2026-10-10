@@ -66,6 +66,12 @@ export class FakeCalendarClient implements CalendarClient {
       .sort((a, b) => a.startAt.localeCompare(b.startAt));
   }
 
+  readStudyBlock(id: string): Promise<CalendarEvent> {
+    const event = this.events.get(id);
+    if (!event || event.source !== 'polymate' || !event.editable) return Promise.reject(new FakeError('forbidden', 'Only sample PolyMate blocks can be linked.'));
+    return Promise.resolve({ ...event });
+  }
+
   createStudyBlock(input: StudyBlockInput, operationId: string): Promise<OperationResult> {
     return this.once(operationId, () => {
       validateStudyInterval(input.startAt, input.endAt);

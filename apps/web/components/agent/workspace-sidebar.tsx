@@ -1,6 +1,7 @@
 'use client';
 
 import type { MouseEvent } from 'react';
+import { useSyncExternalStore } from 'react';
 
 export type WorkspaceView = 'calendar' | 'chat' | 'settings';
 
@@ -24,7 +25,22 @@ export function WorkspaceSidebar({ view, ownerName, hrefFor, onNavigate }: {
   hrefFor: (view: WorkspaceView) => string;
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, view: WorkspaceView) => void;
 }) {
+  const darkMode = useSyncExternalStore(
+    callback => {
+      document.documentElement.addEventListener('polymate-theme-change', callback);
+      return () => document.documentElement.removeEventListener('polymate-theme-change', callback);
+    },
+    () => document.documentElement.classList.contains('dark'),
+    () => false,
+  );
   const initials = ownerName.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+
+  function toggleTheme() {
+    const nextDarkMode = !document.documentElement.classList.contains('dark');
+    document.documentElement.classList.toggle('dark', nextDarkMode);
+    document.documentElement.dispatchEvent(new Event('polymate-theme-change'));
+    try { localStorage.setItem('polymate-theme', nextDarkMode ? 'dark' : 'light'); } catch { /* Theme still works for this session. */ }
+  }
 
   return <aside className="sticky top-0 z-10 flex border-b border-[#dce3db] bg-[#eef2eb] px-4 py-3 md:h-dvh md:w-60 md:shrink-0 md:flex-col md:border-r md:border-b-0 md:px-5 md:py-8">
     <a href={hrefFor('calendar')} onClick={event => onNavigate(event, 'calendar')} className="flex shrink-0 items-center gap-3 font-semibold tracking-tight md:px-2 md:text-xl" aria-label="PolyMate calendar">
@@ -40,6 +56,10 @@ export function WorkspaceSidebar({ view, ownerName, hrefFor, onNavigate }: {
           {destination.label}
         </a>)}
       </nav>
+      <button type="button" onClick={toggleTheme} aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} aria-pressed={darkMode}
+        className="mt-2 flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-[#617269] transition-colors hover:bg-[#e1e8dc] hover:text-[#173b32] md:w-full md:px-4 md:text-sm">
+        <span aria-hidden="true">{darkMode ? '☀' : '☾'}</span>{darkMode ? 'Light mode' : 'Dark mode'}
+      </button>
     </div>
     <div className="mt-auto hidden border-t border-[#d6dfd1] pt-5 md:block">
       <div className="flex items-center gap-3 px-2">

@@ -21,7 +21,8 @@ const knownRejections = new Set([400, 401, 403, 404, 409, 412, 422]);
 
 function values(input: StudyBlockInput) {
   // Deliberately pick editable values; never forward a caller-supplied owner.
-  return { title: input.title, startAt: input.startAt, endAt: input.endAt, timezone: input.timezone };
+  return { title: input.title, startAt: input.startAt, endAt: input.endAt, timezone: input.timezone,
+    ...(input.assignmentId ? { assignmentId: input.assignmentId, expectedAssignmentVersion: input.expectedAssignmentVersion } : {}) };
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -156,6 +157,10 @@ export function createStudyCalendarClient(options: StudyCalendarClientOptions = 
       kind: 'delete', eventId, path: `${blockPath}/${encodeURIComponent(eventId)}`, method: 'DELETE', body: { expectedEtag },
     }),
     getBlockingOperation: blockingOperation,
+    trackOperation: (result: StudyBlockOperationResult) => {
+      if (!operations.has(result.operationId)) operations.set(result.operationId, { mutation: null, result });
+      else remember(result.operationId, result);
+    },
     getOperation: (operationId: string) => operations.get(operationId)?.result ?? null,
     async loadUnresolved(): Promise<StudyBlockOperationResult[]> {
       if (options.calendarClient) return [];

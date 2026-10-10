@@ -51,6 +51,10 @@ export class StandaloneCalendarService implements CalendarClient {
     return [...local, ...external].sort((a, b) => a.startAt.localeCompare(b.startAt) || a.id.localeCompare(b.id));
   }
 
+  readStudyBlock(id: string): Promise<CalendarEvent> {
+    return this.owned(parseEventId(id));
+  }
+
   async createStudyBlock(input: StudyBlockInput, operationId: string): Promise<OperationResult> {
     input = parseStudyBlockInput(input);
     operationId = parseOperationId(operationId);

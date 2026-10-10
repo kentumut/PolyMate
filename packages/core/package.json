@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./progress/memory": "./progress/memory.ts",
+    "./progress": "./progress/service.ts",
     "./identity": "./src/identity.ts",
     "./google-auth": "./integrations/google-auth/oauth.ts",
     "./google-auth/crypto": "./integrations/google-auth/crypto.ts",

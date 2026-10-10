@@ -9,6 +9,9 @@ export const AGENT_TOOL_NAMES = [
   'polymate_create_study_block',
   'polymate_edit_study_block',
   'polymate_move_study_block',
+  'polymate_get_study_progress',
+  'polymate_link_study_session',
+  'polymate_report_study_progress',
 ] as const;
 
 export type AgentToolName = typeof AGENT_TOOL_NAMES[number];

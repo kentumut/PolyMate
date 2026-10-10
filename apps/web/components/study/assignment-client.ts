@@ -115,5 +115,9 @@ export function createSampleAssignmentClient() {
     if (outcome === 'unknown') throw new Error('Simulated lost reply after the fixture save.');
     return Response.json({ assignment }, { status: 201 });
   };
-  return { ...createAssignmentClient({ fetcher }), setOutcome: (next: AssignmentFixtureOutcome) => { outcome = next; } };
+  return { ...createAssignmentClient({ fetcher }), setOutcome: (next: AssignmentFixtureOutcome) => { outcome = next; },
+    applySampleProgress: (assignment: Assignment) => {
+      for (const entry of entries.values()) if (entry.assignment.id === assignment.id) { entry.assignment = assignment; return; }
+      throw new Error('Sample assignment not found.');
+    } };
 }

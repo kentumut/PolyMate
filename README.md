@@ -2,7 +2,7 @@
 
 An AI study companion for ETH students with a weekly calendar, Moodle calendar subscriptions, and an OpenClaw-backed study chat.
 
-**Current status:** The calendar, Google OAuth, Moodle connection, and study-planning flow are implemented. Live AI, Moodle, and Google verification still requires deployment credentials.
+**Current status:** Iteration 1 is complete: the Google-connected calendar passed live acceptance on 10 October 2026. See the [acceptance results](docs/ITERATION_1_ACCEPTANCE.md). Iteration 2 is the next roadmap milestone: deadlines, availability, plan preview, and approved Google study blocks. Moodle and AI integrations are implemented separately; their live acceptance is not covered by the calendar checks.
 
 - [Five-person schedule](docs/TEAM_SCHEDULE.md)
 - [Branches, ownership, and parallel merging](CONTRIBUTING.md)

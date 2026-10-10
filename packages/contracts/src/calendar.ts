@@ -191,11 +191,14 @@ export function parseActionRequest(value: unknown): StudyBlockActionRequest {
 }
 
 /** Flat dialog wire contract; delegates interval/title validation to the service contract. */
-export function parseDialogCreateRequest(value: unknown): CreateStudyBlockRequest {
+export function parseDialogCreateRequest(value: unknown): CreateStudyBlockRequest & { assignmentId?: string; expectedAssignmentVersion?: number } {
   const body = record(value, 'request');
-  only(body, ['operationId', 'title', 'startAt', 'endAt', 'timezone'], 'request');
+  only(body, ['operationId', 'title', 'startAt', 'endAt', 'timezone', 'assignmentId', 'expectedAssignmentVersion'], 'request');
   if (body.timezone !== 'Europe/Zurich') throw new ContractError('timezone must be Europe/Zurich.');
-  return { operationId: parseOperationId(body.operationId), block: parseStudyBlockInput({ title: body.title, startAt: body.startAt, endAt: body.endAt }) };
+  if ((body.assignmentId === undefined) !== (body.expectedAssignmentVersion === undefined)) throw new ContractError('Send the assignment ID and version together.');
+  if (body.assignmentId !== undefined && (typeof body.expectedAssignmentVersion !== 'number' || !Number.isInteger(body.expectedAssignmentVersion) || body.expectedAssignmentVersion < 1)) throw new ContractError('Review the current assignment version.');
+  return { operationId: parseOperationId(body.operationId), block: parseStudyBlockInput({ title: body.title, startAt: body.startAt, endAt: body.endAt }),
+    ...(body.assignmentId !== undefined ? { assignmentId: parseOperationId(body.assignmentId), expectedAssignmentVersion: body.expectedAssignmentVersion as number } : {}) };
 }
 
 export function parseDialogUpdateRequest(value: unknown): UpdateStudyBlockRequest {

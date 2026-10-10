@@ -4,7 +4,7 @@
 
 **Integration branch:** `feat/catalin-i1-calendar-integration`, based on merged `main` at `276fbd9`. The original workflow was merged in PR #12.
 
-**Status:** dialog, browser mutation adapter, and `CalendarStudyWorkflow` are implemented and wired into `/calendar` on this branch. The decided flat mutation API delegates to the existing protected Google service; operation recovery and reconciliation are implemented. Deployment and live Google acceptance are still pending; issue #11 is not ready to close.
+**Status:** the workflow is merged through PR #16 and deployed at `8e9bdcc`. On 10 October 2026, Catalin confirmed that all listed live Google acceptance checks pass on the managed site. This is Catalin's manual acceptance confirmation; issue #11 is ready for closure and Kent's first-release sign-off process.
 
 ## Components available to Kent
 
@@ -86,20 +86,20 @@ The workflow supplies all four mutation callbacks and `onReconcile` to the dialo
 4. Use `/calendar` without the sample parameter for real Google actions. Database/migrations and OAuth credentials/test account must be configured. Failed operation-recovery reads disable writes until Retry check succeeds; pending/unknown changes expose Check change.
 5. Run the managed-site live acceptance table below and record actual results before closing issue #11.
 
-## Live acceptance still required
+## Live acceptance — confirmed by Catalin on 10 October 2026
 
-On the managed site with a designated real Google account, record each result and evidence:
+Catalin confirmed in the project conversation that the following checks all pass on `https://07.hackathon.ethz.ch/calendar` with real Google Calendar. The results below record that user-reported manual verification.
 
 | Scenario | Expected result | Actual result / evidence |
 |---|---|---|
-| Connect Google | OAuth returns to managed site; connected state shown. | Not run |
-| View commitments | Existing Google events visible in Zurich time. | Not run |
-| Create | Same study block appears in PolyMate and Google. | Not run |
-| Move | New time confirmed in Google; previous time replaced. | Not run |
-| Mark done and reload | Session completion persists after reload. | Not run |
-| Confirm Delete | Block disappears from Google and reloaded PolyMate. | Not run |
-| Overlap | Honest rejection; no conflicting Google write. | Not run |
-| Disconnected/revoked Google | Reconnect feedback; no false success. | Not run |
-| Forbidden personal-event edit | Mutation rejected; Google event unchanged. | Not run |
+| Connect Google | OAuth returns to managed site; connected state shown. | Passed — Catalin's manual confirmation |
+| View commitments | Existing Google events visible in Zurich time. | Passed — Catalin's manual confirmation |
+| Create | Same study block appears in PolyMate and Google. | Passed — Catalin's manual confirmation |
+| Move | New time confirmed in Google; previous time replaced. | Passed — Catalin's manual confirmation |
+| Mark done and reload | Session completion persists after reload. | Passed — Catalin's manual confirmation |
+| Confirm Delete | Block disappears from Google and reloaded PolyMate. | Passed — Catalin's manual confirmation |
+| Overlap | Honest rejection; no conflicting Google write. | Passed — Catalin's manual confirmation |
+| Disconnected Google | Reconnect feedback; no false success. | Passed — Catalin's manual confirmation |
+| Personal-event protection | Personal events cannot be edited, completed, or deleted; Google events remain unchanged. | Passed — Catalin's manual confirmation |
 
-After integration, finish browser verification, run this live journey, record demo evidence, and link the reviewed PR plus remaining blockers in issue #11. The fixture run and mocked adapter tests do not meet the live release gate.
+Kent can proceed with the first calendar release based on Catalin's manual sign-off. The separate automated browser suite remains paused; its historical partial run is not the evidence for this live acceptance. Catalin's next iteration-2 implementation is manual assignment/deadline/effort entry, study preferences, and Generate Plan / Apply Plan controls.

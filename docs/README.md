@@ -5,9 +5,11 @@ PolyMate is a proactive AI study companion for ETH CS bachelor's and master's st
 ## Project documents
 
 - **Start here:** [Five-person delivery schedule](TEAM_SCHEDULE.md): named roles, parallel tasks per iteration, branch/file ownership, and release gates.
+- [Iteration 1 acceptance](ITERATION_1_ACCEPTANCE.md): completed live Google Calendar checks on 10 October 2026.
 - [Parallel development and merging](../CONTRIBUTING.md): each person's branch, file boundaries, commands, review pairs, and merge order.
 - [Kent's implementation handoff](KENT_HANDOFF.md): implemented infrastructure and remaining teammate dependencies.
 - [Manual assignment entry](ASSIGNMENT_ENTRY_HANDOFF.md): assignment form/list, persistence API, migration, and testing instructions for iteration 2.
+- [Session progress and recovery](STUDY_PROGRESS_HANDOFF.md): assignment-linked reports, missed-session moves, remaining effort, and agent activity interfaces.
 - [Deployment and recovery](DEPLOYMENT.md): VM setup, SHA releases, backup/restore, and rollback.
 - [Product specification](POLYMATE_SPEC.md): agreed student experience, hackathon scope, and success criteria.
 - [Implementation plan](IMPLEMENTATION_PLAN.md): staged VM architecture, service contracts, testing, and deployment/recovery runbook.
@@ -17,7 +19,7 @@ PolyMate is a proactive AI study companion for ETH CS bachelor's and master's st
 
 The five positions are Yildirim (calendar interface), Dogancem (scheduling/calendar service), Kent (integration/release), Bartek (data/connections), and Catalin (student workflow/quality).
 
-The foundation is deployed on the VIScon team 07 VM at [the managed address](https://07.hackathon.ethz.ch), running commit `31f82f1`. The Next.js workspace, calendar preview, managed identity, web/database containers, CI, and deployment/recovery scripts are implemented. Google OAuth, live calendar actions, and teammate feature modules are still being integrated. This preview is not the first MVP.
+**Iteration 1 is complete.** The Google-connected calendar passed live acceptance at [the managed address](https://07.hackathon.ethz.ch) on 10 October 2026; the final checks used deployed commit `c39aae9`. Google OAuth and calendar actions are integrated, including ownership/conflict protection, reload persistence, revoked-access feedback, and restart/token-refresh recovery. See [the results](ITERATION_1_ACCEPTANCE.md). Iteration 2 adds deadlines, availability, plan generation, and approved Google blocks.
 
 ## Run locally
 

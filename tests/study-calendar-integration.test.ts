@@ -16,6 +16,7 @@ import { eventIdForOperation } from '../packages/core/calendar/mapping';
 
 const mocks = vi.hoisted(() => ({ token: vi.fn(), begin: vi.fn(), finish: vi.fn(), find: vi.fn(), list: vi.fn() }));
 vi.mock('../packages/db/src/google-oauth', () => ({ getValidAccessToken: mocks.token }));
+vi.mock('../packages/db/src/study-progress', () => ({ observeStudyCalendarChange: vi.fn(), syncStudyCalendarRead: vi.fn(), reserveBlockAssignment: vi.fn() }));
 vi.mock('../packages/db/src/calendar-operations', () => ({
   calendarOperationStore: { withOwnerLock: (_owner: string, run: () => Promise<unknown>) => run(), begin: mocks.begin, finish: mocks.finish },
   findCalendarOperation: mocks.find, listUnresolvedCalendarOperations: mocks.list,
