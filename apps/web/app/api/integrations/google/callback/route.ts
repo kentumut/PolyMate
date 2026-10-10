@@ -3,6 +3,8 @@ import { consumeCallbackState, exchangeAuthorizationCode, verifyGoogleCalendarAc
 import { openBrowserBinding } from '@polymate/core/google-auth/crypto';
 import { oauthStateStore, saveConnection } from '@polymate/db/google-oauth';
 import { NextRequest, NextResponse } from 'next/server';
+import { withExclusiveCalendarAction } from '@/lib/agent-runtime';
+import { switchCalendarHome } from '@/lib/calendar-route';
 import { BINDING_COOKIE, cookieOptions, googleConfig } from '@/lib/google-oauth';
 
 export const dynamic = 'force-dynamic';
@@ -27,8 +29,13 @@ export async function GET(request: NextRequest) {
       const tokens = await exchangeAuthorizationCode({ code, clientId: config.clientId,
         clientSecret: config.clientSecret, redirectUri: config.redirectUri });
       await verifyGoogleCalendarAccess({ accessToken: async () => tokens.accessToken });
-      await saveConnection(owner.userId, tokens);
+      const { created } = await saveConnection(owner.userId, tokens);
       outcome = 'connected';
+      // Google is the default home for study blocks on a first connection. Reconnecting keeps the
+      // student's existing choice. A failed move leaves blocks in PolyMate; the student can retry.
+      if (created) {
+        await withExclusiveCalendarAction(owner.userId, () => switchCalendarHome(owner, 'google')).catch(() => {});
+      }
     }
   } catch {
     // The browser gets a generic result. Codes, state, and credentials stay out of logs and URLs.

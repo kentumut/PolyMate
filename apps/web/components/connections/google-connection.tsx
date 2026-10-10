@@ -112,7 +112,7 @@ export function GoogleConnection({ demo = false }: { demo?: boolean }) {
     </div>}
     {status?.enabled && home && <fieldset className="space-y-2 rounded-xl border border-[#dce3db] p-3" disabled={busy}>
       <legend className="px-1 text-xs font-medium text-[#173b32]">Save study blocks to</legend>
-      {(['polymate', 'google'] as const).map(option => <label key={option} className="flex items-start gap-2 text-sm">
+      {(['google', 'polymate'] as const).map(option => <label key={option} className="flex items-start gap-2 text-sm">
         <input type="radio" name="calendar-home" className="mt-1" checked={home === option}
           disabled={option === 'google' && !status.connected && home !== 'google'}
           onChange={() => void requestHome(option, false)} />
@@ -121,7 +121,7 @@ export function GoogleConnection({ demo = false }: { demo?: boolean }) {
           : 'Blocks are added to your Google Calendar and also shown in PolyMate.'}</span></span>
       </label>)}
       {!status.connected && home !== 'google' && <p className="text-xs text-[#617269]">Connect Google to save study blocks there.</p>}
-      {pendingSwitch && <div className="rounded-lg bg-[#edf0e7] p-3 text-xs leading-5" role="status">
+      {pendingSwitch && <div className="rounded-lg bg-[#edf0eb] p-3 text-xs leading-5 text-[#21362d]" role="status">
         <p>{pendingSwitch.upcomingBlocks
           ? `${pendingSwitch.upcomingBlocks} upcoming study block${pendingSwitch.upcomingBlocks === 1 ? '' : 's'} will move to your ${HOME_LABEL[pendingSwitch.to]}. Past blocks stay where they are.`
           : `New study blocks will be saved to your ${HOME_LABEL[pendingSwitch.to]}.`}</p>

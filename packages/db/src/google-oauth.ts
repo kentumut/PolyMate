@@ -56,12 +56,13 @@ export async function setCalendarHome(ownerId: string, home: CalendarHome): Prom
   if (home === 'google' && result.rowCount !== 1) throw new Error('Google Calendar is not connected.');
 }
 
+/** Returns `created: true` only for a first connection, so callers can apply first-connect defaults. */
 export async function saveConnection(ownerId: string, tokens: {
   accessToken: string;
   refreshToken?: string;
   expiresAt: Date;
   scopes: string[];
-}): Promise<void> {
+}): Promise<{ created: boolean }> {
   if (!tokens.refreshToken) {
     const existing = await getPool().query<{ refresh_token_ciphertext: string | null }>(
       'SELECT refresh_token_ciphertext FROM calendar_connections WHERE owner_id = $1', [ownerId],
@@ -70,7 +71,7 @@ export async function saveConnection(ownerId: string, tokens: {
       throw new Error('Google did not provide offline access. Please reconnect.');
     }
   }
-  await getPool().query(
+  const result = await getPool().query<{ created: boolean }>(
     `INSERT INTO calendar_connections
        (owner_id, access_token_ciphertext, refresh_token_ciphertext, access_token_expires_at, granted_scopes)
      VALUES ($1, $2, $3, $4, $5)
@@ -79,9 +80,11 @@ export async function saveConnection(ownerId: string, tokens: {
        refresh_token_ciphertext = COALESCE(EXCLUDED.refresh_token_ciphertext, calendar_connections.refresh_token_ciphertext),
        access_token_expires_at = EXCLUDED.access_token_expires_at,
        granted_scopes = EXCLUDED.granted_scopes,
-       connected_at = now(), updated_at = now()`,
+       connected_at = now(), updated_at = now()
+     RETURNING (xmax = 0) AS created`,
     [ownerId, encryptSecret(tokens.accessToken), tokens.refreshToken ? encryptSecret(tokens.refreshToken) : null, tokens.expiresAt, tokens.scopes],
   );
+  return { created: result.rows[0]?.created ?? false };
 }
 
 /** Study blocks still live in Google; disconnecting would hide them from PolyMate. */
