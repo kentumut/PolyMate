@@ -28,10 +28,31 @@ describe('semester planning agent', () => {
         { unitId: 101, semester: '2026W', reason: 'Duplicate suggestion.' },
       ],
       cautions: ['Confirm the final allocation in myStudies.'],
-    }, candidates as never, new Set());
+    }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [] });
 
     expect(proposal.courses).toEqual([{ ...course, status: 'planned', reason: 'Closes a major gap.' }]);
     expect(proposal.cautions).toHaveLength(1);
-    expect(verifiedProposal({ summary: 'No change.', recommendations: [{ unitId: 101, semester: '2026W', reason: 'Already there.' }], cautions: [] }, candidates as never, new Set([101])).courses).toEqual([]);
+    expect(verifiedProposal({ summary: 'No change.', recommendations: [{ unitId: 101, semester: '2026W', reason: 'Already there.' }], cautions: [] }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [{ ...course, status: 'planned' }] }).courses).toEqual([]);
+  });
+
+  it('never lets recommendations take a semester above target plus 3 ECTS', () => {
+    const majorCore = { ...course, id: 102, title: 'Advanced Machine Learning', credits: 10 };
+    const seminar = { ...course, id: 103, title: 'Systems for AI Seminar', credits: 2 };
+    const candidates = new Map([['2026W:102', majorCore], ['2026W:103', seminar]]);
+    const existing = { ...course, id: 100, title: 'Existing courses', credits: 31, status: 'planned' as const };
+
+    const proposal = verifiedProposal({
+      summary: 'Add both courses.',
+      recommendations: [
+        { unitId: 102, semester: '2026W', reason: 'Closes the major-core gap.' },
+        { unitId: 103, semester: '2026W', reason: 'Closes the seminar gap.' },
+      ],
+      cautions: [],
+    }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [existing] });
+
+    expect(proposal.courses.map(item => item.id)).toEqual([103]);
+    expect(31 + proposal.courses.reduce((sum, item) => sum + (item.credits ?? 0), 0)).toBe(33);
+    expect(proposal.summary).toContain('33 ECTS');
+    expect(proposal.cautions.at(-1)).toContain('Advanced Machine Learning');
   });
 });
