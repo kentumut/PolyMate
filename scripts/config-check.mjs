@@ -35,6 +35,12 @@ export function validateConfiguration(env) {
     if (env.POLYMATE_LLM_THINKING && !['off', 'minimal', 'low', 'medium', 'high'].includes(env.POLYMATE_LLM_THINKING)) errors.push('POLYMATE_LLM_THINKING must be off, minimal, low, medium, or high.');
     if (env.POLYMATE_LLM_FAST && !['true', 'false'].includes(env.POLYMATE_LLM_FAST)) errors.push('POLYMATE_LLM_FAST must be true or false.');
   }
+  if (env.POLYMATE_CHAT_MODEL && !/^[a-zA-Z0-9._-]+$/.test(env.POLYMATE_CHAT_MODEL)) {
+    errors.push('POLYMATE_CHAT_MODEL must be an OpenAI model ID.');
+  }
+  if (env.POLYMATE_CHAT_REASONING && !['none', 'low', 'medium', 'high'].includes(env.POLYMATE_CHAT_REASONING)) {
+    errors.push('POLYMATE_CHAT_REASONING must be none, low, medium, or high.');
+  }
   return errors;
 }
 
