@@ -41,7 +41,7 @@ import {
   type DemoProfile,
   type DemoStage,
 } from '@/lib/demo-fixtures';
-import { CheckInNotice, CheckInSettings, useChats } from './chat-list';
+import { ChatHistoryRail, CheckInNotice, CheckInSettings, useChats } from './chat-list';
 import { fetchChat, unreadCheckIns } from './chat-client';
 
 type AgentCard = { kind: 'assignments' | 'timeline' | 'schedule' | 'connections' | 'progress'; data: unknown };
@@ -691,7 +691,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
         <div className="flex items-center gap-1">
           {view === 'courses' && <Button asChild size="sm" variant="outline"><a href={hrefFor('planner')} aria-label="Open semester plan" onClick={event => navigate(event, 'planner')}><GraduationCap aria-hidden="true" /><span className="hidden sm:inline">Semester plan</span></a></Button>}
           {view === 'planner' && <Button asChild size="sm" variant="ghost"><a href={hrefFor('courses')} aria-label="Back to courses" onClick={event => navigate(event, 'courses')}><ArrowLeft aria-hidden="true" /><span className="hidden sm:inline">Courses</span></a></Button>}
-          <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswered}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} chats={demo ? [] : chats.chats} activeChatId={chatId} disabled={busy} onOpenChat={demo ? undefined : chat => void openChat(chat.id)} onNewChat={demo ? undefined : newChat} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
+          <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswered}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
         </div>
       </header>
       {!demo && view !== 'chat' && <CheckInNotice chats={waitingCheckIns} floating disabled={busy} onOpen={chat => void openChat(chat.id)} />}
@@ -716,7 +716,9 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
           <SemesterPlanner sample={sample} onRecommend={openRecommendation} />
         </section>
 
-        <section aria-labelledby="study-chat-title" className={view === 'chat' ? 'flex h-full min-h-0 flex-col' : 'hidden'}>
+        <div className={view === 'chat' ? 'flex h-full min-h-0 flex-col md:flex-row' : 'hidden'}>
+          <ChatHistoryRail chats={demo ? [] : chats.chats} activeChatId={chatId} demo={demo} disabled={busy || demo} onOpenChat={chat => void openChat(chat.id)} onNewChat={newChat} />
+        <section aria-labelledby="study-chat-title" className="flex min-h-0 min-w-0 flex-1 flex-col">
           <h2 id="study-chat-title" className="sr-only">Plan with PolyMate</h2>
           <div className="min-h-0 flex-1 overflow-y-auto" aria-live="polite" aria-relevant="additions text">
             <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 pb-8 pt-6 sm:px-6">
@@ -768,6 +770,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
             </div>
           </div>
         </section>
+        </div>
 
         <section aria-label="Settings" className={view === 'settings' ? 'grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]' : 'hidden'}>
           <MoodleConnection />
