@@ -31,7 +31,8 @@ describe('Moodle assignment planning and calendar tools', () => {
     expect(plan.blocks[0].endAt).toBe('2026-10-10T14:00:00.000Z');
     expect(plan.unscheduled[0].remainingMinutes).toBe(70);
     await expect(tools.scheduleTimeline(plan)).rejects.toThrow('cannot fit');
-    expect((await tools.scheduleTimeline(plan, true)).complete).toBe(false);
+    // The approved partial request is fully done once every fitting block is written.
+    expect((await tools.scheduleTimeline(plan, true)).complete).toBe(true);
   });
 
   it('uses student extensions, excludes submitted work, and refuses changed deadlines', async () => {

@@ -58,6 +58,22 @@ describe('standalone calendar service', () => {
     expect((await service.updateStudyBlock(created.event!.id, { title: 'Changed' }, '"999"', operation(3))).error?.code).toBe('conflict');
   });
 
+  it('replays a create whose stored intent comes back with reordered keys', async () => {
+    // Postgres jsonb reorders object keys, so the stored intent differs in key order from the retry.
+    class ReorderingStore extends MemoryOperationStore {
+      override async begin(record: Parameters<MemoryOperationStore['begin']>[0]) {
+        const prior = await super.begin(record);
+        if (!prior) return prior;
+        const { title, startAt, endAt } = prior.record.intendedChange as StudyBlockInput;
+        return { ...prior, record: { ...prior.record, intendedChange: { endAt, title, startAt } } };
+      }
+    }
+    service = new StandaloneCalendarService(owner, events, new ReorderingStore());
+    const first = await service.createStudyBlock(block, operation(1));
+    expect(await service.createStudyBlock(block, operation(1))).toEqual(first);
+    expect((await service.createStudyBlock({ ...block, title: 'Other' }, operation(1))).error?.code).toBe('validation');
+  });
+
   it('ignores an unavailable optional Google overlay', async () => {
     service = new StandaloneCalendarService(owner, events, new MemoryOperationStore(), async () => { throw new Error('Google unavailable'); });
     await service.createStudyBlock(block, operation(1));

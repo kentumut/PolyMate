@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import {
   parseDateRange,
   parseEtag,
@@ -121,7 +122,8 @@ export class StandaloneCalendarService implements CalendarClient {
       if (prior) {
         const same = prior.record.ownerId === this.owner.userId && prior.record.kind === record.kind &&
           prior.record.targetEventId === record.targetEventId && prior.record.expectedEtag === record.expectedEtag &&
-          JSON.stringify(prior.record.intendedChange) === JSON.stringify(record.intendedChange);
+          // jsonb does not preserve key order, so compare structurally rather than as JSON text.
+          isDeepStrictEqual(prior.record.intendedChange, record.intendedChange);
         if (!same) return { operationId: record.operationId, status: 'failed', error: { code: 'validation', message: 'This operation ID was already used for a different change.' } };
         if (prior.result) return prior.result;
         const recovered = await this.recover(record);
