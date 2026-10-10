@@ -414,6 +414,12 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
     if (id) await openChat(id);
   }
 
+  function openRecommendation(prompt: string) {
+    setInput(prompt);
+    showChatView();
+    window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
+  }
+
   function completeDemoOnboarding(profile: DemoProfile) {
     const goal = profile.goal === 'deadline' ? 'finish urgent work' : profile.goal === 'exam' ? 'build exam confidence' : 'keep the week sustainable';
     const cadence = profile.coachCadence === 'proactive' ? 'flag risks that need a response' : 'stay quiet between weekly summaries';
