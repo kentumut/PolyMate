@@ -2,7 +2,7 @@
 
 import type { MouseEvent } from 'react';
 import { useSyncExternalStore } from 'react';
-import { BookOpen, CalendarDays, MessageSquare, Moon, Settings, Sparkles, Sun } from 'lucide-react';
+import { BookOpen, CalendarDays, LogOut, MessageSquare, Moon, Settings, Sparkles, Sun } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -16,9 +16,10 @@ const destinations = [
   { view: 'settings', label: 'Settings', icon: Settings },
 ] satisfies { view: WorkspaceView; label: string; icon: typeof MessageSquare }[];
 
-export function WorkspaceSidebar({ view, ownerName, hrefFor, onNavigate }: {
+export function WorkspaceSidebar({ view, ownerName, demo = false, hrefFor, onNavigate }: {
   view: WorkspaceView;
   ownerName: string;
+  demo?: boolean;
   hrefFor: (view: WorkspaceView) => string;
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, view: WorkspaceView) => void;
 }) {
@@ -45,9 +46,10 @@ export function WorkspaceSidebar({ view, ownerName, hrefFor, onNavigate }: {
       <span className="hidden sm:inline">PolyMate</span>
     </a>
 
-    <a href="/demo" className="ml-1 flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border bg-background px-2.5 text-xs font-medium shadow-sm transition-colors hover:bg-accent md:mt-3 md:ml-0 md:justify-start md:px-3" aria-label="Open mentor demo">
-      <Sparkles className="size-3.5" aria-hidden="true" />
-      <span className="hidden sm:inline">Mentor demo</span>
+    {/* Full page loads: the server decides demo mode from the query, so leaving needs a fresh render without it. */}
+    <a href={demo ? '/calendar?view=chat' : '/demo'} className="ml-1 flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border bg-background px-2.5 text-xs font-medium shadow-sm transition-colors hover:bg-accent md:mt-3 md:ml-0 md:justify-start md:px-3" aria-label={demo ? 'Exit mentor demo' : 'Open mentor demo'}>
+      {demo ? <LogOut className="size-3.5" aria-hidden="true" /> : <Sparkles className="size-3.5" aria-hidden="true" />}
+      <span className="hidden sm:inline">{demo ? 'Exit demo' : 'Mentor demo'}</span>
     </a>
 
     <nav aria-label="Study space" className="ml-auto flex items-center gap-1 md:mt-6 md:ml-0 md:flex-col md:items-stretch">
