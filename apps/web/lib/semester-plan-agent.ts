@@ -440,6 +440,19 @@ export async function improveSemesterPlan(
 ) {
   const plan = semesterPlanRequestSchema.parse(rawPlan);
   const client = options.client ?? new VvzClient();
+  const existingAudit = plan.courses.length ? await checkMscCsGraduation(client, {
+    major: plan.major,
+    minor: plan.minor,
+    courses: plan.courses.map(course => ({ unitId: course.id, status: course.status })),
+    previousBachelorLanguageCredits: 0,
+  }) : null;
+  if (existingAudit?.projected.graduationReady) return {
+    proposal: { summary: 'The existing projected plan already satisfies the encoded graduation requirements.', courses: [], cautions: [] },
+    audit: existingAudit,
+  };
+  const deterministic = await deterministicGraduationRoadmap(plan, client, existingAudit);
+  if (deterministic) return deterministic;
+
   const context: PlannerContext = { client, plan, candidates: new Map(), inspectedCandidates: new Set() };
   const configuration = directChatConfiguration(options.env);
   const agent = new Agent<PlannerContext, typeof agentOutputSchema>({
@@ -474,13 +487,6 @@ HARD WORKLOAD RULE: no semester may exceed targetCredits + ${MAX_SEMESTER_OVERAG
     courses: combined.map(course => ({ unitId: course.id, status: course.status })),
     previousBachelorLanguageCredits: 0,
   }) : null;
-  const existingAudit = plan.courses.length ? await checkMscCsGraduation(client, {
-    major: plan.major,
-    minor: plan.minor,
-    courses: plan.courses.map(course => ({ unitId: course.id, status: course.status })),
-    previousBachelorLanguageCredits: 0,
-  }) : null;
   const enforced = enforceGraduationReadyProposal(proposal, proposedAudit, existingAudit);
-  if (enforced.audit?.projected.graduationReady || existingAudit?.projected.graduationReady) return enforced;
-  return await deterministicGraduationRoadmap(plan, client, existingAudit) ?? enforced;
+  return enforced;
 }
