@@ -2,6 +2,8 @@
 
 See [Catalin's iteration-1 handoff](../../../../docs/CATALIN_I1_HANDOFF.md) for the decided HTTP contract, recorded verification, integration dependencies, and live acceptance checklist.
 
+Manual assignment entry is documented in [the iteration-2 handoff](../../../../docs/ASSIGNMENT_ENTRY_HANDOFF.md). `AssignmentsPanel` appears beside the calendar and supports persistent assignment saves independently of Google. The development sample page also offers labelled success/failure/uncertain/slow save scenarios.
+
 `StudyBlockDialog` from `./study-block-dialog` implements **create, edit/move, Mark done, and confirmed Delete**, with read-only details for personal/non-editable events. Pass `selectedEvent={null}` to create, or the loaded event to edit. It uses native modal-dialog focus handling and existing React/Tailwind dependencies.
 
 `CalendarStudyWorkflow` now composes the view, dialog, and mutation client on `/calendar`. The parent must be a Client Component to supply callback functions. Standalone dialog example:
