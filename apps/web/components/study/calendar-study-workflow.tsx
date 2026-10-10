@@ -148,11 +148,11 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
   }
 
   return <div className="min-w-0 space-y-3">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="text-sm text-[#617269]">{sample ? 'Sample workflow — changes stay in memory.' : 'Manage your PolyMate calendar. Google events appear read-only when connected.'}</p>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
+      <p className="text-sm text-muted-foreground">{sample ? 'Sample workflow — changes stay in memory.' : 'Google events are read-only. PolyMate study blocks are editable.'}</p>
       <div className="flex gap-2">
-        <button type="button" onClick={() => setReloadKey(key => key + 1)} className="rounded-lg border border-[#c8d3c8] bg-white px-3 py-2 text-sm">Refresh calendar</button>
-        <button type="button" disabled={disabled} onClick={() => show(null)} className="rounded-lg bg-[#173b32] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Add study block</button>
+        <button type="button" onClick={() => setReloadKey(key => key + 1)} className="rounded-md border bg-background px-3 py-2 text-sm font-medium hover:bg-accent">Refresh</button>
+        <button type="button" disabled={disabled} onClick={() => show(null)} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">Add study block</button>
       </div>
     </div>
     {!ready && !recoveryError && <p role="status" className="text-sm text-[#617269]">Checking pending calendar changes…</p>}

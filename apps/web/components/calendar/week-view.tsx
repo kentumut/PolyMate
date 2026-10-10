@@ -34,8 +34,8 @@ export type WeekViewProps = {
 
 type DragSelection = { dayIndex: number; anchorMinute: number; focusMinute: number };
 
-const HOUR_HEIGHT = 56;
-const COLUMNS = 'grid-cols-[48px_1fr] md:grid-cols-[48px_repeat(7,minmax(0,1fr))]';
+const HOUR_HEIGHT = 40;
+const COLUMNS = 'grid-cols-[44px_1fr] md:grid-cols-[44px_repeat(7,minmax(0,1fr))]';
 const subscribeToHydration = () => () => {};
 const clientHydrated = () => true;
 const serverHydrated = () => false;
@@ -105,19 +105,19 @@ export function WeekView({
     onTimeRangeSelect?.(selection.startAt, selection.endAt);
   }
 
-  return <section className="overflow-hidden rounded-2xl border border-[#dce3db] bg-white" aria-label="Weekly calendar">
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0eb] px-4 py-4 sm:px-6">
+  return <section className="overflow-hidden rounded-xl border bg-card" aria-label="Weekly calendar">
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
       <div>
         <h2 className="font-semibold" aria-live="polite">{formatWeekLabel(range)}</h2>
-        <p className="mt-1 text-xs text-[#748278]">Europe/Zurich · PolyMate Calendar</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">Europe/Zurich</p>
       </div>
       <nav className="flex items-center gap-1" aria-label="Week navigation">
         <button type="button" onClick={() => changeRange(shiftWeek(range, -1))} aria-label="Previous week"
-          className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce3db] text-lg hover:bg-[#f2f5f0]">‹</button>
+          className="grid h-8 w-8 place-items-center rounded-md border text-lg hover:bg-accent">‹</button>
         <button type="button" onClick={() => changeRange(weekRange(current))} disabled={isCurrentWeek}
-          className="h-9 rounded-lg border border-[#dce3db] px-3 text-sm font-medium hover:bg-[#f2f5f0] disabled:opacity-40">Today</button>
+          className="h-8 rounded-md border px-3 text-xs font-medium hover:bg-accent disabled:opacity-40">Today</button>
         <button type="button" onClick={() => changeRange(shiftWeek(range, 1))} aria-label="Next week"
-          className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce3db] text-lg hover:bg-[#f2f5f0]">›</button>
+          className="grid h-8 w-8 place-items-center rounded-md border text-lg hover:bg-accent">›</button>
       </nav>
     </header>
 
@@ -134,33 +134,33 @@ export function WeekView({
     </div>}
 
     {/* Phones show one day at a time; the strip switches between days of this week. */}
-    <div className="flex gap-1 overflow-x-auto border-b border-[#edf0eb] px-3 py-2 md:hidden" role="tablist" aria-label="Day">
+    <div className="flex gap-1 overflow-x-auto border-b px-3 py-2 md:hidden" role="tablist" aria-label="Day">
       {days.map((day, index) => <button key={day.key} type="button" role="tab" aria-selected={index === mobileDay} onClick={() => setFocusedDay(index)}
-        className={`min-w-0 flex-1 rounded-lg py-1.5 text-center text-xs ${index === mobileDay ? 'bg-[#173b32] text-white' : index === todayIndex ? 'bg-[#eef2e9]' : ''}`}>
+        className={`min-w-0 flex-1 rounded-md py-1.5 text-center text-xs ${index === mobileDay ? 'bg-primary text-primary-foreground' : index === todayIndex ? 'bg-accent' : ''}`}>
         <span className="block">{day.weekday}</span><span className="block text-sm font-semibold">{day.dayOfMonth}</span>
       </button>)}
     </div>
 
     <div className="relative" aria-busy={loading}>
-      <div className={`hidden border-b border-[#edf0eb] md:grid ${COLUMNS}`}>
+      <div className={`hidden border-b md:grid ${COLUMNS}`}>
         <span />
-        {days.map((day, index) => <div key={day.key} className="border-l border-[#edf0eb] py-2 text-center">
-          <span className="block text-[11px] uppercase tracking-wide text-[#748278]">{day.weekday}</span>
-          <span className={`mt-0.5 inline-grid h-7 min-w-7 place-items-center rounded-full px-1 text-sm font-semibold ${index === todayIndex ? 'bg-[#173b32] text-white' : ''}`}
+        {days.map((day, index) => <div key={day.key} className="border-l py-1.5 text-center">
+          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">{day.weekday}</span>
+          <span className={`mt-0.5 inline-grid h-6 min-w-6 place-items-center rounded-full px-1 text-xs font-semibold ${index === todayIndex ? 'bg-primary text-primary-foreground' : ''}`}
             aria-current={index === todayIndex ? 'date' : undefined}>{day.dayOfMonth}</span>
         </div>)}
       </div>
 
-      {hasAllDay && <div className={`grid border-b border-[#edf0eb] ${COLUMNS}`}>
-        <span className="self-center pr-1 text-right text-[10px] text-[#87928b]">all day</span>
-        {days.map((day, index) => <div key={day.key} className={`min-h-8 space-y-1 border-l border-[#edf0eb] p-1 ${index === mobileDay ? '' : 'hidden md:block'}`}>
+      {hasAllDay && <div className={`grid border-b ${COLUMNS}`}>
+        <span className="self-center pr-1 text-right text-[10px] text-muted-foreground">all day</span>
+        {days.map((day, index) => <div key={day.key} className={`min-h-8 space-y-1 border-l p-1 ${index === mobileDay ? '' : 'hidden md:block'}`}>
           {allDayEventsFor(events, day).map(event => <EventButton key={event.id} event={event} assignment={assignmentLabels.get(event.id)} selected={event.id === selectedId} onSelect={onSelect} compact />)}
         </div>)}
       </div>}
 
       <div className={`grid ${COLUMNS}`}>
         <div className="relative" style={{ height: hourCount * HOUR_HEIGHT }} aria-hidden="true">
-          {Array.from({ length: hourCount }, (_, i) => <span key={i} className="absolute right-1.5 -translate-y-1/2 text-[10px] text-[#87928b]" style={{ top: i * HOUR_HEIGHT }}>
+          {Array.from({ length: hourCount }, (_, i) => <span key={i} className="absolute right-1.5 -translate-y-1/2 text-[10px] text-muted-foreground" style={{ top: i * HOUR_HEIGHT }}>
             {i === 0 ? '' : `${String(hours.start + i).padStart(2, '0')}:00`}
           </span>)}
         </div>
@@ -170,8 +170,8 @@ export function WeekView({
           return <div key={day.key} role="group" aria-label={day.weekday + ' ' + day.dayOfMonth}
             onPointerDown={event => startDrag(event, index)} onPointerMove={event => moveDrag(event, index)}
             onPointerUp={event => finishDrag(event, index)} onPointerCancel={() => setDragSelection(null)}
-            className={`relative border-l border-[#edf0eb] ${index === todayIndex ? 'bg-[#fafcf8]' : ''} ${index === mobileDay ? '' : 'hidden md:block'} ${canDrag ? 'cursor-crosshair select-none' : ''}`}
-            style={{ height: hourCount * HOUR_HEIGHT, backgroundImage: `repeating-linear-gradient(to bottom, #edf0eb 0 1px, transparent 1px ${HOUR_HEIGHT}px)` }}>
+            className={`relative border-l ${index === todayIndex ? 'bg-muted/30' : ''} ${index === mobileDay ? '' : 'hidden md:block'} ${canDrag ? 'cursor-crosshair select-none' : ''}`}
+            style={{ height: hourCount * HOUR_HEIGHT, backgroundImage: `repeating-linear-gradient(to bottom, color-mix(in oklab, var(--border) 70%, transparent) 0 1px, transparent 1px ${HOUR_HEIGHT}px)` }}>
             {dragSelection?.dayIndex === index && <SelectionPreview selection={dragSelection} hours={hours} />}
             {placed.map(item => {
               const { event } = item;
@@ -186,13 +186,13 @@ export function WeekView({
         })}
       </div>
 
-      {loading && <div className="absolute inset-0 z-30 grid place-items-center bg-white/60">
-        <span className="rounded-full border border-[#dce3db] bg-white px-4 py-2 text-xs font-medium" role="status">Loading your week…</span>
+      {loading && <div className="absolute inset-0 z-30 grid place-items-center bg-background/60">
+        <span className="rounded-full border bg-card px-4 py-2 text-xs font-medium shadow-sm" role="status">Loading your week…</span>
       </div>}
       {!loading && !error && items.length === 0 && <p className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-sm text-[#748278]">Nothing planned this week yet.</p>}
     </div>
 
-    <footer className="flex flex-wrap gap-4 border-t border-[#edf0eb] px-6 py-3 text-[11px] text-[#617269]" aria-label="Legend">
+    <footer className="flex flex-wrap gap-4 border-t px-4 py-2.5 text-[11px] text-muted-foreground" aria-label="Legend">
       {events.some(event => event.source === 'google-personal') && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-l-[3px] border-[#9aa79f] bg-[#eef1ec]" />Google events (read-only)</span>}
       <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#2f6b55]" />PolyMate study block</span>
       <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border border-dashed border-[#2f6b55] bg-[#e4efe7]" />Done</span>
@@ -232,9 +232,9 @@ function EventButton({ event, assignment, selected, onSelect, compact = false }:
 
 function PlacedEventButton({ item, assignment, selected, onSelect }: { item: PlacedEvent; assignment?: string; selected: boolean; onSelect: (id: string) => void }) {
   const { event } = item;
-  const short = item.height < 5;
+  const short = item.height < 8;
   // Planned blocks are titled after their assignment; only label blocks whose title says something else.
-  const showAssignment = assignment && assignment !== event.title && item.height >= 6;
+  const showAssignment = assignment && assignment !== event.title && item.height >= 10;
   return <button type="button" onClick={() => onSelect(event.id)} aria-label={eventLabel(event, assignment)} aria-pressed={selected}
     className={`absolute px-1.5 py-1 ${eventClasses(event, selected)} ${item.continuesBefore ? 'rounded-t-none' : ''} ${item.continuesAfter ? 'rounded-b-none' : ''}`}
     style={{ top: `${item.top}%`, height: `${item.height}%`, left: `calc(${item.left}% + 2px)`, width: `calc(${item.width}% - 4px)` }}>
@@ -251,7 +251,7 @@ const proposedTag = { proposed: 'Proposed', unknown: 'Checking', failed: 'Not ad
 /** Preview of a planner block: dashed amber outline, no fill colour shared with synced blocks, not clickable. */
 function ProposedTile({ item }: { item: PlacedEvent<ProposedBlock> }) {
   const { event: block } = item;
-  const short = item.height < 5;
+  const short = item.height < 8;
   return <div role="note" tabIndex={0} aria-label={proposedLabel(block)} title={proposedLabel(block)}
     className={`absolute overflow-hidden rounded-md border-2 border-dashed px-1.5 py-0.5 text-[11px] leading-tight focus-visible:z-30 focus-visible:outline-offset-1 ${
       block.status === 'failed' ? 'border-[#c4655d] bg-[#fbf0ee] text-[#9e3e38]' : 'border-[#c08a2b] bg-[#fffaf0] text-[#7a5d1c]'}`}

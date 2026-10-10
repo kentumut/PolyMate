@@ -5,7 +5,7 @@ import { currentPlanApproval } from '@polymate/core/agent/contracts';
 
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
 import type { CalendarEvent } from '@polymate/contracts/calendar';
-import { ArrowUp, Square } from 'lucide-react';
+import { ArrowLeft, ArrowUp, ClipboardPlus, GraduationCap, Square } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CalendarStudyWorkflow } from '@/components/study/calendar-study-workflow';
@@ -145,6 +145,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   const [coachRefreshKey, setCoachRefreshKey] = useState(0);
   const [coachOutstanding, setCoachOutstanding] = useState(0);
   const [nextEvent, setNextEvent] = useState<CalendarEvent | null>(null);
+  const [assignmentsOpen, setAssignmentsOpen] = useState(false);
   const nextId = useRef(0);
   const inFlight = useRef<AbortController | null>(null);
   const messagesEnd = useRef<HTMLDivElement | null>(null);
@@ -280,7 +281,12 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     <main className={view === 'chat' ? 'flex h-[calc(100dvh-57px)] min-w-0 flex-1 flex-col overflow-hidden md:h-dvh' : 'min-w-0 flex-1'}>
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4 sm:px-6">
         <p className="truncate text-sm font-medium">{view === 'chat' ? 'Chat' : <>PolyMate <span className="text-muted-foreground">/ {pageTitle}</span></>}</p>
-        <CoachInbox sample={sample} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
+        <div className="flex items-center gap-2">
+          {view === 'calendar' && <Button type="button" size="sm" aria-label="Add assignment" onClick={() => { setAssignmentsOpen(true); window.dispatchEvent(new Event('polymate-add-assignment')); }}><ClipboardPlus aria-hidden="true" /><span className="hidden sm:inline">Add assignment</span></Button>}
+          {view === 'courses' && <Button asChild size="sm" variant="outline"><a href={hrefFor('planner')} aria-label="Open semester plan" onClick={event => navigate(event, 'planner')}><GraduationCap aria-hidden="true" /><span className="hidden sm:inline">Semester plan</span></a></Button>}
+          {view === 'planner' && <Button asChild size="sm" variant="ghost"><a href={hrefFor('courses')} aria-label="Back to courses" onClick={event => navigate(event, 'courses')}><ArrowLeft aria-hidden="true" /><span className="hidden sm:inline">Courses</span></a></Button>}
+          <CoachInbox sample={sample} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
+        </div>
       </header>
 
       <div className={view === 'chat' ? 'min-h-0 flex-1' : 'mx-auto w-full max-w-7xl px-4 py-8 sm:px-7 md:px-10 md:py-10 lg:px-12'}>
@@ -291,8 +297,8 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
 
         {/* Keep panels mounted so navigation preserves drafts, forms, and calendar state. */}
         <section aria-label="Calendar" className={view === 'calendar' ? 'space-y-5' : 'hidden'}>
-          <div className="min-w-0 rounded-xl border bg-card p-4 shadow-sm sm:p-6"><CalendarStudyWorkflow sample={sample} externalReloadKey={reloadKey} /></div>
-          <details className="group rounded-xl border bg-card shadow-sm">
+          <div className="min-w-0"><CalendarStudyWorkflow sample={sample} externalReloadKey={reloadKey} /></div>
+          <details open={assignmentsOpen} onToggle={event => setAssignmentsOpen(event.currentTarget.open)} className="group rounded-xl border bg-card shadow-sm">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 text-sm font-medium [&::-webkit-details-marker]:hidden">
               <span>Assignments <span className="ml-2 hidden font-normal text-muted-foreground sm:inline">Deadlines and effort estimates</span></span>
               <span className="text-xl leading-none text-muted-foreground transition-transform group-open:rotate-45" aria-hidden="true">+</span>

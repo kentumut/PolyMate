@@ -2,7 +2,7 @@
 
 import type { MouseEvent } from 'react';
 import { useSyncExternalStore } from 'react';
-import { BookOpen, CalendarDays, GraduationCap, MessageSquare, Moon, Settings, Sun } from 'lucide-react';
+import { BookOpen, CalendarDays, MessageSquare, Moon, Settings, Sun } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -12,7 +12,6 @@ export type WorkspaceView = 'calendar' | 'planner' | 'courses' | 'chat' | 'setti
 const destinations = [
   { view: 'chat', label: 'Chat', icon: MessageSquare },
   { view: 'calendar', label: 'Calendar', icon: CalendarDays },
-  { view: 'planner', label: 'Semester plan', icon: GraduationCap },
   { view: 'courses', label: 'Courses', icon: BookOpen },
   { view: 'settings', label: 'Settings', icon: Settings },
 ] satisfies { view: WorkspaceView; label: string; icon: typeof MessageSquare }[];
@@ -49,10 +48,11 @@ export function WorkspaceSidebar({ view, ownerName, hrefFor, onNavigate }: {
     <nav aria-label="Study space" className="ml-auto flex items-center gap-1 md:mt-6 md:ml-0 md:flex-col md:items-stretch">
       {destinations.map(destination => {
         const Icon = destination.icon;
-        return <a key={destination.view} href={hrefFor(destination.view)} onClick={event => onNavigate(event, destination.view)} aria-current={view === destination.view ? 'page' : undefined}
-          className={cn('flex h-9 items-center gap-3 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:text-sm', view === destination.view && 'bg-accent text-foreground')}>
+        const active = view === destination.view || (view === 'planner' && destination.view === 'courses');
+        return <a key={destination.view} href={hrefFor(destination.view)} onClick={event => onNavigate(event, destination.view)} aria-current={active ? 'page' : undefined}
+          className={cn('flex h-9 items-center gap-3 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:text-sm', active && 'bg-accent text-foreground')}>
           <Icon className="size-4" strokeWidth={1.8} aria-hidden="true" />
-          <span className={cn(view !== destination.view && 'hidden sm:inline', 'md:inline')}>{destination.label}</span>
+          <span className={cn(!active && 'hidden sm:inline', 'md:inline')}>{destination.label}</span>
         </a>;
       })}
     </nav>
