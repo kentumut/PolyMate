@@ -21,6 +21,9 @@ export function PlanningPanel({ onCalendarChange }: { onCalendarChange: () => vo
   const plan = state?.plan;
   const confirmed = state?.results.filter(result => result.status === 'synced').length ?? 0;
   const applied = Boolean(plan?.blocks.length && confirmed === plan.blocks.length);
+  const planningChanged = workspace?.planningChanged;
+  // Share the preview with the calendar overlay; the server state stays authoritative.
+  useEffect(() => { if (state) planningChanged?.(state); }, [state, planningChanged]);
 
   async function load() {
     setLoading(true); setError('');

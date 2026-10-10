@@ -23,13 +23,26 @@ Generate/apply requests serialize per owner with a database advisory lock. Every
 
 Approval and operation IDs persist before dispatch. A retry uses the same operation IDs; failed/uncertain operations stop the sequence. Expired or stale partially dispatched plans can check already attempted blocks without sending unattempted blocks. Confirmations survive the web process stopping before preview bookkeeping, because reads recover them from the calendar operation log. Progress bookkeeping repairs itself from confirmed operations and saved assignment intents.
 
+## Calendar overlay (Yildirim)
+
+The week view now shows the planner's state alongside Google events. Each item answers one question: is this block in Google yet?
+
+- **Proposed blocks** from the current preview have a dashed amber outline and a `Proposed` tag. They share lanes with real events, so overlaps with existing commitments stay visible. They are notes, not buttons, so they never open the study-block dialog. A banner above the grid says how many fall in the visible week and that they reach Google only after the plan is applied.
+- **After apply**, Google-confirmed blocks drop out of the overlay, and the real solid-green study block takes their place after the calendar reload. A block whose apply is uncertain shows `Checking`. A failed block shows `Not added` in red. An expired preview that was never applied is hidden, because it can no longer be applied.
+- **Assignment labels**: a study block linked to an assignment shows `↳ <assignment>` when its own title differs, and its accessible label always names the assignment.
+- **Unscheduled work**: a collapsible strip lists open effort that no block covers. While a preview is current, this is the planner's shortfall with its reasons. Without one, it mirrors the planner's own rule: remaining effort minus linked, undeleted sessions that have no report for their current revision. Assignments past their deadline are left out.
+
+Files: `apps/web/components/calendar/plan-overlay.ts` (pure derivations, tested in `tests/calendar-plan-overlay.test.ts`), with `week-view.tsx` / `week-layout.ts` (layout generalised to any timed item). `CalendarPanel` passes the new `proposed`, `assignmentLabels` and `unscheduled` props through to `WeekView`. `PlanningPanel` publishes its loaded or returned `PlanningState` into the study workspace (`planning`, `planningChanged`), and `CalendarStudyWorkflow` derives the overlay from that plus the progress state. The calendar keeps no planning state of its own, and the existing selection and edit contract is unchanged.
+
+Sample mode has no planner, because planning needs Postgres. In development, review the overlay at **http://127.0.0.1:3000/dev/calendar-plan**, a labelled fixture that covers every block state, the banners, assignment labels, and the phone day view.
+
 ## OpenClaw and remaining scope
 
 OpenClaw continues to run the model/tool loop and the existing Moodle tools. This manual flow works without an LLM or Moodle connection; Google and Postgres are required. It does not add another agent runtime or deploy a worker.
 
 The manual planner service is **not yet exposed as an OpenClaw tool**. Chat continues to plan from Moodle entries using its existing timeline contract. The two paths share interval subtraction and Google writes, but still have distinct planning inputs and draft storage. Follow-up work should expose the general planning service through validated tools and agree how Moodle entries enter the assignment/progress model.
 
-Further release work: calendar overlay/assignment labels for previews, live Google acceptance, and decisions about durable background jobs and subsequent automated-change consent. The current implementation performs only explicitly approved foreground writes. No background calendar writes or reminder delivery are enabled.
+Further release work: live Google acceptance, and decisions about durable background jobs and subsequent automated-change consent. The current implementation performs only explicitly approved foreground writes. No background calendar writes or reminder delivery are enabled.
 
 ## Verification and release gate
 
