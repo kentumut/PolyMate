@@ -34,7 +34,9 @@ if (command === 'setup') {
   const installed = resolve(runtime, 'node_modules/openclaw/package.json');
   if (!existsSync(installed) || JSON.parse(readFileSync(installed)).version !== OPENCLAW_VERSION) {
     mkdirSync(runtime, { recursive: true });
-    const npm = spawnSync('npm', ['install', '--prefix', runtime, '--no-audit', '--no-fund', `openclaw@${OPENCLAW_VERSION}`], { stdio: 'inherit' });
+    const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const npm = spawnSync(npmCommand, ['install', '--prefix', runtime, '--no-audit', '--no-fund', `openclaw@${OPENCLAW_VERSION}`], { stdio: 'inherit', shell: process.platform === 'win32' });
+    if (npm.error) throw npm.error;
     if (npm.status !== 0) process.exit(npm.status ?? 1);
   }
   cpSync(resolve(root, 'integrations/openclaw-agent-plugin'), pluginPath, { recursive: true });
