@@ -16,7 +16,10 @@ export type GoogleEvent = {
   extendedProperties?: { private?: Record<string, string>; shared?: Record<string, string> };
 };
 
-export type GoogleEventWrite = Partial<Omit<GoogleEvent, 'etag' | 'status' | 'attendees'>>;
+export type GoogleEventWrite = Partial<Omit<GoogleEvent, 'etag' | 'status' | 'attendees'>> & {
+  /** Only 'confirmed', to restore an event this owner deleted earlier. */
+  status?: 'confirmed';
+};
 
 /** Google answered with an error status. The write definitely did not apply (except 5xx). */
 export class GoogleApiError extends Error {
@@ -83,12 +86,12 @@ export class GoogleCalendarApi {
     throw new GoogleApiError(413, 'tooManyEvents');
   }
 
-  /** Returns null when the event does not exist or was deleted. */
-  async get(id: string): Promise<GoogleEvent | null> {
+  /** Returns null when the event does not exist or, unless asked for, was deleted. */
+  async get(id: string, options: { includeCancelled?: boolean } = {}): Promise<GoogleEvent | null> {
     try {
       const event = await this.request<GoogleEvent>('GET', `/${encodeURIComponent(id)}`);
       assertEvent(event);
-      return event && event.status !== 'cancelled' ? event : null;
+      return event && (options.includeCancelled || event.status !== 'cancelled') ? event : null;
     } catch (error) {
       if (error instanceof GoogleApiError && (error.status === 404 || error.status === 410)) return null;
       throw error;

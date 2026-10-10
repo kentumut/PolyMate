@@ -29,7 +29,7 @@ vi.mock('../packages/db/src/assignments', () => ({
   createAssignment: mocks.createAssignment,
   AssignmentRequestConflict: class AssignmentRequestConflict extends Error {},
 }));
-vi.mock('../apps/web/lib/calendar-route', () => ({ calendarServiceFor: () => mocks, calendarError: () => Response.json({ error: { message: 'Calendar unavailable.' } }, { status: 502 }) }));
+vi.mock('../apps/web/lib/calendar-route', () => ({ calendarServiceFor: () => mocks, calendarHomeFor: async () => ({ home: 'google', connected: true }), calendarError: () => Response.json({ error: { message: 'Calendar unavailable.' } }, { status: 502 }) }));
 
 import { AGENT_SYSTEM_INSTRUCTIONS, VVZ_ROUTING_INSTRUCTIONS, agentAppContext, agentResponseBody, beginAgentTurn, callOpenClawAgent, dispatchOpenClawTool, endAgentTurn, parseAgentToolArguments, publicPendingPlan, scheduleCurrentPlan } from '../apps/web/lib/agent-runtime';
 import { currentPlanApproval, followsUpOnRequest, isCreateAssignmentRequest, isCreateBlockRequest, isExplicitCalendarConsent, isExplicitDeleteConsent, isExplicitPartialConsent } from '../packages/core/agent/contracts';
@@ -600,10 +600,11 @@ describe('PolyMate agent tool routing', () => {
     ]);
     expect(context.upcomingMoodleEntries).toHaveLength(25);
     expect(context.moreEntries).toBe(8);
+    expect(context.calendarHome).toBe('google');
     expect(JSON.stringify(context)).not.toContain('Ignore previous instructions');
 
     mocks.moodleConnectionAvailable.mockResolvedValueOnce(false);
-    expect(await agentAppContext(owner.userId)).toBe('{"moodleConnected":false}');
+    expect(await agentAppContext(owner.userId)).toBe('{"moodleConnected":false,"calendarHome":"google"}');
     mocks.calendarSnapshotForOwner.mockRejectedValueOnce(new Error('feed down'));
     expect(await agentAppContext(owner.userId)).toContain('Moodle and calendar context are unavailable');
 

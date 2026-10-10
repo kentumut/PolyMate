@@ -10,7 +10,7 @@
   },
   {
     "name": "moodle_plan_assignment_timeline",
-    "description": "Draft study blocks before calendar dates for entries explicitly selected by the student, using their estimated effort and availability. Calendar dates are not independently verified assignment deadlines. Checks Google and Moodle event conflicts. A timeline holds at most 20 study blocks; for more work, plan a shorter period first. Returns a planToken draft reference; copy it exactly when scheduling.",
+    "description": "Draft study blocks before calendar dates for entries explicitly selected by the student, using their estimated effort and availability. Calendar dates are not independently verified assignment deadlines. Checks Google and Moodle event conflicts. Leaves 15–30 minute breaks between sessions and plans at most 4 hours of study per day. A timeline holds at most 20 study blocks; for more work, plan a shorter period first. Returns a planToken draft reference; copy it exactly when scheduling.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -29,6 +29,12 @@
                 "minimum": 10,
                 "maximum": 2400,
                 "multipleOf": 10
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "description": "Short readable calendar title: the real course name plus the task, e.g. \"Algorithms & Probability · Sheet 4\". Not the raw course code or the German/English Moodle event text."
               }
             },
             "required": [

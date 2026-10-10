@@ -35,6 +35,10 @@ export function assertGoogleMutation(request: NextRequest): void {
 }
 
 export function routeError(error: unknown): Response {
+  // Matched by name so this module stays free of database imports.
+  if (error instanceof Error && error.name === 'CalendarHomeInUseError') {
+    return Response.json({ error: { code: 'calendar_home_in_use', message: error.message } }, { status: 409, headers: { 'Cache-Control': 'no-store' } });
+  }
   const status = error instanceof IdentityError ? error.status : 500;
   const message = error instanceof IdentityError ? error.message : 'Google Calendar request failed.';
   return Response.json({ error: { message } }, { status, headers: { 'Cache-Control': 'no-store' } });

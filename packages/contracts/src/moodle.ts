@@ -25,7 +25,7 @@ export interface MoodleReader {
 }
 export type TimelineRequest = {
   /** Effort is an estimate supplied by the student/AI, never a Moodle fact. */
-  work: { assignmentId: number; estimatedMinutes: number }[];
+  work: { assignmentId: number; estimatedMinutes: number; /** Readable calendar title chosen by the agent. */ label?: string }[];
   /** Explicit ISO instants with offsets; windows must not overlap. */
   availability: { startAt: string; endAt: string }[];
 };
