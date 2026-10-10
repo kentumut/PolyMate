@@ -77,10 +77,8 @@ export function CoachInbox({ sample, refreshKey, onRespond, onOutstandingChange 
     </PopoverTrigger>
     <PopoverContent align="end" className="max-h-[min(42rem,calc(100dvh-5rem))] w-[min(26rem,calc(100vw-2rem))] overflow-y-auto p-0">
       <div className="sticky top-0 z-10 bg-popover px-4 py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div><p className="text-sm font-semibold">Weekly coach</p><p className="mt-1 text-xs text-muted-foreground">Context carries forward. You only answer what changed.</p></div>
-          {outstanding.length > 0 && <Badge variant="warning">{outstanding.length} to answer</Badge>}
-        </div>
+        <p className="text-sm font-semibold">Weekly coach</p>
+        <p className="mt-1 text-xs text-muted-foreground">Context carries forward. You only answer what changed.</p>
       </div>
       <Separator />
 
@@ -88,13 +86,22 @@ export function CoachInbox({ sample, refreshKey, onRespond, onOutstandingChange 
         {error && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error} <button type="button" className="underline" onClick={() => setReloadKey(value => value + 1)}>Retry</button></div>}
         {!state && !error && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" /> Loading coaching…</p>}
 
-        {outstanding.length > 0 ? <section aria-label="Responses needed" className="space-y-3">
-          {outstanding.map(item => <article key={item.id} className="rounded-lg border border-amber-200 bg-amber-50/60 p-3.5 dark:border-amber-900 dark:bg-amber-950/30">
-            <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Response needed</p>
-            <h3 className="mt-1.5 text-sm font-semibold">{item.title}</h3>
-            <p className="mt-1.5 text-sm leading-5 text-muted-foreground">{item.body}</p>
-            <Button type="button" size="sm" className="mt-3" onClick={() => { setOpen(false); onRespond(item); }}>Respond <ChevronRight aria-hidden="true" /></Button>
-          </article>)}
+        {outstanding.length > 0 ? <section aria-labelledby="coach-outstanding-heading">
+          <h2 id="coach-outstanding-heading" className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+            Needs your answer <span className="tabular-nums">· {outstanding.length}</span>
+          </h2>
+          <ul className="divide-y overflow-hidden rounded-lg border">
+            {outstanding.map(item => <li key={item.id}>
+              <button type="button" className="group flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none" onClick={() => { setOpen(false); onRespond(item); }} aria-label={`Respond: ${item.title}`}>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">{item.title}</span>
+                  <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{item.body}</span>
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden="true" />
+              </button>
+            </li>)}
+          </ul>
         </section> : state && <div className="rounded-lg bg-muted p-3 text-sm"><p className="font-medium">You’re caught up</p><p className="mt-1 text-muted-foreground">No coaching questions need your response.</p></div>}
 
         {updates.length > 0 && <details className="group">
