@@ -64,6 +64,39 @@ function semesterCredits(courses: ReadonlyArray<{ semester: string; credits: num
   return totals;
 }
 
+export function chooseAlternativeSwap(
+  plan: SemesterPlanAgentInput,
+  chosenCourseId: number,
+  candidates: SearchCourse[],
+) {
+  const chosen = plan.courses.find(course => course.id === chosenCourseId);
+  if (!chosen) return null;
+  const maximumCredits = plan.targetCredits + MAX_SEMESTER_OVERAGE;
+  const currentCredits = semesterCredits(plan.courses).get(chosen.semester) ?? 0;
+  const existingIds = new Set(plan.courses.map(course => course.id));
+  const existingNumbers = new Set(plan.courses.map(course => course.number?.trim().toUpperCase()).filter((number): number is string => Boolean(number)));
+  const removable = plan.courses.filter(course => course.semester === chosen.semester && course.id !== chosen.id && course.status === 'planned');
+  const extraRemovalSets: typeof removable[] = [[]];
+  for (const course of removable) extraRemovalSets.push([course]);
+  for (let left = 0; left < removable.length; left += 1) {
+    for (let right = left + 1; right < removable.length; right += 1) extraRemovalSets.push([removable[left], removable[right]]);
+  }
+
+  const options = candidates
+    .filter(course => course.id !== chosen.id && !existingIds.has(course.id) && course.credits !== null && course.credits > 0)
+    .filter(course => !course.number || !existingNumbers.has(course.number.trim().toUpperCase()))
+    .flatMap(course => extraRemovalSets.map(extraRemovals => {
+      const removedCredits = (chosen.credits ?? 0) + extraRemovals.reduce((sum, item) => sum + (item.credits ?? 0), 0);
+      const resultingCredits = currentCredits - removedCredits + (course.credits ?? 0);
+      return { course, removeCourseIds: [chosen.id, ...extraRemovals.map(item => item.id)], resultingCredits };
+    }))
+    .filter(option => option.resultingCredits <= maximumCredits)
+    .sort((left, right) => left.removeCourseIds.length - right.removeCourseIds.length
+      || Math.abs(left.resultingCredits - plan.targetCredits) - Math.abs(right.resultingCredits - plan.targetCredits)
+      || Math.abs((left.course.credits ?? 0) - (chosen.credits ?? 0)) - Math.abs((right.course.credits ?? 0) - (chosen.credits ?? 0)));
+  return options[0] ?? null;
+}
+
 function semesterIndex(semester: string) {
   const match = /^(\d{4})([SW])$/.exec(semester);
   return match ? Number(match[1]) * 2 + (match[2] === 'W' ? 1 : 0) : 0;
@@ -443,6 +476,7 @@ export async function suggestCourseAlternative(raw: unknown, options: { client?:
   const { plan, courseId } = alternativeRequestSchema.parse(raw);
   const chosen = plan.courses.find(course => course.id === courseId);
   if (!chosen) throw new Error('Choose a course that is currently in the semester plan.');
+  if (chosen.status !== 'planned') throw new Error('Only planned courses can be replaced.');
   const client = options.client ?? new VvzClient();
   const audit = await checkMscCsGraduation(client, {
     major: plan.major,
@@ -457,8 +491,6 @@ export async function suggestCourseAlternative(raw: unknown, options: { client?:
   if (!category || !(VVZ_CURRICULUM_BROWSE_CATEGORIES as readonly string[]).includes(category)) {
     throw new Error('PolyMate could not determine a curriculum category for that course.');
   }
-  const existingIds = new Set(plan.courses.map(course => course.id));
-  const existingNumbers = new Set(plan.courses.map(course => course.number?.trim().toUpperCase()).filter((number): number is string => Boolean(number)));
   const sourceSemester = chosen.sourceSemester ?? chosen.semester;
   const fallbackSemester = sourceSemester.at(-1) === 'W' ? '2026W' : '2027S';
   const candidates: SearchCourse[] = [];
@@ -466,22 +498,20 @@ export async function suggestCourseAlternative(raw: unknown, options: { client?:
     const result = await client.browseMscCsCurriculum({ semester, major: plan.major, minor: plan.minor, categories: [category], limitPerCategory: 8 });
     candidates.push(...(result.categories[category as VvzCurriculumCategory] ?? []));
   }
-  const semesterCreditsWithoutChosen = semesterCredits(plan.courses).get(chosen.semester)! - (chosen.credits ?? 0);
   const maximumCredits = plan.targetCredits + MAX_SEMESTER_OVERAGE;
-  const alternative = candidates
-    .filter(course => course.id !== chosen.id && !existingIds.has(course.id) && course.credits !== null && course.credits > 0)
-    .filter(course => !course.number || !existingNumbers.has(course.number.trim().toUpperCase()))
-    .filter(course => semesterCreditsWithoutChosen + (course.credits ?? 0) <= maximumCredits)
-    .sort((left, right) => Math.abs((left.credits ?? 0) - (chosen.credits ?? 0)) - Math.abs((right.credits ?? 0) - (chosen.credits ?? 0)))[0];
-  if (!alternative) throw new Error(`No unused ${category.replaceAll('_', ' ')} alternative fits the ${maximumCredits}-ECTS semester limit.`);
+  const swap = chooseAlternativeSwap(plan, chosen.id, candidates);
+  if (!swap) throw new Error(`No unused ${category.replaceAll('_', ' ')} alternative can fit the ${maximumCredits}-ECTS semester limit, even after changing up to three planned courses.`);
+  const alternative = swap.course;
+  const removedCount = swap.removeCourseIds.length;
   return {
     course: {
       ...alternative,
       semester: chosen.semester,
       ...(alternative.semester !== chosen.semester ? { sourceSemester: alternative.semester } : {}),
     },
+    removeCourseIds: swap.removeCourseIds,
     category,
-    reason: `Alternative ${category.replaceAll('_', ' ')} course with ${alternative.credits} ECTS. It keeps the planned ${chosen.semester} workload within ${maximumCredits} ECTS; confirm prerequisites and ${alternative.semester !== chosen.semester ? `recurrence from ${alternative.semester}` : 'availability'} before replacing the original course.`,
+    reason: `Alternative ${category.replaceAll('_', ' ')} course with ${alternative.credits} ECTS. ${removedCount > 1 ? `Replacing ${removedCount} planned courses makes room for it and leaves ` : 'The replacement leaves '}${swap.resultingCredits} ECTS in ${chosen.semester}, within the ${maximumCredits}-ECTS limit; confirm prerequisites and ${alternative.semester !== chosen.semester ? `recurrence from ${alternative.semester}` : 'availability'} before applying the change.`,
   };
 }
 

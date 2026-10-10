@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { degreeProgressionProfile, enforceGraduationReadyProposal, semesterPlanRequestSchema, verifiedProposal } from '../apps/web/lib/semester-plan-agent';
+import { chooseAlternativeSwap, degreeProgressionProfile, enforceGraduationReadyProposal, semesterPlanRequestSchema, verifiedProposal } from '../apps/web/lib/semester-plan-agent';
 
 const course = {
   id: 101,
@@ -54,6 +54,23 @@ describe('semester planning agent', () => {
     expect(31 + proposal.courses.reduce((sum, item) => sum + (item.credits ?? 0), 0)).toBe(33);
     expect(proposal.summary).toContain('33 ECTS');
     expect(proposal.cautions.at(-1)).toContain('Advanced Machine Learning');
+  });
+
+  it('can change up to three planned courses to make an alternative fit', () => {
+    const plan = semesterPlanRequestSchema.parse({
+      major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30,
+      courses: [
+        { ...course, id: 100, title: 'Advanced Machine Learning', credits: 4, status: 'planned' },
+        { ...course, id: 101, title: 'First flexible course', credits: 3, status: 'planned' },
+        { ...course, id: 102, title: 'Second flexible course', credits: 3, status: 'planned' },
+        { ...course, id: 103, title: 'Fixed course', credits: 23, status: 'in_progress' },
+      ],
+    });
+    const alternative = { ...course, id: 200, number: '263-0200-00L', title: 'Larger alternative', credits: 10 };
+
+    const swap = chooseAlternativeSwap(plan, 100, [alternative] as never);
+
+    expect(swap).toMatchObject({ course: alternative, removeCourseIds: [100, 101, 102], resultingCredits: 33 });
   });
 
   it('requires readiness inspection and rejects recommendations in past semesters', () => {
