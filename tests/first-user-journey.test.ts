@@ -49,6 +49,7 @@ const conversationId = '00000000-0000-4000-8000-0000000000f1';
 const request = (path: string, init: RequestInit = {}) => new NextRequest(`${origin}${path}`, { ...init, headers: { ...headers, ...(init.headers ?? {}) } });
 
 beforeEach(() => {
+  delete (globalThis as typeof globalThis & { __polymateAgentRuntime?: unknown }).__polymateAgentRuntime;
   vi.clearAllMocks();
   mocks.onboarding.completed = false; mocks.onboarding.profile = null; mocks.memories.length = 0;
   vi.stubEnv('AUTH_MODE', 'managed-proxy'); vi.stubEnv('MANAGED_PROXY_ONLY', 'true'); vi.stubEnv('APP_ORIGIN', origin);
@@ -94,8 +95,9 @@ describe('first-time student journey', () => {
     expect(await (await googleStatus(request('/api/integrations/google/status'))).json()).toMatchObject({ connected: true, enabled: true });
 
     const chat = await sendMessage(request('/api/agent/chat', { method: 'POST', body: JSON.stringify({ message: 'What should I study first?', conversationId }) }));
-    expect(chat.status).toBe(200);
-    expect((await chat.json()).reply).toBe('Let’s start with your closest deadline.');
+    const chatBody = await chat.json();
+    expect(chat.status, JSON.stringify(chatBody)).toBe(200);
+    expect(chatBody.reply).toBe('Let’s start with your closest deadline.');
     expect(mocks.callAgent).toHaveBeenCalledWith(expect.objectContaining({
       message: 'What should I study first?',
       persistentContext: expect.stringContaining('Preferred focus session length: 50 minutes.'),
