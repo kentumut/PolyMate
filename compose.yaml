@@ -52,7 +52,12 @@ services:
       context: .
       target: web
     restart: unless-stopped
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # Foreground chat calls OpenAI directly from the web process (apps/web/lib/direct-chat-runtime.ts).
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      POLYMATE_CHAT_MODEL: ${POLYMATE_CHAT_MODEL:-gpt-6-luna}
+      POLYMATE_CHAT_REASONING: ${POLYMATE_CHAT_REASONING:-none}
     depends_on:
       db:
         condition: service_healthy

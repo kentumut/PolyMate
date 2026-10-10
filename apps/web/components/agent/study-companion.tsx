@@ -5,9 +5,11 @@ import { currentPlanApproval } from '@polymate/core/agent/contracts';
 
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
 import type { CalendarEvent } from '@polymate/contracts/calendar';
+import type { OnboardingProfile, OnboardingState } from '@polymate/contracts/onboarding';
 import { ArrowLeft, ArrowUp, Check, ClipboardPlus, GraduationCap, RotateCcw, Sparkles, Square } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { CalendarStudyWorkflow } from '@/components/study/calendar-study-workflow';
 import { AssignmentsPanel } from '@/components/study/assignments-panel';
 import { GoogleConnection } from '@/components/connections/google-connection';
@@ -39,7 +41,7 @@ import {
   type DemoProfile,
   type DemoStage,
 } from '@/lib/demo-fixtures';
-import { ChatList, CheckInNotice, CheckInSettings, useChats } from './chat-list';
+import { CheckInNotice, CheckInSettings, useChats } from './chat-list';
 import { fetchChat, unreadCheckIns } from './chat-client';
 
 type AgentCard = { kind: 'assignments' | 'timeline' | 'schedule' | 'connections' | 'progress'; data: unknown };
@@ -201,17 +203,17 @@ const demoStages: Array<{ id: DemoStage; label: string }> = [
   { id: 'move', label: 'Adapt' },
 ];
 
-function DemoOnboarding({ onComplete }: { onComplete: (profile: DemoProfile) => void }) {
+function StudentOnboarding({ demo, busy = false, error = '', onComplete }: { demo: boolean; busy?: boolean; error?: string; onComplete: (profile: OnboardingProfile) => void }) {
   const [goal, setGoal] = useState<DemoProfile['goal']>();
   const [sessionMinutes, setSessionMinutes] = useState<DemoProfile['sessionMinutes']>();
   const [coachCadence, setCoachCadence] = useState<DemoProfile['coachCadence']>();
   const ready = goal !== undefined && sessionMinutes !== undefined && coachCadence !== undefined;
   const optionClass = (selected: boolean) => `rounded-xl border p-3 text-left transition ${selected ? 'border-primary bg-primary text-primary-foreground' : 'bg-card hover:bg-accent'}`;
-  return <section className="my-auto py-4" aria-labelledby="demo-onboarding-title">
+  return <section className="my-auto py-4" aria-labelledby="student-onboarding-title">
     <div className="rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
-      <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><Sparkles className="size-4" aria-hidden="true" /> Mentor demo · interactive walkthrough</p>
-      <h1 id="demo-onboarding-title" className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Shape Alex’s study coach</h1>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">Choose a goal, focus rhythm, and coaching style. Your decisions change the conversation, memory, notifications, and calendar plan.</p>
+      <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><Sparkles className="size-4" aria-hidden="true" /> {demo ? 'Mentor demo · interactive walkthrough' : 'A quick setup · about one minute'}</p>
+      <h1 id="student-onboarding-title" className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">{demo ? 'Shape Alex’s study coach' : 'Set up your study coach'}</h1>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">Choose a goal, focus rhythm, and coaching style. PolyMate uses these choices when it recommends work, builds plans, and checks in.</p>
 
       <fieldset className="mt-6"><legend className="text-sm font-semibold">1. What should PolyMate optimize for?</legend>
         <div className="mt-2 grid gap-2 sm:grid-cols-3">{DEMO_ONBOARDING_OPTIONS.goal.map(option => <button key={option.value} type="button" role="radio" aria-checked={goal === option.value} onClick={() => setGoal(option.value)} className={optionClass(goal === option.value)}><span className="block text-sm font-medium">{option.label}</span><span className={`mt-1 block text-xs leading-5 ${goal === option.value ? 'text-primary-foreground/75' : 'text-muted-foreground'}`}>{option.description}</span></button>)}</div>
@@ -222,7 +224,8 @@ function DemoOnboarding({ onComplete }: { onComplete: (profile: DemoProfile) => 
       <fieldset className="mt-5"><legend className="text-sm font-semibold">3. How visible should coaching be?</legend>
         <div className="mt-2 grid grid-cols-2 gap-2">{DEMO_ONBOARDING_OPTIONS.coachCadence.map(option => <button key={option.value} type="button" role="radio" aria-checked={coachCadence === option.value} onClick={() => setCoachCadence(option.value)} className={optionClass(coachCadence === option.value)}><span className="block text-sm font-medium">{option.label}</span><span className={`mt-1 hidden text-xs leading-5 sm:block ${coachCadence === option.value ? 'text-primary-foreground/75' : 'text-muted-foreground'}`}>{option.description}</span></button>)}</div>
       </fieldset>
-      <Button type="button" disabled={!ready} onClick={() => { if (ready) onComplete({ goal, sessionMinutes, coachCadence }); }} className="mt-6 w-full">Start the interactive demo <ArrowUp className="rotate-90" aria-hidden="true" /></Button>
+      {error && <p className="mt-5 text-sm text-destructive" role="alert">{error}</p>}
+      <Button type="button" disabled={!ready || busy} onClick={() => { if (ready) onComplete({ goal, sessionMinutes, coachCadence }); }} className="mt-6 w-full">{busy ? 'Saving your preferences…' : demo ? 'Start the interactive demo' : 'Start planning'} {!busy && <ArrowUp className="rotate-90" aria-hidden="true" />}</Button>
     </div>
   </section>;
 }
@@ -269,7 +272,7 @@ function DemoGuide({ stage, busy, onRun, onApprove, onOpenCalendar }: { stage: D
   </section>;
 }
 
-export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { sample: boolean; ownerName: string; demo?: boolean; demoNow?: string }) {
+export function StudyCompanion({ sample, ownerName, demo = false, demoNow, development = false }: { sample: boolean; ownerName: string; demo?: boolean; demoNow?: string; development?: boolean }) {
   const workspace = useStudyWorkspace();
   // The demo route always supplies its server timestamp. Keep the fallback stable so
   // non-demo server/client renders cannot disagree during hydration.
@@ -299,12 +302,38 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
   const [demoPlanStyle, setDemoPlanStyle] = useState<DemoPlanStyle>('spread');
   const [demoCoachAnswered, setDemoCoachAnswered] = useState(false);
   const [demoMemories, setDemoMemories] = useState(() => demo ? [] : demoInitialMemories(demoEpoch));
+  const [onboardingStatus, setOnboardingStatus] = useState<'loading' | 'required' | 'complete' | 'error'>(demo || sample ? 'complete' : development ? 'required' : 'loading');
+  const [onboardingBusy, setOnboardingBusy] = useState(false);
+  const [onboardingError, setOnboardingError] = useState('');
+  const [onboardingReloadKey, setOnboardingReloadKey] = useState(0);
   // Each chat is stored under its own ID; a fresh ID is a new, still empty chat.
   const [chatId, setChatId] = useState(() => crypto.randomUUID());
   const chats = useChats(sample);
   const nextId = useRef(0);
   const inFlight = useRef<AbortController | null>(null);
   const messagesEnd = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (demo || sample) return;
+    if (development) {
+      const timer = window.setTimeout(() => {
+        let completed = false;
+        try { completed = Boolean(window.localStorage.getItem('polymate-onboarding')); } catch { /* Storage can be disabled in an embedded browser. */ }
+        setOnboardingStatus(completed ? 'complete' : 'required');
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+    let current = true;
+    fetch('/api/onboarding', { credentials: 'same-origin', cache: 'no-store' })
+      .then(async response => {
+        const body = await response.json() as OnboardingState & { error?: { message?: string } };
+        if (!response.ok) throw new Error(body.error?.message ?? 'Your setup could not be loaded.');
+        return body;
+      })
+      .then(body => { if (current) setOnboardingStatus(body.completed ? 'complete' : 'required'); })
+      .catch(reason => { if (current) { setOnboardingStatus('error'); setOnboardingError(reason instanceof Error ? reason.message : 'Your setup could not be loaded.'); } });
+    return () => { current = false; };
+  }, [demo, development, onboardingReloadKey, sample]);
 
   useEffect(() => {
     let current = true;
@@ -384,6 +413,24 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
     ]);
     setCoachRefreshKey(value => value + 1);
     setDemoStage('brief');
+  }
+
+  async function completeStudentOnboarding(profile: OnboardingProfile) {
+    if (onboardingBusy) return;
+    setOnboardingBusy(true); setOnboardingError('');
+    try {
+      if (development) { try { window.localStorage.setItem('polymate-onboarding', JSON.stringify(profile)); } catch { /* The local preview may use ephemeral storage. */ } }
+      else {
+        const response = await fetch('/api/onboarding', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(profile) });
+        const body = await response.json() as OnboardingState & { error?: { message?: string } };
+        if (!response.ok || !body.completed) throw new Error(body.error?.message ?? 'Your preferences could not be saved.');
+      }
+      setOnboardingStatus('complete');
+      setMessages([{ id: ++nextId.current, role: 'assistant', text: `You’re set. I’ll use **${profile.sessionMinutes}-minute focus sessions** and your coaching preference when we plan. What would you like to make progress on first?`, cards: [] }]);
+      setCoachRefreshKey(value => value + 1);
+      void chats.refresh();
+    } catch (reason) { setOnboardingError(reason instanceof Error ? reason.message : 'Your preferences could not be saved.'); }
+    finally { setOnboardingBusy(false); }
   }
 
   async function runDemoTurn(text: string, action?: { allowPartial: boolean } | { draftToken: string; confirmAssignmentFinished: boolean }) {
@@ -618,6 +665,17 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
   const demoRange = demo ? demoWeekRange(demoEpoch) : null;
   const demoCoach = demo ? demoCoachingState(demoEpoch, demoMemories, demoProfile?.coachCadence === 'proactive', demoCoachAnswered) : undefined;
   const demoOnboarding = demo && demoStage === 'onboarding';
+  const studentOnboarding = !demo && !sample && onboardingStatus !== 'complete';
+  const onboardingActive = demoOnboarding;
+
+  if (studentOnboarding) return <div className="flex min-h-dvh flex-col bg-muted/25">
+    <header className="flex h-16 shrink-0 items-center border-b bg-background px-5 sm:px-8"><Link href="/" className="flex items-center gap-2 text-sm font-semibold"><span className="grid size-8 place-items-center rounded-lg bg-foreground text-xs font-bold text-background">P</span>PolyMate</Link></header>
+    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 py-8 sm:px-8">
+      {onboardingStatus === 'required' && <StudentOnboarding demo={false} busy={onboardingBusy} error={onboardingError} onComplete={profile => void completeStudentOnboarding(profile)} />}
+      {onboardingStatus === 'loading' && <div className="my-auto text-center"><p className="text-sm font-medium">Preparing your study space…</p><p className="mt-2 text-sm text-muted-foreground">Loading your saved preferences.</p></div>}
+      {onboardingStatus === 'error' && <div className="my-auto mx-auto max-w-md rounded-2xl border bg-card p-6 text-center shadow-sm"><h1 className="text-xl font-semibold">Your setup could not be loaded</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">{onboardingError}</p><Button type="button" className="mt-5" onClick={() => { setOnboardingStatus('loading'); setOnboardingError(''); setOnboardingReloadKey(value => value + 1); }}>Try again</Button></div>}
+    </main>
+  </div>;
 
   return <div className="min-h-dvh bg-background md:flex md:items-start">
     <WorkspaceSidebar view={view} ownerName={ownerName} demo={demo} hrefFor={hrefFor} onNavigate={navigate} />
@@ -628,8 +686,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
           {view === 'calendar' && <Button type="button" size="sm" aria-label="Add assignment" onClick={() => { setAssignmentsOpen(true); window.dispatchEvent(new Event('polymate-add-assignment')); }}><ClipboardPlus aria-hidden="true" /><span className="hidden sm:inline">Add assignment</span></Button>}
           {view === 'courses' && <Button asChild size="sm" variant="outline"><a href={hrefFor('planner')} aria-label="Open semester plan" onClick={event => navigate(event, 'planner')}><GraduationCap aria-hidden="true" /><span className="hidden sm:inline">Semester plan</span></a></Button>}
           {view === 'planner' && <Button asChild size="sm" variant="ghost"><a href={hrefFor('courses')} aria-label="Back to courses" onClick={event => navigate(event, 'courses')}><ArrowLeft aria-hidden="true" /><span className="hidden sm:inline">Courses</span></a></Button>}
-          {!demo && <ChatList chats={chats.chats} activeChatId={chatId} disabled={busy} onOpen={chat => void openChat(chat.id)} onNew={newChat} />}
-          <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswered}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
+          <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswered}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} chats={demo ? [] : chats.chats} activeChatId={chatId} disabled={busy} onOpenChat={demo ? undefined : chat => void openChat(chat.id)} onNewChat={demo ? undefined : newChat} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
         </div>
       </header>
       {!demo && view !== 'chat' && <CheckInNotice chats={waitingCheckIns} floating disabled={busy} onOpen={chat => void openChat(chat.id)} />}
@@ -663,8 +720,8 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
           <h2 id="study-chat-title" className="sr-only">Plan with PolyMate</h2>
           <div className="min-h-0 flex-1 overflow-y-auto" aria-live="polite" aria-relevant="additions text">
             <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 pb-8 pt-6 sm:px-6">
-              {demoOnboarding && <DemoOnboarding onComplete={completeDemoOnboarding} />}
-              {!demoOnboarding && !messages.length && <div className="my-auto flex flex-col items-center py-5 text-center sm:py-10">
+              {demoOnboarding && <StudentOnboarding demo onComplete={completeDemoOnboarding} />}
+              {!onboardingActive && !messages.length && <div className="my-auto flex flex-col items-center py-5 text-center sm:py-10">
                 <h1 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-4xl">{demo ? 'See PolyMate work across your study week' : `How are you feeling, ${firstName}?`}</h1>
                 <p className="mt-3 max-w-xl text-sm leading-5 text-muted-foreground sm:mt-4 sm:leading-6">{demo ? <><span className="sm:hidden">Try the real Chat, memory, approval flow, and calendar.</span><span className="hidden sm:inline">This guided conversation uses the real Chat interface, cards, approval flow, and in-memory calendar contract. Every demonstrated capability also exists in the production agent.</span></> : nextEvent && nextEventTime ? <>Your next event is <span className="font-medium text-foreground">{nextEvent.title}</span> on {nextEventTime}.</> : 'Your calendar is clear for now. What would you like to make progress on?'}</p>
                 {coachOutstanding > 0 && <button type="button" onClick={() => document.getElementById('coach-notifications-trigger')?.click()} className="mt-5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900">Your coach needs {coachOutstanding} response{coachOutstanding === 1 ? '' : 's'} from you</button>}
@@ -690,7 +747,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
 
           <div className="shrink-0 bg-gradient-to-t from-background via-background to-transparent px-4 pb-3 pt-3 sm:px-6 sm:pb-5">
             <div className="mx-auto max-w-3xl">
-              {demoOnboarding ? <p className="text-center text-xs text-muted-foreground">Choose one option in each group to start. Nothing connects to an external account.</p> : <>
+              {onboardingActive ? <p className="text-center text-xs text-muted-foreground">Choose one option in each group to continue.</p> : <>
               {error && <p className="mb-2 text-sm text-destructive" role="alert">{error}</p>}
               {demo && <DemoGuide stage={demoStage} busy={busy} onRun={prompt => void sendMessage(undefined, undefined, prompt)} onApprove={() => void sendMessage(undefined, { allowPartial: false })} onOpenCalendar={() => { window.history.pushState(null, '', hrefFor('calendar')); window.scrollTo({ top: 0 }); }} />}
               {!demo && view === 'chat' && waitingCheckIns.length > 0 && <div className="mb-2"><CheckInNotice chats={waitingCheckIns} floating={false} disabled={busy} onOpen={chat => void openChat(chat.id)} /></div>}

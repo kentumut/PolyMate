@@ -13,7 +13,8 @@
     "./moodle": "./src/moodle.ts",
     "./planning": "./src/planning.ts",
     "./coaching": "./src/coaching.ts",
-    "./courses": "./src/courses.ts"
+    "./courses": "./src/courses.ts",
+    "./onboarding": "./src/onboarding.ts"
   },
   "scripts": { "typecheck": "tsc --noEmit" }
 }

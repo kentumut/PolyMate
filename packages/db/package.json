@@ -15,7 +15,8 @@
     "./moodle-calendar": "./src/moodle-calendar.ts",
     "./planning": "./src/planning.ts",
     "./coaching": "./src/coaching.ts",
-    "./courses": "./src/courses.ts"
+    "./courses": "./src/courses.ts",
+    "./onboarding": "./src/onboarding.ts"
   },
   "dependencies": { "@polymate/contracts": "workspace:*", "@polymate/core": "workspace:*", "pg": "8.23.1" },
   "scripts": { "typecheck": "tsc --noEmit" }
