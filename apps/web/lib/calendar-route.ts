@@ -6,6 +6,8 @@ import { assertSameOrigin, IdentityError, resolveOwner, type OwnerContext } from
 import { CalendarBusyError } from '@polymate/core/calendar/operations';
 import { calendarOperationStore, findCalendarOperation } from '@polymate/db/calendar-operations';
 import { getValidAccessToken } from '@polymate/db/google-oauth';
+import { observeStudyCalendarChange } from '@polymate/db/study-progress';
+import { ProgressError } from '@polymate/core/progress';
 import type { NextRequest, NextResponse } from 'next/server';
 
 export const CALENDAR_CSRF_COOKIE = 'polymate_calendar_csrf';
@@ -52,6 +54,7 @@ export function calendarError(error: unknown): Response {
   else if (error instanceof IdentityError) [status, code, message] = [error.status, 'identity', error.message];
   else if (error instanceof CalendarBusyError) [status, code, message] = [409, 'busy', error.message];
   else if (error instanceof ContractError) [status, code, message] = [422, 'validation', error.message];
+  else if (error instanceof ProgressError) [status, code, message] = [error.code === 'not_found' ? 404 : error.code === 'forbidden' ? 403 : 409, error.code, error.message];
   else if (error instanceof GoogleNotConnectedError) [status, code, message] = [409, 'not_connected', 'Connect Google Calendar to see your week.'];
   else if (error instanceof GoogleApiError || error instanceof GoogleTransportError) {
     [status, code, message] = [503, 'google_unavailable', 'Google Calendar is not responding. Try again shortly.'];
@@ -73,12 +76,19 @@ export async function calendarMutation<T>(
   request: NextRequest,
   parse: (body: unknown) => T,
   run: (service: CalendarService, input: T) => Promise<OperationResult>,
+  before?: (owner: OwnerContext, input: T) => Promise<void>,
 ): Promise<Response> {
   try {
     const owner = resolveOwner(request.headers);
     assertCalendarMutation(request);
     const input = parse(await readJson(request));
-    return operationResponse(await run(calendarServiceFor(owner), input));
+    if (before) await before(owner, input);
+    const result = await run(calendarServiceFor(owner), input);
+    const path = new URL(request.url).pathname;
+    const kind = request.method === 'DELETE' ? 'delete' : request.method === 'PATCH' ? 'update' : path.endsWith('/complete') ? 'complete' : 'create';
+    const target = kind === 'create' ? null : decodeURIComponent(path.split('/').at(kind === 'complete' ? -2 : -1)!);
+    await observeStudyCalendarChange(owner.userId, kind, target, result);
+    return operationResponse(result);
   } catch (error) {
     return calendarError(error);
   }
@@ -92,7 +102,10 @@ export async function reconcileCalendarOperation(request: NextRequest, id: strin
     const operationId = parseOperationId(id);
     const stored = await findCalendarOperation(owner.userId, operationId);
     if (!stored) return Response.json({ error: { code: 'not_found', message: 'Calendar operation not found.' } }, { status: 404, headers: NO_STORE });
-    if (stored.result?.status === 'synced' || stored.result?.status === 'failed') return operationResponse(stored.result);
+    if (stored.result?.status === 'synced' || stored.result?.status === 'failed') {
+      await observeStudyCalendarChange(owner.userId, stored.record.kind, stored.record.targetEventId, stored.result);
+      return operationResponse(stored.result);
+    }
     const service = calendarServiceFor(owner);
     const { record } = stored;
     let result: OperationResult;
@@ -103,6 +116,7 @@ export async function reconcileCalendarOperation(request: NextRequest, id: strin
       else if (record.kind === 'complete') result = await service.completeStudyBlock(record.targetEventId, record.expectedEtag, operationId);
       else result = await service.deleteStudyBlock(record.targetEventId, record.expectedEtag, operationId);
     }
+    await observeStudyCalendarChange(owner.userId, record.kind, record.targetEventId, result);
     return operationResponse(result);
   } catch (error) {
     return calendarError(error);

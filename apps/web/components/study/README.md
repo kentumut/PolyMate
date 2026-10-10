@@ -1,5 +1,7 @@
 # Study-block dialog handoff
 
+Assignment-linked session progress and missed-session recovery are described in [the progress handoff](../../../../docs/STUDY_PROGRESS_HANDOFF.md). The shared workspace connects assignment cards, the calendar, progress history, and sample state. Apply migration `0003_study_progress.sql` for persistent progress.
+
 See [Catalin's iteration-1 handoff](../../../../docs/CATALIN_I1_HANDOFF.md) for the decided HTTP contract, recorded verification, integration dependencies, and live acceptance checklist.
 
 Manual assignment entry is documented in [the iteration-2 handoff](../../../../docs/ASSIGNMENT_ENTRY_HANDOFF.md). `AssignmentsPanel` appears beside the calendar and supports persistent assignment saves independently of Google. The development sample page also offers labelled success/failure/uncertain/slow save scenarios.

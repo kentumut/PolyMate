@@ -48,6 +48,10 @@ export class CalendarService implements CalendarClient {
     return events.flatMap(event => toCalendarEvent(event, this.ownerId) ?? []);
   }
 
+  async readStudyBlock(id: string): Promise<CalendarEvent> {
+    return this.map(await this.ownedEvent(parseEventId(id)));
+  }
+
   createStudyBlock(input: StudyBlockInput, operationId: string): Promise<OperationResult> {
     input = parseStudyBlockInput(input);
     operationId = parseOperationId(operationId);

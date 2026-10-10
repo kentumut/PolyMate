@@ -4,6 +4,7 @@ import { IdentityError, resolveOwner, type OwnerContext } from '@polymate/core/i
 import { CalendarStudyWorkflow } from '@/components/study/calendar-study-workflow';
 import { GoogleConnection } from '@/components/connections/google-connection';
 import { AssignmentsPanel } from '@/components/study/assignments-panel';
+import { StudyWorkspaceProvider } from '@/components/study/study-workspace-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,7 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
             <p className="mt-4 max-w-xl text-sm leading-6 text-[#617269]">Your lectures, plans, and study blocks, together in one calm place.</p></div>
           <span className="rounded-full bg-[#e8ede5] px-4 py-2 text-xs font-medium">{sample ? 'Sample calendar' : 'Study calendar'}</span>
         </div>
+        <StudyWorkspaceProvider key={`${owner.userId}:workspace:${sample}`} sample={sample}>
         <div className="mt-9 grid gap-5 lg:grid-cols-[1fr_290px]">
           <CalendarStudyWorkflow key={`${owner.userId}:${sample}`} sample={sample} />
           <aside className="space-y-5">
@@ -43,6 +45,7 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
             <p className="px-1 text-xs text-[#748278]">Signed in as {owner.displayName}</p>
           </aside>
         </div>
+        </StudyWorkspaceProvider>
         <p className="mt-6 text-xs text-[#7a877e]">Create, move, complete, or delete PolyMate study blocks. Your personal Google events remain read-only.</p>
       </section>
     </main>;

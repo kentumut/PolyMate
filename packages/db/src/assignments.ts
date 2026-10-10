@@ -14,14 +14,14 @@ export class AssignmentRequestConflict extends Error {
   constructor() { super('This save request already belongs to different assignment details. Start a new save for your changes.'); this.name = 'AssignmentRequestConflict'; }
 }
 
-function assignment(row: Row): Assignment {
+export function assignmentFromRow(row: Omit<Row, 'creation_input'>): Assignment {
   return parseAssignment({ id: row.id, title: row.title, dueAt: row.due_at.toISOString(), estimatedMinutes: row.estimated_minutes,
     remainingMinutes: row.remaining_minutes, status: row.status, version: row.version });
 }
 
 export async function listAssignments(ownerId: string): Promise<Assignment[]> {
   const result = await getPool().query<Row>(`SELECT ${columns} FROM assignments WHERE owner_id = $1 ORDER BY due_at, id`, [ownerId]);
-  return result.rows.map(assignment);
+  return result.rows.map(assignmentFromRow);
 }
 
 export async function createAssignment(owner: OwnerContext, request: AssignmentCreateRequest): Promise<{ assignment: Assignment; created: boolean }> {
@@ -34,11 +34,11 @@ export async function createAssignment(owner: OwnerContext, request: AssignmentC
      ON CONFLICT (owner_id, client_request_id) DO NOTHING RETURNING ${columns}`,
     [owner.userId, input.title, input.dueAt, input.estimatedMinutes, clientRequestId, input],
   );
-  if (inserted.rows[0]) return { assignment: assignment(inserted.rows[0]), created: true };
+  if (inserted.rows[0]) return { assignment: assignmentFromRow(inserted.rows[0]), created: true };
   const existing = await getPool().query<Row>(
     `SELECT ${columns} FROM assignments WHERE owner_id = $1 AND client_request_id = $2`, [owner.userId, clientRequestId],
   );
   const row = existing.rows[0];
   if (!row || !isDeepStrictEqual(row.creation_input, input)) throw new AssignmentRequestConflict();
-  return { assignment: assignment(row), created: false };
+  return { assignment: assignmentFromRow(row), created: false };
 }
