@@ -11,6 +11,7 @@ import type { CalendarClient, OperationResult } from '@polymate/contracts/calend
 import type { PlanningState } from '@polymate/contracts/planning';
 import { createAssignmentClient, createSampleAssignmentClient, type AssignmentClient, type AssignmentFixtureOutcome } from './assignment-client';
 import { createProgressClient } from './progress-client';
+import { demoAssignment, demoCalendarEvents } from '@/lib/demo-fixtures';
 
 type Workspace = {
   assignmentSource: { client: AssignmentClient; setOutcome?: (outcome: AssignmentFixtureOutcome) => void };
@@ -25,11 +26,11 @@ type Workspace = {
 const Context = createContext<Workspace | null>(null);
 export const useStudyWorkspace = () => useContext(Context);
 
-export function StudyWorkspaceProvider({ sample, children }: { sample: boolean; children: ReactNode }) {
+export function StudyWorkspaceProvider({ sample, demoNow, children }: { sample: boolean; demoNow?: string; children: ReactNode }) {
   const [services] = useState(() => {
     if (sample) {
-      const assignments = createSampleAssignmentClient();
-      const calendar = new FakeCalendarClient(undefined, 250);
+      const assignments = createSampleAssignmentClient(demoNow ? [demoAssignment(demoNow)] : []);
+      const calendar = new FakeCalendarClient(demoNow ? demoCalendarEvents(demoNow) : undefined, 250);
       const store = new MemoryStudyProgressStore('sample-owner', () => assignments.listAssignments(), assignments.applySampleProgress);
       const progress = new StudyProgressService('sample-owner', calendar, store);
       return { assignmentSource: { client: assignments, setOutcome: assignments.setOutcome }, calendarClient: calendar,

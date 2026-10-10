@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createAuthorization, consumeCallbackState, exchangeAuthorizationCode, refreshAccessToken, type OAuthStateStore } from '../packages/core/integrations/google-auth/oauth';
+import { createAuthorization, consumeCallbackState, exchangeAuthorizationCode, refreshAccessToken, verifyGoogleCalendarAccess, type OAuthStateStore } from '../packages/core/integrations/google-auth/oauth';
 import { decryptSecret, encryptSecret, openBrowserBinding, sealBrowserBinding } from '../packages/core/integrations/google-auth/crypto';
 
 afterEach(() => vi.unstubAllEnvs());
@@ -62,5 +62,22 @@ describe('Google credentials', () => {
     const refreshed = await refreshAccessToken({ refreshToken: 'refresh-a', clientId: 'id', clientSecret: 'secret', fetcher });
     expect(refreshed.accessToken).toBe('access-b');
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('verifies primary-calendar access before accepting a connection', async () => {
+    const fetcher = vi.fn(async (url: string | URL | Request) => {
+      expect(String(url)).toContain('/calendars/primary/events?');
+      return Response.json({ items: [] });
+    });
+
+    await expect(verifyGoogleCalendarAccess({
+      accessToken: async () => 'access-a', fetcher, now: new Date('2026-10-10T12:00:00Z'),
+    })).resolves.toBeUndefined();
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a connection when Google does not grant Calendar access', async () => {
+    const fetcher = vi.fn(async () => Response.json({ error: { errors: [{ reason: 'insufficientPermissions' }] } }, { status: 403 }));
+    await expect(verifyGoogleCalendarAccess({ accessToken: async () => 'access-a', fetcher })).rejects.toThrow('Google Calendar must be connected.');
   });
 });

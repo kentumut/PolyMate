@@ -1,13 +1,12 @@
 'use client';
 
 import type { Course, ExamPrepPriority } from '@polymate/contracts/courses';
+import { CalendarClock, Clock3, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
+import { Button } from '@/components/ui/button';
+import { DEMO_COURSES } from '@/lib/demo-fixtures';
 
-const sampleCourses: Course[] = [{
-  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Algorithms and Data Structures', exerciseSessionCount: 12,
-  lectureHoursPerWeek: 4, exerciseSessionMinutes: 120, examDate: '2027-01-25', version: 1,
-  examPrep: { must: ['Dynamic programming sheets', 'Past exam 2025'], optional: ['Extra graph problems'], not_required: ['Optional coding project'] },
-}];
+const sampleCourses: Course[] = DEMO_COURSES;
 
 type FormState = Omit<Course, 'examPrep'> & { examPrep: Record<ExamPrepPriority, string> };
 const blank = (): FormState => ({ id: crypto.randomUUID(), name: '', exerciseSessionCount: 0, lectureHoursPerWeek: 0, exerciseSessionMinutes: 90,
@@ -16,12 +15,14 @@ const toForm = (course: Course): FormState => ({ ...course, examPrep: {
   must: course.examPrep.must.join('\n'), optional: course.examPrep.optional.join('\n'), not_required: course.examPrep.not_required.join('\n'),
 } });
 const lines = (value: string) => value.split('\n').map(item => item.trim()).filter(Boolean);
-const inputClass = 'mt-1 w-full rounded-lg border border-[#c8d3c8] bg-white px-3 py-2 text-sm outline-none focus:border-[#658071]';
+const inputClass = 'mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/30';
+const examDate = (value: string) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00Z`));
 
 export function CoursesPanel({ sample }: { sample: boolean }) {
   const [courses, setCourses] = useState<Course[]>(sample ? sampleCourses : []);
   const [form, setForm] = useState<FormState>(() => blank());
   const [editing, setEditing] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [loading, setLoading] = useState(!sample);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -42,7 +43,15 @@ export function CoursesPanel({ sample }: { sample: boolean }) {
     return () => { current = false; };
   }, [reloadKey, sample]);
 
-  function reset() { setForm(blank()); setEditing(false); setNotice(''); }
+  function reset() { setForm(blank()); setEditing(false); setFormOpen(false); setNotice(''); }
+
+  function revealEditor() {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      document.getElementById('course-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }));
+  }
+
+  function startNew() { setForm(blank()); setEditing(false); setFormOpen(true); setNotice(''); revealEditor(); }
 
   async function save(event: FormEvent) {
     event.preventDefault(); if (busy) return;
@@ -75,30 +84,50 @@ export function CoursesPanel({ sample }: { sample: boolean }) {
     finally { setBusy(false); }
   }
 
-  return <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(24rem,0.75fr)]">
-    <section className="space-y-4">
-      <div className="rounded-2xl border border-[#dce3db] bg-[#f5f8f2] p-5 sm:p-6"><p className="text-[11px] font-semibold uppercase tracking-widest text-[#658071]">Course context</p><h2 className="mt-2 text-xl font-medium">Give PolyMate the shape of each course</h2><p className="mt-2 text-sm leading-6 text-[#617269]">Course workload and exam priorities become factual context for Chat. They do not create calendar blocks by themselves.</p></div>
-      {loading && <p role="status" className="text-sm text-[#617269]">Loading courses…</p>}
-      {courses.map(course => <article key={course.id} className="rounded-2xl border border-[#dce3db] bg-white p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{course.name}</h3><p className="mt-1 text-xs text-[#617269]">Exam {new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', dateStyle: 'long' }).format(new Date(`${course.examDate}T12:00:00Z`))}</p></div><div className="flex gap-2"><button type="button" disabled={busy} onClick={() => { setForm(toForm(course)); setEditing(true); setNotice(''); }} className="rounded-lg border border-[#c8d3c8] px-3 py-1.5 text-xs">Edit</button><button type="button" disabled={busy} onClick={() => void remove(course)} className="px-2 py-1.5 text-xs underline">Remove</button></div></div>
-        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3"><div><dt className="text-xs text-[#748278]">Exercise sessions</dt><dd className="mt-1 font-medium">{course.exerciseSessionCount}</dd></div><div><dt className="text-xs text-[#748278]">Lectures / week</dt><dd className="mt-1 font-medium">{course.lectureHoursPerWeek} h</dd></div><div><dt className="text-xs text-[#748278]">Per exercise session</dt><dd className="mt-1 font-medium">{course.exerciseSessionMinutes} min</dd></div></dl>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">{(['must','optional','not_required'] as const).map(priority => <div key={priority} className="rounded-xl bg-[#f6f7f3] p-3"><p className="text-xs font-semibold uppercase tracking-wider text-[#748278]">{priority === 'not_required' ? 'Not required' : priority}</p>{course.examPrep[priority].length ? <ul className="mt-2 space-y-1 text-sm">{course.examPrep[priority].map(item => <li key={item}>• {item}</li>)}</ul> : <p className="mt-2 text-xs text-[#748278]">Nothing listed</p>}</div>)}</div>
-      </article>)}
-      {!loading && !courses.length && <p className="rounded-2xl border border-dashed border-[#c8d3c8] p-6 text-sm text-[#617269]">No courses yet. Add the first one using the form.</p>}
+  const totalLectureHours = courses.reduce((sum, course) => sum + course.lectureHoursPerWeek, 0);
+  const nextExam = [...courses].sort((a, b) => a.examDate.localeCompare(b.examDate))[0];
+
+  return <div className="space-y-5">
+    <section className="flex flex-col gap-5 rounded-xl border bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <div><h2 className="text-lg font-semibold">Course context</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Tell PolyMate how much work each course takes and what matters for the exam. This context informs Chat without adding calendar events.</p></div>
+      <Button type="button" onClick={startNew}><Plus aria-hidden="true" /> Add course</Button>
     </section>
 
-    <form onSubmit={save} className="sticky top-5 space-y-4 rounded-2xl border border-[#dce3db] bg-white p-5 sm:p-6">
-      <div><p className="text-xs font-semibold uppercase tracking-wider text-[#748278]">{editing ? 'Edit course' : 'New course'}</p><h2 className="mt-1 text-lg font-medium">Workload and exam preparation</h2></div>
-      <label className="block text-sm">Course name<input required maxLength={120} className={inputClass} value={form.name} onChange={event => setForm(previous => ({ ...previous, name: event.target.value }))} /></label>
-      <div className="grid grid-cols-2 gap-3"><label className="text-sm">Exercise sessions<input required type="number" min={0} max={200} className={inputClass} value={form.exerciseSessionCount} onChange={event => setForm(previous => ({ ...previous, exerciseSessionCount: Number(event.target.value) }))} /></label><label className="text-sm">Minutes per session<input required type="number" min={0} max={1440} className={inputClass} value={form.exerciseSessionMinutes} onChange={event => setForm(previous => ({ ...previous, exerciseSessionMinutes: Number(event.target.value) }))} /></label></div>
-      <div className="grid grid-cols-2 gap-3"><label className="text-sm">Lecture hours / week<input required type="number" min={0} max={60} step="0.5" className={inputClass} value={form.lectureHoursPerWeek} onChange={event => setForm(previous => ({ ...previous, lectureHoursPerWeek: Number(event.target.value) }))} /></label><label className="text-sm">Exam date<input required type="date" className={inputClass} value={form.examDate} onChange={event => setForm(previous => ({ ...previous, examDate: event.target.value }))} /></label></div>
-      <p className="text-xs leading-5 text-[#617269]">Add one exam-prep topic per line.</p>
-      <label className="block text-sm">Must solve<textarea rows={4} maxLength={30000} className={inputClass} value={form.examPrep.must} onChange={event => setForm(previous => ({ ...previous, examPrep: { ...previous.examPrep, must: event.target.value } }))} placeholder={'Core exercise sheets\nPast exams'} /></label>
-      <label className="block text-sm">Optional<textarea rows={3} maxLength={30000} className={inputClass} value={form.examPrep.optional} onChange={event => setForm(previous => ({ ...previous, examPrep: { ...previous.examPrep, optional: event.target.value } }))} /></label>
-      <label className="block text-sm">Not required<textarea rows={3} maxLength={30000} className={inputClass} value={form.examPrep.not_required} onChange={event => setForm(previous => ({ ...previous, examPrep: { ...previous.examPrep, not_required: event.target.value } }))} /></label>
-      {error && <p role="alert" className="text-sm text-[#9b302b]">{error} <button type="button" className="underline" onClick={() => setReloadKey(value => value + 1)}>Refresh</button></p>}
-      {notice && <p role="status" className="text-sm text-[#617269]">{notice}</p>}
-      <div className="flex gap-2"><button disabled={busy} className="rounded-xl bg-[#173b32] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{busy ? 'Saving…' : 'Save course'}</button>{editing && <button type="button" disabled={busy} onClick={reset} className="rounded-xl border border-[#c8d3c8] px-4 py-2 text-sm">Cancel</button>}</div>
-    </form>
+    <dl className="grid gap-3 sm:grid-cols-3">
+      <div className="rounded-xl border bg-card p-4"><dt className="text-xs text-muted-foreground">Tracked courses</dt><dd className="mt-1 text-2xl font-semibold">{courses.length}</dd></div>
+      <div className="rounded-xl border bg-card p-4"><dt className="text-xs text-muted-foreground">Lectures each week</dt><dd className="mt-1 text-2xl font-semibold">{totalLectureHours}<span className="ml-1 text-sm font-normal text-muted-foreground">hours</span></dd></div>
+      <div className="rounded-xl border bg-card p-4"><dt className="text-xs text-muted-foreground">Next exam</dt><dd className="mt-1 text-sm font-semibold">{nextExam ? nextExam.name : 'Nothing scheduled'}</dd>{nextExam && <p className="mt-1 text-xs text-muted-foreground">{examDate(nextExam.examDate)}</p>}</div>
+    </dl>
+
+    {formOpen && <form id="course-editor" onSubmit={save} className="scroll-mt-20 rounded-xl border bg-card shadow-sm md:scroll-mt-4">
+      <div className="flex items-start justify-between gap-4 border-b px-5 py-4"><div><h2 className="font-semibold">{editing ? `Edit ${form.name}` : 'Add a course'}</h2><p className="mt-1 text-sm text-muted-foreground">Workload first, then exam scope.</p></div><Button type="button" size="icon" variant="ghost" onClick={reset} aria-label="Close course editor"><X aria-hidden="true" /></Button></div>
+      <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)]">
+        <div className="space-y-4">
+          <label className="block text-sm font-medium">Course name<input required maxLength={120} className={inputClass} value={form.name} onChange={event => setForm(previous => ({ ...previous, name: event.target.value }))} /></label>
+          <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium">Exercise sessions<input required type="number" min={0} max={200} className={inputClass} value={form.exerciseSessionCount} onChange={event => setForm(previous => ({ ...previous, exerciseSessionCount: Number(event.target.value) }))} /></label><label className="text-sm font-medium">Minutes / session<input required type="number" min={0} max={1440} className={inputClass} value={form.exerciseSessionMinutes} onChange={event => setForm(previous => ({ ...previous, exerciseSessionMinutes: Number(event.target.value) }))} /></label></div>
+          <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium">Lecture hours / week<input required type="number" min={0} max={60} step="0.5" className={inputClass} value={form.lectureHoursPerWeek} onChange={event => setForm(previous => ({ ...previous, lectureHoursPerWeek: Number(event.target.value) }))} /></label><label className="text-sm font-medium">Exam date<input required type="date" className={inputClass} value={form.examDate} onChange={event => setForm(previous => ({ ...previous, examDate: event.target.value }))} /></label></div>
+        </div>
+        <div><p className="text-sm font-medium">Exam preparation</p><p className="mt-1 text-xs text-muted-foreground">One topic per line. PolyMate uses these priorities when suggesting study work.</p><div className="mt-4 grid gap-3 md:grid-cols-3">
+          <label className="block text-sm font-medium">Must solve<textarea rows={6} maxLength={30000} className={inputClass} value={form.examPrep.must} onChange={event => setForm(previous => ({ ...previous, examPrep: { ...previous.examPrep, must: event.target.value } }))} placeholder={'Core exercise sheets\nPast exams'} /></label>
+          <label className="block text-sm font-medium">Optional<textarea rows={6} maxLength={30000} className={inputClass} value={form.examPrep.optional} onChange={event => setForm(previous => ({ ...previous, examPrep: { ...previous.examPrep, optional: event.target.value } }))} /></label>
+          <label className="block text-sm font-medium">Not required<textarea rows={6} maxLength={30000} className={inputClass} value={form.examPrep.not_required} onChange={event => setForm(previous => ({ ...previous, examPrep: { ...previous.examPrep, not_required: event.target.value } }))} /></label>
+        </div></div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4"><div>{error && <p role="alert" className="text-sm text-destructive">{error} <button type="button" className="underline" onClick={() => setReloadKey(value => value + 1)}>Refresh</button></p>}{notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}</div><div className="flex gap-2"><Button type="button" variant="outline" onClick={reset}>Cancel</Button><Button disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add course'}</Button></div></div>
+    </form>}
+
+    {loading && <p role="status" className="text-sm text-muted-foreground">Loading courses…</p>}
+    {!formOpen && error && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error} <button type="button" className="underline" onClick={() => setReloadKey(value => value + 1)}>Refresh</button></p>}
+    {!formOpen && notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
+
+    {!loading && courses.length > 0 && <section><div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold">Your courses</h2><p className="text-xs text-muted-foreground">{courses.length} in Chat context</p></div><div className="grid gap-4 xl:grid-cols-2">
+      {courses.map(course => <article key={course.id} className="rounded-xl border bg-card p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words font-semibold sm:truncate">{course.name}</h3><p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarClock className="size-3.5 shrink-0" aria-hidden="true" /> Exam {examDate(course.examDate)}</p></div><div className="flex shrink-0 gap-1"><Button type="button" size="icon" variant="ghost" disabled={busy} onClick={() => { setForm(toForm(course)); setEditing(true); setFormOpen(true); setNotice(''); revealEditor(); }} aria-label={`Edit ${course.name}`}><Pencil aria-hidden="true" /></Button><Button type="button" size="icon" variant="ghost" disabled={busy} onClick={() => void remove(course)} aria-label={`Remove ${course.name}`} className="text-muted-foreground hover:text-destructive"><Trash2 aria-hidden="true" /></Button></div></div>
+        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-y py-3 text-xs"><span className="flex items-center gap-1.5"><Clock3 className="size-3.5 text-muted-foreground" /> {course.lectureHoursPerWeek} lecture h/week</span><span>{course.exerciseSessionCount} exercise sessions</span><span>{course.exerciseSessionMinutes} min each</span></div>
+        <div className="mt-4 space-y-3">{(['must','optional','not_required'] as const).map(priority => <div key={priority} className="grid grid-cols-[6rem_1fr] gap-3 text-sm"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{priority === 'not_required' ? 'Skip' : priority}</p>{course.examPrep[priority].length ? <p className="line-clamp-2">{course.examPrep[priority].join(' · ')}</p> : <p className="text-muted-foreground">—</p>}</div>)}</div>
+      </article>)}
+    </div></section>}
+
+    {!loading && !courses.length && <section className="rounded-xl border border-dashed p-10 text-center"><h2 className="font-semibold">Add your first course</h2><p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">A course profile gives Chat concrete workload and exam-priority context.</p><Button type="button" onClick={startNew} className="mt-4"><Plus /> Add course</Button></section>}
   </div>;
 }

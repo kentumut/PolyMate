@@ -65,26 +65,26 @@ function AssignmentDialogForm({ initialInput, onClose, onCreateAssignment, fixtu
       min={name === 'estimatedMinutes' ? 1 : undefined} step={name === 'estimatedMinutes' ? 1 : undefined}
       onChange={event => change(name, event.target.value)} aria-invalid={Boolean(errors[name])}
       aria-describedby={errors[name] ? `${id}-${name}-error` : undefined}
-      className="mt-2 w-full rounded-lg border border-[#c8d3c8] bg-white px-3 py-2.5 text-sm disabled:bg-[#edf0eb]" />
-    {errors[name] && <p id={`${id}-${name}-error`} className="mt-2 text-sm text-[#9b302b]">{errors[name]}</p>}
+      className="mt-2 w-full rounded-md border bg-background px-3 py-2.5 text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring disabled:bg-muted" />
+    {errors[name] && <p id={`${id}-${name}-error`} className="mt-2 text-sm text-destructive">{errors[name]}</p>}
   </div>;
 
   return <dialog ref={dialogRef} aria-labelledby={`${id}-heading`} aria-describedby={`${id}-description`}
     onCancel={event => { event.preventDefault(); if (!inFlight.current) onClose(); }}
-    className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-lg overflow-y-auto rounded-2xl border border-[#dce3db] bg-[#f6f7f3] p-6 text-[#173b32] shadow-xl backdrop:bg-black/35">
+    className="fixed inset-0 m-auto max-h-[calc(100dvh-1rem)] w-[calc(100%_-_1rem)] max-w-lg overflow-y-auto rounded-xl border bg-card p-4 text-card-foreground shadow-xl backdrop:bg-black/35 sm:max-h-[90dvh] sm:w-[calc(100%_-_2rem)] sm:p-6">
     <h2 id={`${id}-heading`} className="text-2xl font-semibold">Add assignment</h2>
-    <p id={`${id}-description`} className="mt-2 text-sm leading-6 text-[#617269]">Choose the deadline in Europe/Zurich and estimate the total study effort. Saving does not schedule calendar blocks.</p>
-    {fixtureMode && <p className="mt-3 rounded-lg bg-[#e8ede5] p-3 text-sm">Sample data — changes reset after reload.</p>}
+    <p id={`${id}-description`} className="mt-2 text-sm leading-6 text-muted-foreground">Choose the deadline in Europe/Zurich and estimate the total study effort. Saving does not schedule calendar blocks.</p>
+    {fixtureMode && <p className="mt-3 rounded-lg bg-muted p-3 text-sm text-muted-foreground">Sample data — changes reset after reload.</p>}
     <form ref={formRef} noValidate onSubmit={submit} className="mt-6 space-y-5">
       {field('title', 'Assignment title', 'text')}
       <div className="grid gap-4 sm:grid-cols-2">{field('date', 'Deadline date', 'date')}{field('time', 'Deadline time', 'time')}</div>
       {field('estimatedMinutes', 'Estimated effort — minutes', 'number')}
-      <div role="status" aria-live="polite" aria-atomic="true">{message && <p className={`rounded-lg border p-3 text-sm ${status === 'failed' ? 'border-[#d9aaa5] text-[#9b302b]' : 'border-[#c8d3c8]'}`}>
+      <div role="status" aria-live="polite" aria-atomic="true">{message && <p className={`rounded-lg border p-3 text-sm ${status === 'failed' ? 'border-destructive/40 text-destructive' : 'border-border'}`}>
         {status === 'unknown' && <strong>Unconfirmed: </strong>}{message}
       </p>}</div>
-      <div className="flex justify-end gap-3 border-t border-[#dce3db] pt-4">
-        <button type="button" disabled={status === 'saving'} onClick={() => { if (!inFlight.current) onClose(); }} className="rounded-lg border border-[#c8d3c8] px-4 py-2.5 text-sm font-medium disabled:opacity-50">{status === 'saved' || status === 'unknown' ? 'Close' : 'Cancel'}</button>
-        {status !== 'saved' && <button type="submit" disabled={status === 'saving'} className="rounded-lg bg-[#173b32] px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">{status === 'saving' ? 'Saving…' : status === 'unknown' ? 'Retry save' : 'Save assignment'}</button>}
+      <div className="flex justify-end gap-3 border-t pt-4">
+        <button type="button" disabled={status === 'saving'} onClick={() => { if (!inFlight.current) onClose(); }} className="rounded-md border bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50">{status === 'saved' || status === 'unknown' ? 'Close' : 'Cancel'}</button>
+        {status !== 'saved' && <button type="submit" disabled={status === 'saving'} className="rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">{status === 'saving' ? 'Saving…' : status === 'unknown' ? 'Retry save' : 'Save assignment'}</button>}
       </div>
     </form>
   </dialog>;

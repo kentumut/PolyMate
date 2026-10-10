@@ -93,7 +93,7 @@ export function PlanningPanel({ onCalendarChange }: { onCalendarChange: () => vo
           <input type="checkbox" checked={preferences.weekdays.includes(index + 1)} onChange={event => setPreferences(previous => ({ ...previous,
             weekdays: event.target.checked ? [...previous.weekdays, index + 1].sort() : previous.weekdays.filter(value => value !== index + 1),
           }))} />{day}</label>)}</div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-xs">From<input type="time" required className={inputClass} value={preferences.startTime} onChange={event => setPreferences(previous => ({ ...previous, startTime: event.target.value }))} /></label>
           <label className="text-xs">Until<input type="time" required className={inputClass} value={preferences.endTime} onChange={event => setPreferences(previous => ({ ...previous, endTime: event.target.value }))} /></label>
           <label className="text-xs">Minutes per day<input type="number" min={10} max={1440} required className={inputClass} value={preferences.dailyMinutes} onChange={event => setPreferences(previous => ({ ...previous, dailyMinutes: Number(event.target.value) }))} /></label>

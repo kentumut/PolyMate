@@ -205,7 +205,7 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, initialEndAt, onC
 
   return <dialog ref={dialogRef} aria-labelledby={`${id}-heading`} aria-describedby={`${id}-description`}
     onCancel={event => { event.preventDefault(); if (!submitting && !reconciling && !externalSubmitting) { if (confirmingDelete) cancelDelete(); else onClose(); } }}
-    className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-lg overflow-y-auto rounded-2xl border border-[#dce3db] bg-[#f6f7f3] p-6 text-[#173b32] shadow-xl backdrop:bg-black/35">
+    className="fixed inset-0 m-auto max-h-[calc(100dvh-1rem)] w-[calc(100%_-_1rem)] max-w-lg overflow-y-auto rounded-2xl border border-[#dce3db] bg-[#f6f7f3] p-4 text-[#173b32] shadow-xl backdrop:bg-black/35 sm:max-h-[90dvh] sm:w-[calc(100%_-_2rem)] sm:p-6">
     <h2 id={`${id}-heading`} className="text-2xl font-semibold">{confirmingDelete ? 'Delete study block?' : readOnly ? 'Event details' : editing ? 'Edit study block' : 'Create a study block'}</h2>
     <p id={`${id}-description`} className="mt-2 text-sm leading-6 text-[#617269]">{confirmingDelete ? 'Review the saved block before deleting it.' : readOnly ? 'This event is read-only here.' : editing ? 'Change the title or move this study block.' : 'Choose your study time.'} All times are in Europe/Zurich.</p>
     {editing && <p className="mt-2 text-sm text-[#617269]">Completion: {completed ? 'Done' : 'Open'}</p>}
