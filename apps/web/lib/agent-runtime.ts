@@ -1,10 +1,11 @@
 import type { NextRequest } from 'next/server';
 import type { AssignmentTimeline, MoodleSnapshot, ScheduledTimeline } from '@polymate/contracts/moodle';
-import { ContractError, parseDateRange, parseEventId, parseStudyBlockChanges, parseStudyBlockInput, type CalendarEvent } from '@polymate/contracts/calendar';
+import { ContractError, parseDateRange, parseEventId, parseStudyBlockChanges, parseStudyBlockInput, type CalendarEvent, type StudyBlockInput } from '@polymate/contracts/calendar';
 import { randomUUID } from 'node:crypto';
 import { AGENT_TOOL_NAMES, AGENT_TOOL_CALL_LIMIT, AGENT_DELETE_LIMIT_PER_TURN, AGENT_DAILY_CREATE_LIMIT, AGENT_DAILY_DELETE_LIMIT, isExplicitCalendarConsent, isExplicitEditConsent, isExplicitPartialConsent, isExplicitMoveConsent, isExplicitDeleteConsent, isAffirmative, isCreateBlockRequest, followsUpOnRequest, parseAgentChatRequest, type AgentToolName } from '@polymate/core/agent/contracts';
 import { AGENT_TOOL_DEFINITIONS } from '@polymate/core/agent/tools';
 import { agentSessionKey, ownerIdFromAgentSessionKey, parseOpenClawToolEnvelope, verifyOpenClawToolEnvelope } from '@polymate/core/agent/context';
+import { findFreeSlot } from '@polymate/core/scheduling/free-slot';
 import { parseTimelineRequest } from '@polymate/core/moodle/tools';
 import type { OwnerContext } from '@polymate/core/identity';
 import { readBoundedText } from '@polymate/core/agent/http';
@@ -481,11 +482,29 @@ async function foregroundTool(turn: ActiveTurn, name: AgentToolName, args: Recor
       const pending = existing ?? { operationId: randomUUID(), expiresAt: Date.now() + 60 * 60_000 };
       assertWriteBudget(turn.owner.userId, 'create', [pending.operationId]);
       runtime.pendingCreates.set(createKey, pending);
-      const result = await calendarServiceFor(turn.owner).createStudyBlock(block, pending.operationId);
+      const calendar = calendarServiceFor(turn.owner);
+      let result = await calendar.createStudyBlock(block, pending.operationId);
       recordWrites(turn.owner.userId, 'create', [pending.operationId], [result]);
       if (result.status === 'synced' || result.status === 'failed') runtime.pendingCreates.delete(createKey);
-      turn.cards.push({ kind: 'schedule', data: { result: { results: [result], complete: result.status === 'synced' }, createdBlock: block } });
+      // A taken slot is not a dead end: place the same block, same length, in the nearest free slot.
+      let placed = block;
+      let relocatedFrom: StudyBlockInput | undefined;
+      if (result.status === 'failed' && result.error?.code === 'overlap') {
+        const slot = await findFreeSlotFor(calendar, block);
+        if (slot) {
+          const shifted = { ...block, ...slot };
+          const shiftedOperationId = randomUUID();
+          assertWriteBudget(turn.owner.userId, 'create', [shiftedOperationId]);
+          const retried = await calendar.createStudyBlock(shifted, shiftedOperationId);
+          recordWrites(turn.owner.userId, 'create', [shiftedOperationId], [retried]);
+          if (retried.status === 'unknown') runtime.pendingCreates.set(JSON.stringify([turn.owner.userId, shifted]), { operationId: shiftedOperationId, expiresAt: Date.now() + 60 * 60_000 });
+          if (retried.status !== 'failed') { result = retried; placed = shifted; relocatedFrom = block; }
+        }
+      }
+      turn.cards.push({ kind: 'schedule', data: { result: { results: [result], complete: result.status === 'synced' }, createdBlock: placed, ...(relocatedFrom ? { relocatedFrom } : {}) } });
       turn.consecutiveFailures = 0;
+      if (relocatedFrom) return { ...result, relocated: { requested: { startAt: relocatedFrom.startAt, endAt: relocatedFrom.endAt }, placed: { startAt: placed.startAt, endAt: placed.endAt }, reason: 'The requested time was taken, so the block was placed in the nearest free slot. Tell the student the new time.' } };
+      if (result.status === 'failed' && result.error?.code === 'overlap') return { ...result, hint: 'No free slot of this length was found in the next 14 days. Suggest splitting the work into shorter blocks or another period.' };
       return result;
     }
     if (name === 'polymate_edit_study_block') {
@@ -628,6 +647,18 @@ export async function dispatchForegroundAgentTool(
   } catch (error) {
     return { error: safeToolError(error) };
   }
+}
+
+const FREE_SLOT_SEARCH_DAYS = 14;
+
+/** Nearest free slot for a block of the same length, searching up to 14 days ahead (never beyond the 42-day write limit). */
+async function findFreeSlotFor(calendar: ReturnType<typeof calendarServiceFor>, block: StudyBlockInput): Promise<{ startAt: string; endAt: string } | null> {
+  const notBefore = new Date(Math.max(Date.parse(block.startAt), Date.now() + 5 * 60_000));
+  const notAfter = new Date(Math.min(notBefore.getTime() + FREE_SLOT_SEARCH_DAYS * 86_400_000, Date.now() + 42 * 86_400_000));
+  if (notAfter <= notBefore) return null;
+  const busy = await calendar.listWeek({ from: new Date(notBefore.getTime() - 86_400_000).toISOString(), to: notAfter.toISOString() });
+  const slot = findFreeSlot({ durationMs: Date.parse(block.endAt) - Date.parse(block.startAt), notBefore, notAfter, busy });
+  return slot && Date.parse(slot.endAt) <= Date.now() + 42 * 86_400_000 ? slot : null;
 }
 
 function assertAgentWriteRange(startAt: string, endAt: string): void {
@@ -796,6 +827,8 @@ export function agentResponseBody(reply: string, turn: ActiveTurn, ownerId: stri
     reply = writes.every(write => write.result.complete)
       ? `Your calendar ${verb} ${synced} block${synced === 1 ? '' : 's'}. Review the confirmed ${verb === 'deleted' ? 'blocks' : 'times'} below.`
       : `Your calendar ${verb} ${synced} block${synced === 1 ? '' : 's'}. ${results.some(result => result.status === 'unknown') ? 'At least one write is uncertain. ' : ''}The request is incomplete; review the results below. The same draft is retained for safe retries while it remains valid.`;
+    const shifted = turn.cards.flatMap(card => card.kind === 'schedule' ? [card.data as { relocatedFrom?: { startAt: string }; createdBlock?: { startAt: string; endAt: string } }] : []).find(data => data.relocatedFrom && data.createdBlock);
+    if (shifted) reply += ` That time was already taken, so the block was placed in the nearest free slot instead (${shifted.createdBlock!.startAt} to ${shifted.createdBlock!.endAt}).`;
     if (turn.cards.some(card => card.kind === 'schedule' && (card.data as { progressSync?: string }).progressSync === 'pending')) {
       reply += ' Local progress history could not be refreshed yet. Synchronization will be retried on the next progress refresh; the confirmed move does not need to be repeated.';
     }

@@ -18,6 +18,7 @@
     "./calendar/operations": "./calendar/operations.ts",
     "./calendar/fake": "./calendar/fake-client.ts",
     "./scheduling/intervals": "./scheduling/intervals.ts",
+    "./scheduling/free-slot": "./scheduling/free-slot.ts",
     "./moodle": "./integrations/moodle/client.ts",
     "./moodle/tools": "./integrations/moodle/tools.ts",
     "./moodle/calendar-feed": "./integrations/moodle/calendar-feed.ts",
