@@ -36,6 +36,7 @@ import {
   demoMovedBlock,
   demoScheduleCard,
   demoTimeline,
+  demoTradeoffExplanation,
   demoWeekRange,
   type DemoCommitment,
   type DemoPlanStyle,
@@ -258,7 +259,7 @@ function decisionsFor(stage: DemoStage): DemoDecision[] {
   return [];
 }
 
-function DemoGuide({ stage, busy, coachOutstanding, onRun, onApprove, onOpenCalendar, onOpenCourses, onDescribeAssignment, onOpenCoach }: { stage: DemoStage; busy: boolean; coachOutstanding: number; onRun: (prompt: string) => void; onApprove: () => void; onOpenCalendar: () => void; onOpenCourses: () => void; onDescribeAssignment: () => void; onOpenCoach: () => void }) {
+function DemoGuide({ stage, busy, coachOutstanding, tradeoffExplained, onRun, onApprove, onOpenCalendar, onOpenCourses, onDescribeAssignment, onOpenCoach }: { stage: DemoStage; busy: boolean; coachOutstanding: number; tradeoffExplained: boolean; onRun: (prompt: string) => void; onApprove: () => void; onOpenCalendar: () => void; onOpenCourses: () => void; onDescribeAssignment: () => void; onOpenCoach: () => void }) {
   const index = stage === 'complete' ? demoStages.length : demoStages.findIndex(item => item.id === stage);
   const decisions = decisionsFor(stage);
   return <section className="mb-3 rounded-xl border bg-muted/45 p-3" aria-label="Guided chat demo">
@@ -274,7 +275,7 @@ function DemoGuide({ stage, busy, coachOutstanding, onRun, onApprove, onOpenCale
       <button type="button" onClick={onOpenCoach} className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left text-xs font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"><span>Coach check-ins</span><span className="rounded-full bg-amber-200 px-1.5 py-0.5 tabular-nums dark:bg-amber-800">{coachOutstanding}</span></button>
     </div>
     {decisions.length > 0 && <div className="mt-3 grid grid-cols-2 gap-2">{decisions.map(decision => <button key={decision.label} type="button" disabled={busy} onClick={() => decision.approve ? onApprove() : onRun(decision.prompt!)} className="rounded-lg border bg-background p-2.5 text-left transition-colors hover:bg-accent disabled:opacity-50"><span className="block text-xs font-semibold sm:text-sm">{decision.label}</span><span className="mt-1 hidden text-xs text-muted-foreground sm:block">{decision.description}</span></button>)}</div>}
-    {stage === 'approve' && <p className="mt-2 text-xs text-muted-foreground">Only the approval choice writes to the calendar. The explanation choice leaves the draft untouched.</p>}
+    {stage === 'approve' && <p className={`mt-2 text-xs ${tradeoffExplained ? 'font-medium text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'}`} role="status">{tradeoffExplained ? 'Trade-off explained in Chat. The draft is still waiting for your decision.' : 'Only the approval choice writes to the calendar. The explanation choice leaves the draft untouched.'}</p>}
     {stage === 'complete' && <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="flex items-center gap-2 text-sm font-medium"><Check className="size-4" /> Demo complete</p><div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => window.location.reload()}><RotateCcw /> Restart</Button><Button type="button" size="sm" onClick={onOpenCalendar}>Open calendar</Button></div></div>}
   </section>;
 }
@@ -306,6 +307,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
   const [demoProfile, setDemoProfile] = useState<DemoProfile | null>(null);
   const [demoCommitment, setDemoCommitment] = useState<DemoCommitment>('volunteering');
   const [demoPlanStyle, setDemoPlanStyle] = useState<DemoPlanStyle>('spread');
+  const [demoTradeoffExplained, setDemoTradeoffExplained] = useState(false);
   const [demoCoachAnswers, setDemoCoachAnswers] = useState(0);
   const [demoMemories, setDemoMemories] = useState(() => demo ? [] : demoInitialMemories(demoEpoch));
   const [onboardingStatus, setOnboardingStatus] = useState<'loading' | 'required' | 'complete' | 'error'>(demo || sample ? 'complete' : development ? 'required' : 'loading');
@@ -496,6 +498,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
       const style: DemoPlanStyle = /front[- ]?load/i.test(text) ? 'frontload' : 'spread';
       const timeline = demoTimeline(demoEpoch, { sessionMinutes: profile.sessionMinutes, style, commitment: demoCommitment });
       setDemoPlanStyle(style);
+      setDemoTradeoffExplained(false);
       setPendingPlan({ timeline, expiresAt: new Date(Date.parse(demoEpoch) + 30 * 60_000).toISOString() });
       const commitmentLabel = demoCommitment === 'volunteering' ? 'Wednesday volunteering' : 'Thursday rehearsal';
       reply(`I found **${timeline.blocks.length} × ${profile.sessionMinutes}-minute sessions** before the deadline and ${style === 'frontload' ? 'front-loaded the work into Monday and Tuesday' : 'spread the work across the available days'}. The draft avoids your Tuesday job, ${commitmentLabel}, and Friday climbing. **Nothing has been written to the calendar yet.**`);
@@ -505,8 +508,10 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
 
     if (demoStage === 'approve') {
       if (!action || 'draftToken' in action || !pendingPlan || !workspace) {
-        reply(/explain|why|trade-off/i.test(text)
-          ? `I chose a **${demoPlanStyle === 'frontload' ? 'front-loaded' : 'spread'}** plan using your ${profile.sessionMinutes}-minute preference. It finishes all 150 minutes before the deadline while protecting the commitment you asked me to remember. The calendar is still unchanged.`
+        const explainsTradeoff = /explain|why|trade-off/i.test(text);
+        if (explainsTradeoff && pendingPlan) setDemoTradeoffExplained(true);
+        reply(explainsTradeoff && pendingPlan
+          ? demoTradeoffExplanation(pendingPlan.timeline, { sessionMinutes: profile.sessionMinutes, style: demoPlanStyle, commitment: demoCommitment })
           : 'The draft is still unchanged. Choose **Approve all blocks** only when you want to write this exact plan.');
         return;
       }
@@ -767,7 +772,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
             <div className="mx-auto max-w-3xl">
               {onboardingActive ? <p className="text-center text-xs text-muted-foreground">Choose one option in each group to continue.</p> : <>
               {error && <p className="mb-2 text-sm text-destructive" role="alert">{error}</p>}
-              {demo && <DemoGuide stage={demoStage} busy={busy} coachOutstanding={coachOutstanding} onRun={prompt => void sendMessage(undefined, undefined, prompt)} onApprove={() => void sendMessage(undefined, { allowPartial: false })} onOpenCalendar={() => { window.history.pushState(null, '', hrefFor('calendar')); window.scrollTo({ top: 0 }); }} onOpenCourses={() => { window.history.pushState(null, '', hrefFor('courses')); window.scrollTo({ top: 0 }); }} onDescribeAssignment={() => openRecommendation(DEMO_ASSIGNMENT_CAPTURE_PROMPT)} onOpenCoach={() => document.getElementById('coach-notifications-trigger')?.click()} />}
+              {demo && <DemoGuide stage={demoStage} busy={busy} coachOutstanding={coachOutstanding} tradeoffExplained={demoTradeoffExplained} onRun={prompt => void sendMessage(undefined, undefined, prompt)} onApprove={() => void sendMessage(undefined, { allowPartial: false })} onOpenCalendar={() => { window.history.pushState(null, '', hrefFor('calendar')); window.scrollTo({ top: 0 }); }} onOpenCourses={() => { window.history.pushState(null, '', hrefFor('courses')); window.scrollTo({ top: 0 }); }} onDescribeAssignment={() => openRecommendation(DEMO_ASSIGNMENT_CAPTURE_PROMPT)} onOpenCoach={() => document.getElementById('coach-notifications-trigger')?.click()} />}
               {!demo && view === 'chat' && waitingCheckIns.length > 0 && <div className="mb-2"><CheckInNotice chats={waitingCheckIns} floating={false} disabled={busy} onOpen={chat => void openChat(chat.id)} /></div>}
               {coachReply && <div className="mb-2 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40"><div><p className="text-xs font-medium text-amber-800 dark:text-amber-300">Answering your coach</p><p className="mt-1">{coachReply.body}</p></div><button type="button" onClick={() => setCoachReply(null)} className="shrink-0 text-xs underline">Cancel</button></div>}
               <form onSubmit={event => void sendMessage(event)} className="relative rounded-2xl border bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/30">

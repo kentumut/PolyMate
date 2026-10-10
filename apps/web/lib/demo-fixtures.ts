@@ -184,6 +184,27 @@ export function demoTimeline(now: Date | string, options: { sessionMinutes?: Dem
   };
 }
 
+export function demoTradeoffExplanation(
+  timeline: AssignmentTimeline,
+  options: { sessionMinutes: DemoSessionMinutes; style: DemoPlanStyle; commitment: DemoCommitment },
+): string {
+  const slots = timeline.blocks.map(block => new Intl.DateTimeFormat('en-GB', {
+    timeZone: CALENDAR_TIMEZONE,
+    weekday: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(block.startAt))).join(', ');
+  const protectedCommitment = options.commitment === 'volunteering'
+    ? 'Wednesday volunteering'
+    : 'Thursday rehearsal';
+  const tradeoff = options.style === 'frontload'
+    ? 'The trade-off is a heavier Monday and Tuesday in exchange for a larger buffer before Friday’s deadline.'
+    : 'The trade-off is a lighter, more evenly paced week with less buffer if a later session slips.';
+
+  return `I chose **${slots}** for the ${timeline.blocks.length} × ${options.sessionMinutes}-minute sessions. Those slots avoid your Tuesday job, ${protectedCommitment}, and Friday climbing while finishing all 150 minutes before the deadline. **${tradeoff}** The calendar is still unchanged; you can approve this draft or revise the constraints.`;
+}
+
 export function demoMovedBlock(now: Date | string, target: DemoMoveTarget = 'friday-16', sessionMinutes: DemoSessionMinutes = 50) {
   const range = nextDemoWeek(now);
   const hour = target === 'friday-15' ? 15 : 16;
