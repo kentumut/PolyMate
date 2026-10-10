@@ -45,7 +45,7 @@ describe('direct foreground chat runtime', () => {
     expect(agent.tools.map(item => item.name)).toEqual(AGENT_TOOL_DEFINITIONS.map(item => item.name));
     expect(agent.model).toBe('gpt-6-luna');
     expect(agent.modelSettings.reasoning).toEqual({ effort: 'none' });
-    expect(agent.modelSettings.parallelToolCalls).toBe(false);
+    expect(agent.modelSettings.parallelToolCalls).toBe(true);
   });
 
   it('builds bounded replay input without treating draft state as instructions', () => {

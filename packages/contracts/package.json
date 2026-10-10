@@ -5,11 +5,14 @@
   "exports": {
     "./study-progress": "./src/study-progress.ts",
     "./assignments": "./src/assignments.ts",
+    "./imports": "./src/imports.ts",
     "./calendar": "./src/calendar.ts",
     "./time": "./src/time.ts",
     "./http-client": "./src/http-client.ts",
     "./moodle": "./src/moodle.ts",
-    "./planning": "./src/planning.ts"
+    "./planning": "./src/planning.ts",
+    "./coaching": "./src/coaching.ts",
+    "./courses": "./src/courses.ts"
   },
   "scripts": { "typecheck": "tsc --noEmit" }
 }

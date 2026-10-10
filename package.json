@@ -16,6 +16,7 @@
     "agent:start": "node scripts/openclaw-local.mjs start",
     "agent:validate": "node scripts/openclaw-local.mjs validate",
     "agent:smoke": "node scripts/agent-smoke.mjs",
+    "agent:latency": "node scripts/agent-latency.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "smoke": "node scripts/smoke.mjs",
     "test:containers": "bash scripts/container-check.sh",

@@ -9,7 +9,7 @@ The prepared runtime:
 - supports both complete and streaming runs;
 - exposes the canonical PolyMate tools in process;
 - calls the existing owner-bound foreground dispatcher, preserving validation, consent, write serialization, cards, retry IDs, and private-value handling;
-- disables parallel tool calls because foreground calendar writes are intentionally serialized;
+- allows independent read tools to run in parallel while the foreground dispatcher keeps writes and stateful tools serialized;
 - keeps SDK tracing disabled because prompts and tool results contain student data.
 
 Configuration is independent from the existing OpenClaw model configuration:
