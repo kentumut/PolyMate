@@ -5,7 +5,7 @@ import { StudyCompanion } from '@/components/agent/study-companion';
 export const dynamic = 'force-dynamic';
 
 export default async function CalendarPage({ searchParams }: PageProps<'/calendar'>) {
-  // Sample data is a local development aid only; production always reads Google.
+  // Sample data is a local development aid; production uses the standalone PolyMate calendar.
   const sample = process.env.NODE_ENV === 'development' && (await searchParams).calendar === 'sample';
   let owner: OwnerContext | undefined;
   try {

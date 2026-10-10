@@ -66,7 +66,7 @@ function ScheduleCard({ data }: { data: unknown }) {
       })()}<strong className="capitalize">{item.status}</strong>{item.error?.message ? ` — ${item.error.message}` : ''}</span>
     </li>)}</ul> : <p className="mt-2 text-sm text-[#617269]">No calendar writes were confirmed.</p>}
     {unattempted.length > 0 && <ul className="mt-3 space-y-1 text-sm text-[#8a5a26]">{unattempted.map(block => <li key={block.operationId}>{block.title} · {dateTime(block.startAt)} — not attempted</li>)}</ul>}
-    {value.result?.complete && <p className="mt-3 text-sm font-medium text-[#173b32]">{value.movedBlock ? 'The move was confirmed by Google Calendar.' : 'All planned blocks were confirmed by Google Calendar.'}</p>}
+    {value.result?.complete && <p className="mt-3 text-sm font-medium text-[#173b32]">{value.movedBlock ? 'The move was saved to your calendar.' : 'All planned blocks were saved to your calendar.'}</p>}
   </section>;
 }
 
@@ -76,10 +76,11 @@ function OtherCards({ cards }: { cards: AgentCard[] }) {
       if (card.kind === 'assignments') return <AssignmentCards key={`assignments-${index}`} data={card.data} />;
       if (card.kind === 'schedule') return <ScheduleCard key={`schedule-${index}`} data={card.data} />;
       if (card.kind === 'connections' && card.data && typeof card.data === 'object') {
-        const value = card.data as { moodleConnected?: boolean; googleCalendarConnected?: boolean; backgroundMoodleAvailable?: boolean; note?: string };
+        const value = card.data as { moodleConnected?: boolean; googleCalendarConnected?: boolean; standaloneCalendarAvailable?: boolean; backgroundMoodleAvailable?: boolean; note?: string };
         return <div key={`connections-${index}`} className="mt-3 rounded-xl bg-[#edf0e7] p-4 text-sm">
+          <p>PolyMate calendar: available.</p>
           <p>Moodle calendar: {value.moodleConnected ? 'subscription connected' : 'not connected'}.</p>
-          <p>Google Calendar: {value.googleCalendarConnected ? 'connected' : 'not connected'}.</p>
+          <p>Optional Google overlay: {value.googleCalendarConnected ? 'connected' : 'not connected'}.</p>
           {!value.backgroundMoodleAvailable && <p className="mt-2 text-xs text-[#617269]">Connect a Moodle calendar subscription to enable scheduled calendar checks.</p>}
           {value.note && <p className="mt-2 text-xs text-[#617269]">{value.note}</p>}
         </div>;
@@ -172,7 +173,10 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
           <div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#748278]">{view === 'settings' ? 'Make it yours' : 'A little structure. More room to learn.'}</p>
             <h1 className="mt-2 text-3xl font-medium tracking-tight">{view === 'calendar' ? 'Your calendar' : view === 'chat' ? 'Chat with PolyMate' : 'Settings'}</h1>
             <p className="mt-2 text-sm text-[#617269]">{view === 'calendar' ? 'See your week and make time for what matters.' : view === 'chat' ? 'Turn course dates and available time into a study plan.' : 'Connect your calendars and keep your study space up to date.'}</p></div>
-          <span className="mt-6 hidden rounded-full border border-[#dce3db] px-3 py-1.5 text-xs text-[#617269] sm:block">{view === 'settings' ? 'Your connections' : 'Europe/Zurich'}</span>
+          <div className="mt-5 hidden items-center gap-2 sm:flex">
+            <a href="/demo" className="rounded-full bg-[#173b32] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#224e41]">View demo</a>
+            <span className="rounded-full border border-[#dce3db] px-3 py-1.5 text-xs text-[#617269]">{view === 'settings' ? 'Your connections' : 'Europe/Zurich'}</span>
+          </div>
         </header>
 
         {/* Keep panels mounted so navigation preserves drafts, forms, and calendar state. */}
@@ -220,8 +224,8 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
         <section aria-label="Settings" className={view === 'settings' ? 'grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]' : 'hidden'}>
           <MoodleConnection />
           <div className="space-y-5">
-            <section className="rounded-2xl border border-[#dce3db] bg-white p-6"><h2 className="text-lg font-medium">Google Calendar</h2>
-              <p className="mt-2 text-sm leading-6 text-[#617269]">See your existing events and add the study blocks you approve.</p><GoogleConnection /></section>
+            <section className="rounded-2xl border border-[#dce3db] bg-white p-6"><h2 className="text-lg font-medium">Optional Google Calendar overlay</h2>
+              <p className="mt-2 text-sm leading-6 text-[#617269]">Your PolyMate calendar works on its own. Connect Google only to show its events as read-only busy time.</p><GoogleConnection /></section>
             <section className="rounded-2xl border border-[#dce3db] p-6"><h2 className="text-sm font-medium">Your study space</h2>
               <dl className="mt-4 space-y-4 text-sm"><div><dt className="text-xs text-[#748278]">Signed in as</dt><dd className="mt-1 break-words">{ownerName}</dd></div>
                 <div><dt className="text-xs text-[#748278]">Calendar timezone</dt><dd className="mt-1">Europe/Zurich</dd></div></dl>

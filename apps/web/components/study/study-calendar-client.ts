@@ -68,7 +68,7 @@ export function createStudyCalendarClient(options: StudyCalendarClientOptions = 
 
   function uncertain(operationId: string) {
     return remember(operationId, { operationId, status: 'unknown', error: {
-      code: 'calendar_write_uncertain', message: 'Google changes could not be confirmed. Reconcile this operation before trying again.',
+      code: 'calendar_write_uncertain', message: 'The calendar change could not be confirmed. Reconcile this operation before trying again.',
     } });
   }
 
@@ -125,7 +125,7 @@ export function createStudyCalendarClient(options: StudyCalendarClientOptions = 
           recoverable: body.error.recoverable === true,
         } });
       }
-      // A 2xx or 5xx alone does not prove a Google mutation succeeded/failed.
+      // A 2xx or 5xx alone does not prove that a calendar mutation succeeded or failed.
       return uncertain(operationId);
     } catch {
       return uncertain(operationId);

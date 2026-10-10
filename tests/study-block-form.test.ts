@@ -23,6 +23,12 @@ describe('study-block form Zurich time conversion', () => {
     });
     expect(initialStudyBlockFields('not a timestamp').date).toBe('');
   });
+
+  it('prefills the exact range selected by dragging the calendar', () => {
+    expect(initialStudyBlockFields('2026-10-09T07:15:00Z', '2026-10-09T08:45:00Z')).toEqual({
+      title: '', date: '2026-10-09', startTime: '09:15', endDate: '2026-10-09', endTime: '10:45',
+    });
+  });
 });
 
 describe('editing and moving an existing study block', () => {

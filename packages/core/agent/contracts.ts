@@ -6,6 +6,8 @@ export const AGENT_TOOL_NAMES = [
   'moodle_schedule_assignment_timeline',
   'polymate_check_connections',
   'polymate_get_calendar',
+  'polymate_create_study_block',
+  'polymate_edit_study_block',
   'polymate_move_study_block',
 ] as const;
 
@@ -25,7 +27,7 @@ export function parseAgentChatRequest(value: unknown): AgentChatRequest {
 
 export function isExplicitCalendarConsent(message: string): boolean {
   if (hasConsentQualifier(message)) return false;
-  return /\b(add|put|schedule)\b.{0,80}\b(calendar|blocks?|timeline|study sessions?)\b|\b(add it|add them|schedule it|schedule them)\b.{0,40}\b(calendar|now|please)\b/i.test(message);
+  return /\b(add|create|put|schedule)\b.{0,80}\b(calendar|blocks?|timeline|study sessions?)\b|\b(add it|add them|schedule it|schedule them)\b.{0,40}\b(calendar|now|please)\b/i.test(message);
 }
 
 export function isExplicitPartialConsent(message: string): boolean {
@@ -40,6 +42,11 @@ function hasConsentQualifier(message: string): boolean {
 
 export function isExplicitMoveConsent(message: string): boolean {
   return !hasConsentQualifier(message) && /\b(move|reschedule)\b.{0,100}\b(tomorrow|today|to|at|on|block|session|event)\b/i.test(message);
+}
+
+export function isExplicitEditConsent(message: string): boolean {
+  return isExplicitMoveConsent(message) || (!hasConsentQualifier(message) &&
+    /\b(edit|rename|change|update)\b.{0,100}\b(title|name|time|date|block|session|event)\b/i.test(message));
 }
 
 export function isAffirmative(message: string): boolean {

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getConnectionStatus: vi.fn(),
   findAutomationForGatewayJob: vi.fn(),
   listWeek: vi.fn(),
+  createStudyBlock: vi.fn(),
   updateStudyBlock: vi.fn(),
 }));
 vi.mock('../apps/web/lib/moodle', () => ({ executeMoodleTool: mocks.executeMoodleTool, moodleConnectionAvailable: mocks.moodleConnectionAvailable, calendarSnapshotForOwner: mocks.calendarSnapshotForOwner }));
@@ -52,6 +53,7 @@ describe('PolyMate agent tool routing', () => {
     mocks.getConnectionStatus.mockReset().mockResolvedValue({ connected: true });
     mocks.findAutomationForGatewayJob.mockReset();
     mocks.listWeek.mockReset();
+    mocks.createStudyBlock.mockReset();
     mocks.updateStudyBlock.mockReset();
   });
   afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
@@ -63,6 +65,11 @@ describe('PolyMate agent tool routing', () => {
       work: [{ assignmentId: 8, estimatedMinutes: 25 }], availability: [{ startAt: '2026-10-13T08:00:00Z', endAt: '2026-10-13T09:00:00Z', timezone: 'UTC' }],
     })).toThrow('only a start and end');
     expect(() => parseAgentToolArguments('moodle_schedule_assignment_timeline', { planToken: 'short' })).toThrow('generated timeline token');
+    expect(() => parseAgentToolArguments('polymate_create_study_block', {
+      title: 'Review', startAt: '2026-10-11T08:00:00Z', endAt: '2026-10-11T08:50:00Z', ownerId: owner.userId,
+    })).toThrow('unsupported fields');
+    expect(() => parseAgentToolArguments('polymate_edit_study_block', { eventId: 'event' })).toThrow('Nothing to change');
+    expect(() => parseAgentToolArguments('polymate_edit_study_block', { eventId: 'event', startAt: '2026-10-11T08:00:00Z' })).toThrow('together');
   });
 
   it('passes the original authenticated request to Moodle and hides the plan token from browser state', async () => {
@@ -243,6 +250,33 @@ describe('PolyMate agent tool routing', () => {
     expect(mocks.updateStudyBlock.mock.calls[0][2]).toBe('etag-original');
     expect(mocks.executeMoodleTool).not.toHaveBeenCalled();
     endAgentTurn(retry.sessionKey);
+  });
+
+  it('creates and edits owner-scoped blocks with explicit consent and stable retry metadata', async () => {
+    const block = { title: 'Review analysis', startAt: '2026-10-11T08:00:00.000Z', endAt: '2026-10-11T08:50:00.000Z' };
+    const denied = beginAgentTurn(request(), owner, { message: 'What would creating a block do?' }).turn;
+    expect((await signedCall(denied.sessionKey, 'polymate_create_study_block', block)).error?.message).toContain('explicitly request');
+    endAgentTurn(denied.sessionKey);
+
+    const first = beginAgentTurn(request(), owner, { message: 'Create a study block tomorrow from 10:00 to 10:50.' }).turn;
+    mocks.createStudyBlock.mockResolvedValueOnce({ status: 'unknown' });
+    await signedCall(first.sessionKey, 'polymate_create_study_block', block);
+    endAgentTurn(first.sessionKey);
+    const retry = beginAgentTurn(request(), owner, { message: 'Retry.' }).turn;
+    mocks.createStudyBlock.mockResolvedValueOnce({ status: 'synced' });
+    await signedCall(retry.sessionKey, 'polymate_create_study_block', block);
+    expect(mocks.createStudyBlock.mock.calls[0][1]).toBe(mocks.createStudyBlock.mock.calls[1][1]);
+    endAgentTurn(retry.sessionKey);
+
+    const event = { id: 'existing_event', ...block, timezone: 'Europe/Zurich', allDay: false, source: 'polymate', editable: true, completion: 'open', etag: 'etag-original' };
+    const edit = beginAgentTurn(request(), owner, { message: 'Rename this block to Focused analysis.' }).turn;
+    expect((await signedCall(edit.sessionKey, 'polymate_edit_study_block', { eventId: event.id, title: 'Focused analysis' })).error).toBeDefined();
+    mocks.listWeek.mockResolvedValue([event]);
+    await signedCall(edit.sessionKey, 'polymate_get_calendar', { from: '2026-10-11T00:00:00Z', to: '2026-10-12T00:00:00Z' });
+    mocks.updateStudyBlock.mockResolvedValue({ status: 'synced' });
+    await signedCall(edit.sessionKey, 'polymate_edit_study_block', { eventId: event.id, title: 'Focused analysis' });
+    expect(mocks.updateStudyBlock).toHaveBeenLastCalledWith(event.id, { title: 'Focused analysis' }, event.etag, expect.any(String));
+    endAgentTurn(edit.sessionKey);
   });
 
   it('keeps prompt injection in retrieved Moodle text from granting calendar consent and overrides false model success claims', async () => {

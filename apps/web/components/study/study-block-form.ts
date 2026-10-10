@@ -85,11 +85,13 @@ export function suggestedEnd(date: string, time: string): { date: string; time: 
   return 'instant' in start ? zurichFields(Date.parse(start.instant) + 50 * 60 * 1000) : null;
 }
 
-export function initialStudyBlockFields(initialStartAt?: string): StudyBlockFields {
+export function initialStudyBlockFields(initialStartAt?: string, initialEndAt?: string): StudyBlockFields {
   const empty = { title: '', date: '', startTime: '', endDate: '', endTime: '' };
   if (!initialStartAt || !Number.isFinite(Date.parse(initialStartAt))) return empty;
   const start = zurichFields(initialStartAt);
-  const end = zurichFields(Date.parse(initialStartAt) + 50 * 60 * 1000);
+  const parsedEnd = initialEndAt && Number.isFinite(Date.parse(initialEndAt)) && Date.parse(initialEndAt) > Date.parse(initialStartAt)
+    ? Date.parse(initialEndAt) : Date.parse(initialStartAt) + 50 * 60 * 1000;
+  const end = zurichFields(parsedEnd);
   return { ...empty, date: start.date, startTime: start.time, endDate: end.date, endTime: end.time };
 }
 

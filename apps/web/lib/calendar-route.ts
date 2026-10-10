@@ -1,11 +1,17 @@
 import { ContractError, parseOperationId, type OperationResult, type StudyBlockChanges, type StudyBlockInput } from '@polymate/contracts/calendar';
-import { CalendarService } from '@polymate/core/calendar';
+import type { CalendarClient } from '@polymate/contracts/calendar';
 import { GoogleApiError, GoogleCalendarApi, GoogleNotConnectedError, GoogleTransportError } from '@polymate/core/calendar/google-api';
+import { toCalendarEvent } from '@polymate/core/calendar/mapping';
+import { StandaloneCalendarService, type StandaloneEventStore } from '@polymate/core/calendar/standalone';
 import { constantTimeEqual } from '@polymate/core/google-auth/crypto';
 import { assertSameOrigin, IdentityError, resolveOwner, type OwnerContext } from '@polymate/core/identity';
 import { CalendarBusyError } from '@polymate/core/calendar/operations';
 import { calendarOperationStore, findCalendarOperation } from '@polymate/db/calendar-operations';
-import { getValidAccessToken } from '@polymate/db/google-oauth';
+import {
+  completeStandaloneCalendarEvent, createStandaloneCalendarEvent, deleteStandaloneCalendarEvent,
+  findStandaloneCalendarEvent, listStandaloneCalendarEvents, updateStandaloneCalendarEvent,
+} from '@polymate/db/calendar-events';
+import { ensureUser, getConnectionStatus, getValidAccessToken } from '@polymate/db/google-oauth';
 import type { NextRequest, NextResponse } from 'next/server';
 
 export const CALENDAR_CSRF_COOKIE = 'polymate_calendar_csrf';
@@ -28,11 +34,28 @@ function assertCalendarMutation(request: NextRequest): void {
   if (!cookie || !supplied || !constantTimeEqual(cookie, supplied)) throw new CsrfError();
 }
 
-/** The service is always bound to the resolved owner; clients never choose whose calendar is used. */
-export function calendarServiceFor(owner: OwnerContext): CalendarService {
-  if (process.env.GOOGLE_ENABLED !== 'true') throw new GoogleNotConnectedError();
-  const api = new GoogleCalendarApi({ accessToken: () => getValidAccessToken(owner) });
-  return new CalendarService(owner.userId, api, calendarOperationStore);
+const standaloneEvents: StandaloneEventStore = {
+  ensureOwner: ensureUser,
+  list: listStandaloneCalendarEvents,
+  find: findStandaloneCalendarEvent,
+  create: createStandaloneCalendarEvent,
+  update: updateStandaloneCalendarEvent,
+  complete: completeStandaloneCalendarEvent,
+  delete: deleteStandaloneCalendarEvent,
+};
+
+/** Always provides the PolyMate calendar; Google is an optional read-only overlay. */
+export function calendarServiceFor(owner: OwnerContext): CalendarClient {
+  const googleEvents = process.env.GOOGLE_ENABLED === 'true' ? async (range: { from: string; to: string }) => {
+    if (!(await getConnectionStatus(owner.userId)).connected) return [];
+    const api = new GoogleCalendarApi({ accessToken: () => getValidAccessToken(owner) });
+    return (await api.list(range.from, range.to)).flatMap(event => {
+      const mapped = toCalendarEvent(event, owner.userId);
+      if (!mapped || mapped.source === 'polymate') return [];
+      return [{ ...mapped, id: `google_${mapped.id}` }];
+    });
+  } : null;
+  return new StandaloneCalendarService(owner, standaloneEvents, calendarOperationStore, googleEvents);
 }
 
 const STATUS_FOR: Record<string, number> = {
@@ -52,9 +75,9 @@ export function calendarError(error: unknown): Response {
   else if (error instanceof IdentityError) [status, code, message] = [error.status, 'identity', error.message];
   else if (error instanceof CalendarBusyError) [status, code, message] = [409, 'busy', error.message];
   else if (error instanceof ContractError) [status, code, message] = [422, 'validation', error.message];
-  else if (error instanceof GoogleNotConnectedError) [status, code, message] = [409, 'not_connected', 'Connect Google Calendar to see your week.'];
+  else if (error instanceof GoogleNotConnectedError) [status, code, message] = [409, 'not_connected', 'The optional Google Calendar overlay is not connected.'];
   else if (error instanceof GoogleApiError || error instanceof GoogleTransportError) {
-    [status, code, message] = [503, 'google_unavailable', 'Google Calendar is not responding. Try again shortly.'];
+    [status, code, message] = [503, 'google_unavailable', 'The optional Google Calendar overlay is not responding.'];
   } else console.error('Calendar route failed.', error instanceof Error ? error.name : typeof error);
   return Response.json({ error: { code, message } }, { status, headers: NO_STORE });
 }
@@ -72,7 +95,7 @@ async function readJson(request: NextRequest): Promise<unknown> {
 export async function calendarMutation<T>(
   request: NextRequest,
   parse: (body: unknown) => T,
-  run: (service: CalendarService, input: T) => Promise<OperationResult>,
+  run: (service: CalendarClient, input: T) => Promise<OperationResult>,
 ): Promise<Response> {
   try {
     const owner = resolveOwner(request.headers);

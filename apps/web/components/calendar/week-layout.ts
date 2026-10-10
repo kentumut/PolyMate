@@ -1,5 +1,5 @@
 import type { CalendarEvent } from '@polymate/contracts/calendar';
-import { addZonedDays, CALENDAR_TIMEZONE, zonedDateKey, zonedParts, type DateRange } from '@polymate/contracts/time';
+import { addZonedDays, CALENDAR_TIMEZONE, zonedDateKey, zonedParts, zonedTimeToInstant, type DateRange } from '@polymate/contracts/time';
 
 export type WeekDay = Readonly<{ key: string; start: string; end: string; weekday: string; dayOfMonth: number }>;
 
@@ -15,6 +15,7 @@ export type PlacedEvent = Readonly<{
 }>;
 
 export const DEFAULT_HOURS = { start: 8, end: 20 } as const;
+export const CALENDAR_SNAP_MINUTES = 15;
 const MINUTE = 60_000;
 
 const weekdayFormat = new Intl.DateTimeFormat('en-GB', { timeZone: CALENDAR_TIMEZONE, weekday: 'short' });
@@ -148,4 +149,23 @@ export function nowOffset(now: Date, day: WeekDay, hours: { start: number; end: 
 
 export function durationMinutes(event: CalendarEvent): number {
   return Math.round((Date.parse(event.endAt) - Date.parse(event.startAt)) / MINUTE);
+}
+
+/** Convert a pointer's vertical position in the time grid to a snapped wall-clock minute. */
+export function snappedGridMinute(offsetY: number, height: number, hours: { start: number; end: number }): number {
+  const span = (hours.end - hours.start) * 60;
+  const raw = hours.start * 60 + (Math.max(0, Math.min(offsetY, height)) / Math.max(height, 1)) * span;
+  return Math.max(hours.start * 60, Math.min(hours.end * 60, Math.round(raw / CALENDAR_SNAP_MINUTES) * CALENDAR_SNAP_MINUTES));
+}
+
+/** Resolve a dragged wall-clock range to transport instants in the calendar timezone. */
+export function calendarSelectionRange(day: WeekDay, anchorMinute: number, focusMinute: number): { startAt: string; endAt: string } {
+  const startMinute = Math.min(anchorMinute, focusMinute);
+  const endMinute = anchorMinute === focusMinute ? startMinute + 50 : Math.max(anchorMinute, focusMinute);
+  const parts = zonedParts(day.start);
+  const instant = (minute: number) => zonedTimeToInstant({
+    year: parts.year, month: parts.month, day: parts.day,
+    hour: Math.floor(minute / 60), minute: minute % 60,
+  }).toISOString();
+  return { startAt: instant(startMinute), endAt: instant(endMinute) };
 }

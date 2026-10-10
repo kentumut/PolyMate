@@ -18,6 +18,8 @@
       "moodle_schedule_assignment_timeline",
       "polymate_check_connections",
       "polymate_get_calendar",
+      "polymate_create_study_block",
+      "polymate_edit_study_block",
       "polymate_move_study_block"
     ]
   }
