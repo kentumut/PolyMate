@@ -39,6 +39,8 @@ import {
   type DemoProfile,
   type DemoStage,
 } from '@/lib/demo-fixtures';
+import { ChatList, CheckInNotice, CheckInSettings, useChats } from './chat-list';
+import { fetchChat, unreadCheckIns } from './chat-client';
 
 type AgentCard = { kind: 'assignments' | 'timeline' | 'schedule' | 'connections' | 'progress'; data: unknown };
 type PendingPlan = { timeline: AssignmentTimeline; expiresAt: string };
@@ -297,6 +299,9 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
   const [demoPlanStyle, setDemoPlanStyle] = useState<DemoPlanStyle>('spread');
   const [demoCoachAnswered, setDemoCoachAnswered] = useState(false);
   const [demoMemories, setDemoMemories] = useState(() => demo ? [] : demoInitialMemories(demoEpoch));
+  // Each chat is stored under its own ID; a fresh ID is a new, still empty chat.
+  const [chatId, setChatId] = useState(() => crypto.randomUUID());
+  const chats = useChats(sample);
   const nextId = useRef(0);
   const inFlight = useRef<AbortController | null>(null);
   const messagesEnd = useRef<HTMLDivElement | null>(null);
@@ -337,6 +342,35 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
     window.history.pushState(null, '', hrefFor('chat'));
     window.scrollTo({ top: 0 });
     window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
+  }
+
+  function showChatView() {
+    window.history.pushState(null, '', hrefFor('chat'));
+    window.scrollTo({ top: 0 });
+  }
+
+  async function openChat(id: string) {
+    if (busy) return;
+    setError('');
+    try {
+      const thread = await fetchChat(id);
+      setChatId(id); setCoachReply(null); setInput('');
+      setMessages(thread.messages.map(item => ({ id: ++nextId.current, role: item.role, text: item.content, cards: [] })));
+      if (thread.chat.unread) void chats.markRead(id);
+      showChatView();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'This chat could not be opened.'); }
+  }
+
+  function newChat() {
+    if (busy) return;
+    setChatId(crypto.randomUUID()); setMessages([]); setCoachReply(null); setError('');
+    showChatView();
+    window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
+  }
+
+  async function checkInNow() {
+    const id = await chats.checkInNow();
+    if (id) await openChat(id);
   }
 
   function openRecommendation(prompt: string) {
@@ -466,10 +500,10 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
     reply('The guided scenario is complete. You can inspect the resulting blocks in Calendar, the course priorities in Courses, and the saved volunteering plan in Coach.');
   }
 
-  async function sendMessage(event?: FormEvent, action?: { allowPartial: boolean } | { draftToken: string; confirmAssignmentFinished: boolean }, suppliedText?: string) {
+  async function sendMessage(event?: FormEvent, action?: { allowPartial: boolean } | { draftToken: string; confirmAssignmentFinished: boolean }, quickReply?: string) {
     event?.preventDefault();
-    if (busy || (sample && !demo) || (!action && !(suppliedText ?? input).trim())) return;
-    const studentText = (suppliedText ?? input).trim();
+    const studentText = (quickReply ?? input).trim();
+    if (busy || (sample && !demo) || (!action && !studentText)) return;
     const text = action ? ('draftToken' in action ? 'Confirm this progress change.' : action.allowPartial ? 'Add only the blocks that fit to my calendar.' : 'Add this timeline to my calendar.')
       : coachReply ? `Weekly planning question: ${coachReply.body}\n\nStudent response: ${studentText}` : studentText;
     // Bind explicit chat approval to the displayed draft, just like its button.
@@ -480,7 +514,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
       : undefined;
     const id = ++nextId.current;
     setMessages(previous => [...previous, { id, role: 'user', text: coachReply && !action ? studentText : text, cards: [] }].slice(-40) as ChatMessage[]);
-    if (!action) setInput('');
+    if (!action && quickReply === undefined) setInput('');
     // Only free-form turns can be stopped; scheduling and confirmations change the calendar and must finish.
     const controller = action || scheduleAction ? null : new AbortController();
     inFlight.current = controller;
@@ -515,7 +549,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
       }
       const response = await fetch('/api/agent/chat', {
         method: 'POST', headers, credentials: 'same-origin', cache: 'no-store',
-        body: JSON.stringify(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text }),
+        body: JSON.stringify({ ...(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text }), conversationId: chatId }),
         signal: controller?.signal,
       });
       let body: ChatResponse;
@@ -537,6 +571,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
       // The final reply is authoritative (redacted, and corrected for calendar outcomes); it replaces streamed text.
       setMessages(previous => [...previous.filter(message => message.id !== streamId), { id: streamId ?? ++nextId.current, role: 'assistant', text: body.reply, cards: body.cards ?? [] }].slice(-40) as ChatMessage[]);
       setCoachRefreshKey(value => value + 1);
+      void chats.refresh();
       setPendingPlan(body.pendingPlan ?? null);
       if (action && 'draftToken' in action) {
         const result = body.cards?.find(card => card.kind === 'progress')?.data as { receipt?: ProgressReceipt } | undefined;
@@ -575,6 +610,9 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
     inFlight.current?.abort();
   }
 
+  const activeChat = chats.chats.find(chat => chat.id === chatId);
+  const quickReplies = activeChat && !messages.some(message => message.role === 'user') ? activeChat.quickReplies : [];
+  const waitingCheckIns = unreadCheckIns(chats.chats, chatId);
   const firstName = ownerName.trim().split(/[\s@]/)[0] || 'there';
   const nextEventTime = nextEvent ? new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Zurich', weekday: 'long', hour: '2-digit', minute: '2-digit',
@@ -593,13 +631,15 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
     <main className={view === 'chat' ? 'flex h-[calc(100dvh-57px)] min-w-0 flex-1 flex-col overflow-hidden md:h-dvh' : 'min-w-0 flex-1'}>
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4 sm:px-6">
         <p className="truncate text-sm font-medium">{view === 'chat' ? <>Chat {demo && <span className="ml-2 rounded-full bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Demo</span>}</> : <>PolyMate <span className="text-muted-foreground">/ {pageTitle}</span></>}</p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {view === 'calendar' && <Button type="button" size="sm" aria-label="Add assignment" onClick={() => { setAssignmentsOpen(true); window.dispatchEvent(new Event('polymate-add-assignment')); }}><ClipboardPlus aria-hidden="true" /><span className="hidden sm:inline">Add assignment</span></Button>}
           {view === 'courses' && <Button asChild size="sm" variant="outline"><a href={hrefFor('planner')} aria-label="Open semester plan" onClick={event => navigate(event, 'planner')}><GraduationCap aria-hidden="true" /><span className="hidden sm:inline">Semester plan</span></a></Button>}
           {view === 'planner' && <Button asChild size="sm" variant="ghost"><a href={hrefFor('courses')} aria-label="Back to courses" onClick={event => navigate(event, 'courses')}><ArrowLeft aria-hidden="true" /><span className="hidden sm:inline">Courses</span></a></Button>}
+          {!demo && <ChatList chats={chats.chats} activeChatId={chatId} disabled={busy} onOpen={chat => void openChat(chat.id)} onNew={newChat} />}
           <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswered}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
         </div>
       </header>
+      {!demo && view !== 'chat' && <CheckInNotice chats={waitingCheckIns} floating disabled={busy} onOpen={chat => void openChat(chat.id)} />}
 
       <div className={view === 'chat' ? 'min-h-0 flex-1' : 'mx-auto w-full max-w-7xl px-4 py-8 sm:px-7 md:px-10 md:py-10 lg:px-12'}>
         {view !== 'chat' && <header className="mb-8">
@@ -645,6 +685,9 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
                   {message.role === 'assistant' ? <MessageContent text={message.text} /> : <p className="whitespace-pre-wrap text-sm leading-6">{message.text}</p>}
                   {message.role === 'assistant' && <OtherCards cards={message.cards} busy={busy} confirmed={confirmedProgress} onConfirm={(draftToken, confirmAssignmentFinished) => void sendMessage(undefined, { draftToken, confirmAssignmentFinished })} />}
                 </article>)}
+                {!demo && quickReplies.length > 0 && !busy && <div className="flex flex-wrap gap-2" aria-label="Suggested replies">
+                  {quickReplies.map(reply => <button key={reply} type="button" onClick={() => void sendMessage(undefined, undefined, reply)} className="rounded-full border bg-card px-3.5 py-1.5 text-sm shadow-sm transition-colors hover:bg-accent">{reply}</button>)}
+                </div>}
                 {busy && streamingId === null && <p className="text-sm text-muted-foreground" role="status">{status}</p>}
                 {pendingPlan && <TimelinePreview plan={pendingPlan} onSchedule={allowPartial => void sendMessage(undefined, { allowPartial })} busy={busy} />}
                 <div ref={messagesEnd} />
@@ -657,6 +700,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
               {demoOnboarding ? <p className="text-center text-xs text-muted-foreground">Choose one option in each group to start. Nothing connects to an external account.</p> : <>
               {error && <p className="mb-2 text-sm text-destructive" role="alert">{error}</p>}
               {demo && <DemoGuide stage={demoStage} busy={busy} onRun={prompt => void sendMessage(undefined, undefined, prompt)} onApprove={() => void sendMessage(undefined, { allowPartial: false })} onOpenCalendar={() => { window.history.pushState(null, '', hrefFor('calendar')); window.scrollTo({ top: 0 }); }} />}
+              {!demo && view === 'chat' && waitingCheckIns.length > 0 && <div className="mb-2"><CheckInNotice chats={waitingCheckIns} floating={false} disabled={busy} onOpen={chat => void openChat(chat.id)} /></div>}
               {coachReply && <div className="mb-2 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40"><div><p className="text-xs font-medium text-amber-800 dark:text-amber-300">Answering your coach</p><p className="mt-1">{coachReply.body}</p></div><button type="button" onClick={() => setCoachReply(null)} className="shrink-0 text-xs underline">Cancel</button></div>}
               <form onSubmit={event => void sendMessage(event)} className="relative rounded-2xl border bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/30">
                 <label htmlFor="agent-message" className="sr-only">Message PolyMate</label>
@@ -678,6 +722,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
         <section aria-label="Settings" className={view === 'settings' ? 'grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]' : 'hidden'}>
           <MoodleConnection />
           <div className="space-y-5">
+            {!sample && <CheckInSettings paused={chats.checkInsPaused} error={chats.error} disabled={busy} onPause={paused => void chats.setPaused(paused)} onCheckInNow={() => void checkInNow()} />}
             <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-lg font-medium">Google Calendar</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Connect your primary calendar so PolyMate can protect existing commitments while it plans. Personal events remain read-only.</p><GoogleConnection demo={demo} /></section>
             <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-sm font-medium">Your study space</h2><dl className="mt-4 space-y-4 text-sm"><div><dt className="text-xs text-muted-foreground">Signed in as</dt><dd className="mt-1 break-words">{ownerName}</dd></div><div><dt className="text-xs text-muted-foreground">Calendar timezone</dt><dd className="mt-1">Europe/Zurich</dd></div></dl></section>
           </div>

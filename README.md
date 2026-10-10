@@ -16,6 +16,7 @@ An AI study companion for ETH students with a weekly calendar, Moodle calendar s
 - [Iteration 2 planner implementation](docs/ITERATION_2_HANDOFF.md)
 - [Full project overview](docs/README.md)
 - [Moodle calendar subscriptions and study planning](docs/MOODLE_AI_INTEGRATION.md)
+- [Proactive check-in chats](docs/PROACTIVE_CHATS_HANDOFF.md)
 
 ## Roadmap: remaining iterations
 
