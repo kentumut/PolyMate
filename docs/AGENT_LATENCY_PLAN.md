@@ -81,18 +81,32 @@ This sends six read-only prompts (small talk, connections, Moodle, calendar, pro
 | `promptTokens` jumps turn over turn while `historyChars` stays capped | H4 | Step 1 (send history once) |
 | `clientMs` much larger than `totalMs` | Network or Next.js overhead outside the turn | Check the VM proxy |
 
+## Findings: first local run (10 October)
+
+Two benchmark runs on a local machine (6 prompts × 3 runs each, OpenClaw 2026.9.9, `openai/gpt-5.6-terra`); see the [results log](#results-log). Three runs per prompt is a small sample: compare medians, not single turns.
+
+- **The model is the bottleneck, not the tools (H6 rejected).** Tools take 2% of turn time: Moodle and progress reads take milliseconds, the calendar read about 0.2 s, and the timeline planner about 0.4 s. All the rest is model time.
+- **Round trips are the cost (H1 confirmed).** One model step takes about 2.7 s at p50 and 5 s at p90. A turn with no tools takes about 1.4 s, a turn with one tool 4–5 s, and the plan prompt (two tools, three steps) 12–18 s. The plan prompt's first two steps are the longest (4–8 s each), because the model reasons about the work and availability arguments.
+- **Failed tool calls add extra round trips.** The OpenClaw log shows two causes, each costing a full extra step:
+  - `polymate_get_calendar` is called with dates in the wrong format (`from must be an ISO timestamp with a timezone offset`). Its tool definition declares `from`/`to` only as `string`, without a format or example.
+  - The model tries to call tools in parallel and our one-tool-at-a-time lock rejects it (`Wait for the current tool to finish before starting another`), so it retries one at a time.
+- **Prompt caching works (H3 not supported).** Each model call carries about 15k prompt tokens, about 95% cached. Our own request is only about 3k tokens; OpenClaw adds the rest (tool definitions and its own instructions). Moving the timestamp is therefore low priority.
+- **No duplicated history observed (H4 not supported).** Prompt tokens per step did not grow across turns while our history went from 2 to 12 messages.
+- **Reasoning level does not help (H7, partly).** `minimal` vs. `low` changed neither the step time nor the reasoning tokens noticeably. A faster model is the remaining H7 experiment.
+- The usage reported for turns with no tool calls looks wrong (3 prompt tokens), so do not rely on token counts for those turns.
+
 ## Plan
 
-Ordered by effort against the 10:00 feature freeze on Sunday 11 October. Each step is measured with `pnpm agent:latency` before and after, using the same prompts and runs.
+Ordered by expected gain per hour against the 10:00 feature freeze on Sunday 11 October, updated after the [first findings](#findings-first-local-run-10-october). Measure each step with `pnpm agent:latency` before and after, using the same prompts and runs.
 
-1. **Measure (done in this change).** Telemetry, `Server-Timing`, the benchmark, and this plan. *Kent:* run `baseline` locally and on the VM and fill in the results log.
-2. **Configuration only, no code.** *Kent:* A/B `POLYMATE_LLM_THINKING` (`low` → `minimal`) and, if per-step time is high, one faster OpenAI model. Before adopting a change, re-run the consent and planning journey in [LOCAL_AI_TESTING.md](LOCAL_AI_TESTING.md): a faster model must not skip consent rules or invent deadlines.
-3. **Small prompt changes.** *Dogancem* (already on the 3a roadmap):
-   - Move `Current time` out of the system message into the final user message, rounded to the minute, so the instructions and history stay cacheable (H3).
-   - Check whether OpenClaw keeps a transcript per `x-openclaw-session-key`. If it does, stop sending our own history, or send a fresh session key per turn (H4).
-   - Shorten the instructions and stop repeating timeline times as prose.
-4. **Fewer round trips** (if the logs show H1/H5). Put a compact per-student snapshot (connections, upcoming Moodle items, next-7-day busy times) into the first message, cached for about 60 seconds, so the model can skip 1–2 tool calls. Allow read-only tools to run in parallel. Owner to be agreed after step 1's numbers.
-5. **Streaming (stretch, likely after the freeze).** Stream the reply and a status line per tool ("Reading Moodle…") to the chat. This complements Yildirim's rotating status words. It touches the gateway call, the route, and the chat UI, so it should only start with a clear measurement and a passing gate.
+1. **Measure (done).** Telemetry, `Server-Timing`, the benchmark, and this plan. *Kent:* repeat the baseline on the VM and add it to the results log.
+2. **Stop failed tool calls (small, saves one step of about 2–3 s whenever it happens).** State the expected format in the tool definitions, e.g. `from`/`to`: "ISO 8601 with offset, e.g. 2026-10-12T00:00:00+02:00", and the same for `startAt`/`endAt` in the other tools. Then regenerate the plugin's tool definitions (`pnpm agent:sync-openclaw-tools`).
+3. **Allow parallel read-only tools (medium, saves one step when the model fetches Moodle and the calendar together).** Let read-only tools (`polymate_check_connections`, `moodle_get_calendar_events`, `polymate_get_calendar`, `polymate_get_study_progress`) run concurrently. Keep writes one at a time and keep the per-turn tool limit.
+4. **Fewer round trips for planning (medium).** Put a compact per-student snapshot (connections, upcoming Moodle items) into the first message, cached for about 60 seconds, so the plan prompt can skip `moodle_get_calendar_events` and go straight to `moodle_plan_assignment_timeline`. Shorter instructions and no timeline times repeated as prose (*Dogancem*, already on the roadmap) also shorten the final step.
+5. **Faster model (configuration only).** A/B one faster OpenAI model against `gpt-5.6-terra` with `--label model-<id>`. Before adopting it, re-run the consent and planning journey in [LOCAL_AI_TESTING.md](LOCAL_AI_TESTING.md): a faster model must not skip consent rules or invent deadlines. Keep thinking at `low`; `minimal` did not help.
+6. **Streaming (stretch, likely after the freeze).** Stream the reply and a status line per tool ("Reading Moodle…") to the chat. It does not change total time but shows progress during the 12–18 s planning turns. Complements Yildirim's rotating status words.
+
+Not planned: moving the timestamp out of the system message, and history deduplication. The first run showed caching works and history does not grow.
 
 *Catalin:* use `pnpm agent:latency` for the before/after comparison in the 3a gate.
 
@@ -102,4 +116,5 @@ Fill in one row per run. "Plan p50" is the `plan` prompt; "Model step p50" is fr
 
 | Date | Where | Label / change | Runs | Plan p50 total | Plan p50 tool calls | Model step p50 | Tool time share | Notes |
 |---|---|---|---|---|---|---|---|---|
-| | | baseline | | | | | | |
+| 2026-10-10 | Local (MacBook, `gpt-5.6-terra`) | baseline, thinking `low` | 3 | 14.9 s (12.3–17.9) | 2 (3 model steps) | 2.7 s | 2% | Small talk 1.4 s. Single-tool prompts 4.2–5.4 s. |
+| 2026-10-10 | Local (MacBook, `gpt-5.6-terra`) | thinking `minimal` | 3 | 13.0 s (10.7–16.8) | 2 (3–4 model steps) | 2.6 s | 2% | Within noise of `low`; reasoning tokens barely changed; more failed calendar calls. Not adopted. |
