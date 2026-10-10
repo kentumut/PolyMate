@@ -76,6 +76,12 @@ export class ContractError extends Error {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const OFFSET_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/;
+/** JSON Schema for tool arguments parsed by parseInstant; spelling out the format avoids a failed call and a retry. */
+export const OFFSET_INSTANT_SCHEMA = {
+  type: 'string',
+  pattern: OFFSET_INSTANT.source,
+  description: 'ISO 8601 date and time with a timezone offset, e.g. 2026-10-12T14:00:00+02:00 (Europe/Zurich). Dates without a time or offset are rejected.',
+} as const;
 const EVENT_ID = /^[A-Za-z0-9_-]{1,1024}$/;
 const MINUTE = 60_000;
 
