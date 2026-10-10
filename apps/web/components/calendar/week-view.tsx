@@ -2,7 +2,7 @@
 
 import type { CalendarEvent } from '@polymate/contracts/calendar';
 import { shiftWeek, weekRange, zonedDateKey, type DateRange } from '@polymate/contracts/time';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   allDayEventsFor, eventLabel, formatTime, formatWeekLabel, nowOffset, placeDayEvents, visibleHours, weekDays, type PlacedEvent,
 } from './week-layout';
@@ -24,9 +24,14 @@ export type WeekViewProps = {
 
 const HOUR_HEIGHT = 56;
 const COLUMNS = 'grid-cols-[48px_1fr] md:grid-cols-[48px_repeat(7,minmax(0,1fr))]';
+const subscribeToHydration = () => () => {};
+const clientHydrated = () => true;
+const serverHydrated = () => false;
 
 /** Prop-driven Monday–Sunday week in Europe/Zurich. Data loading and forms live outside. */
 export function WeekView({ range, events, loading = false, error, notice, selectedId, now: nowProp, onSelect, onRangeChange, onRetry }: WeekViewProps) {
+  // The server and browser clocks can differ; reveal live time markers after hydration.
+  const hydrated = useSyncExternalStore(subscribeToHydration, clientHydrated, serverHydrated);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     if (nowProp) return;
@@ -37,7 +42,7 @@ export function WeekView({ range, events, loading = false, error, notice, select
   const days = useMemo(() => weekDays(range), [range]);
   const hours = useMemo(() => visibleHours(events, days), [events, days]);
   const todayKey = zonedDateKey(current);
-  const todayIndex = days.findIndex(day => day.key === todayKey);
+  const todayIndex = nowProp || hydrated ? days.findIndex(day => day.key === todayKey) : -1;
   const [focusedDay, setFocusedDay] = useState<number | null>(null);
   const mobileDay = focusedDay ?? (todayIndex >= 0 ? todayIndex : 0);
   const hasAllDay = events.some(event => event.allDay);
@@ -104,7 +109,7 @@ export function WeekView({ range, events, loading = false, error, notice, select
         </div>
         {days.map((day, index) => {
           const placed = placeDayEvents(events, day, hours);
-          const nowAt = nowOffset(current, day, hours);
+          const nowAt = nowProp || hydrated ? nowOffset(current, day, hours) : null;
           return <div key={day.key} role="group" aria-label={day.weekday + ' ' + day.dayOfMonth}
             className={`relative border-l border-[#edf0eb] ${index === todayIndex ? 'bg-[#fafcf8]' : ''} ${index === mobileDay ? '' : 'hidden md:block'}`}
             style={{ height: hourCount * HOUR_HEIGHT, backgroundImage: `repeating-linear-gradient(to bottom, #edf0eb 0 1px, transparent 1px ${HOUR_HEIGHT}px)` }}>
