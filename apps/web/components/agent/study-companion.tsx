@@ -6,12 +6,11 @@ import { currentPlanApproval } from '@polymate/core/agent/contracts';
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
 import type { CalendarEvent } from '@polymate/contracts/calendar';
 import type { OnboardingProfile, OnboardingState } from '@polymate/contracts/onboarding';
-import { ArrowLeft, ArrowUp, Check, ClipboardPlus, GraduationCap, RotateCcw, Sparkles, Square } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Check, GraduationCap, RotateCcw, Sparkles, Square } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CalendarStudyWorkflow } from '@/components/study/calendar-study-workflow';
-import { AssignmentsPanel } from '@/components/study/assignments-panel';
 import { GoogleConnection } from '@/components/connections/google-connection';
 import { MoodleConnection } from '@/components/connections/moodle-connection';
 import { MoodleCalendarPreview } from '@/components/connections/moodle-calendar-preview';
@@ -25,9 +24,11 @@ import { CoursesPanel } from '@/components/study/courses-panel';
 import { Button } from '@/components/ui/button';
 import {
   DEMO_COURSES,
+  DEMO_ASSIGNMENT_CAPTURE_PROMPT,
   DEMO_ONBOARDING_OPTIONS,
   DEMO_PROMPTS,
   demoAssignment,
+  demoCapturedAssignment,
   demoCoachingState,
   demoCommitmentMemory,
   demoInitialMemories,
@@ -41,7 +42,7 @@ import {
   type DemoProfile,
   type DemoStage,
 } from '@/lib/demo-fixtures';
-import { CheckInNotice, CheckInSettings, useChats } from './chat-list';
+import { ChatHistoryRail, CheckInNotice, CheckInSettings, useChats } from './chat-list';
 import { fetchChat, unreadCheckIns } from './chat-client';
 
 type AgentCard = { kind: 'assignments' | 'timeline' | 'schedule' | 'connections' | 'progress'; data: unknown };
@@ -57,6 +58,7 @@ const TOOL_STATUS: Record<string, string> = {
   moodle_plan_assignment_timeline: 'Drafting your timeline…',
   moodle_schedule_assignment_timeline: 'Adding blocks to your calendar…',
   polymate_check_connections: 'Checking your connections…',
+  polymate_create_assignment: 'Saving your assignment…',
   polymate_get_calendar: 'Looking at your calendar…',
   polymate_create_study_block: 'Updating your calendar…',
   polymate_edit_study_block: 'Updating your calendar…',
@@ -256,7 +258,7 @@ function decisionsFor(stage: DemoStage): DemoDecision[] {
   return [];
 }
 
-function DemoGuide({ stage, busy, onRun, onApprove, onOpenCalendar }: { stage: DemoStage; busy: boolean; onRun: (prompt: string) => void; onApprove: () => void; onOpenCalendar: () => void }) {
+function DemoGuide({ stage, busy, coachOutstanding, onRun, onApprove, onOpenCalendar, onOpenCourses, onDescribeAssignment, onOpenCoach }: { stage: DemoStage; busy: boolean; coachOutstanding: number; onRun: (prompt: string) => void; onApprove: () => void; onOpenCalendar: () => void; onOpenCourses: () => void; onDescribeAssignment: () => void; onOpenCoach: () => void }) {
   const index = stage === 'complete' ? demoStages.length : demoStages.findIndex(item => item.id === stage);
   const decisions = decisionsFor(stage);
   return <section className="mb-3 rounded-xl border bg-muted/45 p-3" aria-label="Guided chat demo">
@@ -265,6 +267,11 @@ function DemoGuide({ stage, busy, onRun, onApprove, onOpenCalendar }: { stage: D
       <ol className="flex items-center gap-1.5" aria-label={`Demo progress, ${Math.min(index + 1, demoStages.length)} of ${demoStages.length}`}>
         {demoStages.map((item, itemIndex) => <li key={item.id} title={item.label} className={`h-1.5 w-7 rounded-full ${itemIndex < index ? 'bg-primary' : itemIndex === index ? 'bg-amber-500' : 'bg-border'}`}><span className="sr-only">{item.label}</span></li>)}
       </ol>
+    </div>
+    <div className="mt-3 grid gap-2 sm:grid-cols-3" aria-label="Demo setup and coaching skills">
+      <button type="button" onClick={onOpenCourses} className="rounded-lg border bg-background px-3 py-2 text-left text-xs font-medium hover:bg-accent">Add a course</button>
+      <button type="button" onClick={onDescribeAssignment} className="rounded-lg border bg-background px-3 py-2 text-left text-xs font-medium hover:bg-accent">Describe an assignment</button>
+      <button type="button" onClick={onOpenCoach} className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left text-xs font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"><span>Coach check-ins</span><span className="rounded-full bg-amber-200 px-1.5 py-0.5 tabular-nums dark:bg-amber-800">{coachOutstanding}</span></button>
     </div>
     {decisions.length > 0 && <div className="mt-3 grid grid-cols-2 gap-2">{decisions.map(decision => <button key={decision.label} type="button" disabled={busy} onClick={() => decision.approve ? onApprove() : onRun(decision.prompt!)} className="rounded-lg border bg-background p-2.5 text-left transition-colors hover:bg-accent disabled:opacity-50"><span className="block text-xs font-semibold sm:text-sm">{decision.label}</span><span className="mt-1 hidden text-xs text-muted-foreground sm:block">{decision.description}</span></button>)}</div>}
     {stage === 'approve' && <p className="mt-2 text-xs text-muted-foreground">Only the approval choice writes to the calendar. The explanation choice leaves the draft untouched.</p>}
@@ -295,12 +302,11 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
   const [coachRefreshKey, setCoachRefreshKey] = useState(0);
   const [coachOutstanding, setCoachOutstanding] = useState(0);
   const [nextEvent, setNextEvent] = useState<CalendarEvent | null>(null);
-  const [assignmentsOpen, setAssignmentsOpen] = useState(false);
   const [demoStage, setDemoStage] = useState<DemoStage>(demo ? 'onboarding' : 'brief');
   const [demoProfile, setDemoProfile] = useState<DemoProfile | null>(null);
   const [demoCommitment, setDemoCommitment] = useState<DemoCommitment>('volunteering');
   const [demoPlanStyle, setDemoPlanStyle] = useState<DemoPlanStyle>('spread');
-  const [demoCoachAnswered, setDemoCoachAnswered] = useState(false);
+  const [demoCoachAnswers, setDemoCoachAnswers] = useState(0);
   const [demoMemories, setDemoMemories] = useState(() => demo ? [] : demoInitialMemories(demoEpoch));
   const [onboardingStatus, setOnboardingStatus] = useState<'loading' | 'required' | 'complete' | 'error'>(demo || sample ? 'complete' : development ? 'required' : 'loading');
   const [onboardingBusy, setOnboardingBusy] = useState(false);
@@ -453,6 +459,15 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
 
     const profile = demoProfile ?? { goal: 'deadline', sessionMinutes: 50, coachCadence: 'weekly' } as const;
 
+    if (/\badd an assignment\b/i.test(text) && /computer vision exercise sheet 4/i.test(text)) {
+      if (!workspace) { reply('The demo assignment store is not available. Reload the demo and try again.'); return; }
+      const input = demoCapturedAssignment(demoEpoch);
+      const saved = await workspace.assignmentSource.client.createAssignment(input);
+      workspace.assignmentSaved(saved);
+      reply(`I understood the assignment without a form and saved it:\n\n- **${saved.title}**\n- Due **next Thursday at 18:00 (Europe/Zurich)**\n- **${saved.estimatedMinutes} minutes** estimated effort\n\nIn the live product, I ask only for details that are missing.`);
+      return;
+    }
+
     if (demoStage === 'brief') {
       const course = DEMO_COURSES[0];
       const examLens = /exam/i.test(text) || profile.goal === 'exam';
@@ -578,7 +593,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
             validUntil: range.to, createdAt: demoEpoch,
           }]);
           setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: 'Thanks — I marked the coaching question answered and saved that response as context for this week. The guided demo can continue from the same step.', cards: [] }].slice(-40) as ChatMessage[]);
-          setDemoCoachAnswered(true);
+          setDemoCoachAnswers(value => value + 1);
           setCoachReply(null);
           setCoachRefreshKey(value => value + 1);
           return;
@@ -665,12 +680,12 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
     timeZone: 'Europe/Zurich', weekday: 'long', hour: '2-digit', minute: '2-digit',
   }).format(new Date(nextEvent.startAt)) : null;
   const pageTitle = view === 'calendar' ? 'Calendar' : view === 'courses' ? 'Courses' : view === 'planner' ? 'Semester plan' : 'Settings';
-  const pageDescription = view === 'calendar' ? 'Your week, deadlines, and study blocks in one place.'
-    : view === 'courses' ? 'Workload, exam scope, and preparation priorities for each course.'
+  const pageDescription = view === 'calendar' ? 'Your scheduled study blocks and connected calendar events.'
+    : view === 'courses' ? 'Course workload, assignments, and exam preparation priorities.'
       : view === 'planner' ? 'Choose courses that fit your major, minor, and graduation path.'
       : 'Connections and preferences for your study space.';
   const demoRange = demo ? demoWeekRange(demoEpoch) : null;
-  const demoCoach = demo ? demoCoachingState(demoEpoch, demoMemories, demoProfile?.coachCadence === 'proactive', demoCoachAnswered) : undefined;
+  const demoCoach = demo ? demoCoachingState(demoEpoch, demoMemories, demoProfile?.coachCadence === 'proactive', demoCoachAnswers) : undefined;
   const demoOnboarding = demo && demoStage === 'onboarding';
   const studentOnboarding = !demo && !sample && onboardingStatus !== 'complete';
   const onboardingActive = demoOnboarding;
@@ -690,10 +705,10 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4 sm:px-6">
         <p className="truncate text-sm font-medium">{view === 'chat' ? <>Chat {demo && <span className="ml-2 rounded-full bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Demo</span>}</> : <>PolyMate <span className="text-muted-foreground">/ {pageTitle}</span></>}</p>
         <div className="flex items-center gap-1">
-          {view === 'calendar' && <Button type="button" size="sm" aria-label="Add assignment" onClick={() => { setAssignmentsOpen(true); window.dispatchEvent(new Event('polymate-add-assignment')); }}><ClipboardPlus aria-hidden="true" /><span className="hidden sm:inline">Add assignment</span></Button>}
+          <span className="mr-1 hidden rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground sm:inline" title="All dates and times use the fixed Europe/Zurich timezone">Europe/Zurich</span>
           {view === 'courses' && <Button asChild size="sm" variant="outline"><a href={hrefFor('planner')} aria-label="Open semester plan" onClick={event => navigate(event, 'planner')}><GraduationCap aria-hidden="true" /><span className="hidden sm:inline">Semester plan</span></a></Button>}
           {view === 'planner' && <Button asChild size="sm" variant="ghost"><a href={hrefFor('courses')} aria-label="Back to courses" onClick={event => navigate(event, 'courses')}><ArrowLeft aria-hidden="true" /><span className="hidden sm:inline">Courses</span></a></Button>}
-          <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswered}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} chats={demo ? [] : chats.chats} activeChatId={chatId} disabled={busy} onOpenChat={demo ? undefined : chat => void openChat(chat.id)} onNewChat={demo ? undefined : newChat} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
+          <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswers}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
         </div>
       </header>
       {!demo && view !== 'chat' && <CheckInNotice chats={waitingCheckIns} floating disabled={busy} onOpen={chat => void openChat(chat.id)} />}
@@ -705,25 +720,21 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
         </header>}
 
         {/* Keep panels mounted so navigation preserves drafts, forms, and calendar state. */}
-        <section aria-label="Calendar" className={view === 'calendar' ? 'space-y-5' : 'hidden'}>
+        <section aria-label="Calendar" className={view === 'calendar' ? 'block' : 'hidden'}>
           <div className="min-w-0"><CalendarStudyWorkflow sample={sample} demo={demo} externalReloadKey={reloadKey} initialDate={demoRange?.from} /></div>
-          <details open={assignmentsOpen} onToggle={event => setAssignmentsOpen(event.currentTarget.open)} className="group rounded-xl border bg-card shadow-sm">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 text-sm font-medium [&::-webkit-details-marker]:hidden">
-              <span>Assignments <span className="ml-2 hidden font-normal text-muted-foreground sm:inline">Deadlines and effort estimates</span></span>
-              <span className="text-xl leading-none text-muted-foreground transition-transform group-open:rotate-45" aria-hidden="true">+</span>
-            </summary>
-            <div className="border-t [&>section]:border-0 [&>section]:bg-transparent"><AssignmentsPanel sample={sample} onCalendarChange={() => setReloadKey(value => value + 1)} /></div>
-          </details>
-          {sample && <p className="text-xs text-muted-foreground">{demo ? 'Guided demo calendar. Changes stay in this browser and reset on reload.' : 'Development sample calendar. Changes stay in memory.'}</p>}
         </section>
 
-        <section aria-label="Courses" className={view === 'courses' ? 'block' : 'hidden'}><CoursesPanel sample={sample} /></section>
+        <section aria-label="Courses" className={view === 'courses' ? 'space-y-6' : 'hidden'}>
+          <CoursesPanel sample={sample} demo={demo} onAddAssignment={() => openRecommendation(demo ? DEMO_ASSIGNMENT_CAPTURE_PROMPT : 'I want to add an assignment (use Europe/Zurich time): ')} />
+        </section>
 
         <section aria-label="Semester planning" className={view === 'planner' ? '' : 'hidden'}>
           <SemesterPlanner sample={sample} onRecommend={openRecommendation} />
         </section>
 
-        <section aria-labelledby="study-chat-title" className={view === 'chat' ? 'flex h-full min-h-0 flex-col' : 'hidden'}>
+        <div className={view === 'chat' ? 'flex h-full min-h-0 flex-col md:flex-row' : 'hidden'}>
+          <ChatHistoryRail chats={demo ? [] : chats.chats} activeChatId={chatId} demo={demo} disabled={busy || demo} onOpenChat={chat => void openChat(chat.id)} onNewChat={newChat} />
+        <section aria-labelledby="study-chat-title" className="flex min-h-0 min-w-0 flex-1 flex-col">
           <h2 id="study-chat-title" className="sr-only">Plan with PolyMate</h2>
           <div className="min-h-0 flex-1 overflow-y-auto" aria-live="polite" aria-relevant="additions text">
             <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 pb-8 pt-6 sm:px-6">
@@ -756,7 +767,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
             <div className="mx-auto max-w-3xl">
               {onboardingActive ? <p className="text-center text-xs text-muted-foreground">Choose one option in each group to continue.</p> : <>
               {error && <p className="mb-2 text-sm text-destructive" role="alert">{error}</p>}
-              {demo && <DemoGuide stage={demoStage} busy={busy} onRun={prompt => void sendMessage(undefined, undefined, prompt)} onApprove={() => void sendMessage(undefined, { allowPartial: false })} onOpenCalendar={() => { window.history.pushState(null, '', hrefFor('calendar')); window.scrollTo({ top: 0 }); }} />}
+              {demo && <DemoGuide stage={demoStage} busy={busy} coachOutstanding={coachOutstanding} onRun={prompt => void sendMessage(undefined, undefined, prompt)} onApprove={() => void sendMessage(undefined, { allowPartial: false })} onOpenCalendar={() => { window.history.pushState(null, '', hrefFor('calendar')); window.scrollTo({ top: 0 }); }} onOpenCourses={() => { window.history.pushState(null, '', hrefFor('courses')); window.scrollTo({ top: 0 }); }} onDescribeAssignment={() => openRecommendation(DEMO_ASSIGNMENT_CAPTURE_PROMPT)} onOpenCoach={() => document.getElementById('coach-notifications-trigger')?.click()} />}
               {!demo && view === 'chat' && waitingCheckIns.length > 0 && <div className="mb-2"><CheckInNotice chats={waitingCheckIns} floating={false} disabled={busy} onOpen={chat => void openChat(chat.id)} /></div>}
               {coachReply && <div className="mb-2 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40"><div><p className="text-xs font-medium text-amber-800 dark:text-amber-300">Answering your coach</p><p className="mt-1">{coachReply.body}</p></div><button type="button" onClick={() => setCoachReply(null)} className="shrink-0 text-xs underline">Cancel</button></div>}
               <form onSubmit={event => void sendMessage(event)} className="relative rounded-2xl border bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/30">
@@ -775,6 +786,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
             </div>
           </div>
         </section>
+        </div>
 
         <section aria-label="Settings" className={view === 'settings' ? 'grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]' : 'hidden'}>
           <MoodleConnection />

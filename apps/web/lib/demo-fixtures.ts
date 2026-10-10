@@ -1,4 +1,4 @@
-import type { Assignment } from '@polymate/contracts/assignments';
+import type { Assignment, AssignmentInput } from '@polymate/contracts/assignments';
 import type { CalendarEvent, OperationResult } from '@polymate/contracts/calendar';
 import type { CoachingState, StudentMemory } from '@polymate/contracts/coaching';
 import type { Course } from '@polymate/contracts/courses';
@@ -30,10 +30,12 @@ export const DEMO_ONBOARDING_OPTIONS = {
     { value: 30 as const, label: '30-minute sprints', description: 'More short sessions with breaks.' },
   ],
   coachCadence: [
-    { value: 'proactive' as const, label: 'Flag risks early', description: 'Coach asks when a decision needs you.' },
-    { value: 'weekly' as const, label: 'Weekly summary only', description: 'Keep coaching quiet unless requested.' },
+    { value: 'proactive' as const, label: 'Frequent check-ins', description: 'Follow up on risks, workload, and recent study sessions.' },
+    { value: 'weekly' as const, label: 'Weekly check-in', description: 'Use one structured planning review each week.' },
   ],
 } as const;
+
+export const DEMO_ASSIGNMENT_CAPTURE_PROMPT = 'I want to add an assignment: Computer Vision exercise sheet 4 is due next Thursday at 18:00 and should take about 3 hours. Use Zurich time.';
 
 export const DEMO_PROMPTS: Record<Exclude<DemoStage, 'onboarding' | 'approve' | 'complete'>, string> = {
   brief: 'What should I focus on this week?',
@@ -117,6 +119,11 @@ export function demoAssignment(now: Date | string): Assignment {
     status: 'open',
     version: 1,
   };
+}
+
+export function demoCapturedAssignment(now: Date | string): AssignmentInput {
+  const range = nextDemoWeek(now);
+  return { title: 'Computer Vision exercise sheet 4', dueAt: at(range, 3, 18), estimatedMinutes: 180 };
 }
 
 export function demoMoodleSnapshot(now: Date | string): MoodleSnapshot {
@@ -210,22 +217,31 @@ export function demoCommitmentMemory(now: Date | string, commitment: DemoCommitm
   };
 }
 
-export function demoCoachingState(now: Date | string, memories: StudentMemory[], proactive = false, answered = false): CoachingState {
+export function demoCoachingState(now: Date | string, memories: StudentMemory[], proactive = false, answeredCount = 0): CoachingState {
   const range = nextDemoWeek(now);
+  const checkIns = [{
+    id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+    kind: 'weekly_question' as const,
+    title: 'Confirm this week’s pressure point',
+    body: 'Is the Algorithms deadline still the priority, or has something changed?',
+    questionKey: 'priority',
+  }, ...(proactive ? [{
+    id: 'abababab-abab-4bab-8bab-abababababab',
+    kind: 'follow_up' as const,
+    title: 'Check the workload estimate',
+    body: 'Does 150 minutes still feel realistic after your latest exercise session?',
+    questionKey: 'effort',
+  }] : [])];
   return {
     currentWeekStart: range.from.slice(0, 10),
-    messages: [...(proactive ? [{
-      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
-      kind: 'weekly_question' as const,
-      title: 'Confirm this week’s pressure point',
-      body: 'Is the Algorithms deadline still the priority, or has something changed?',
+    messages: [...checkIns.map((item, index) => ({
+      ...item,
       requiresResponse: true,
-      status: answered ? 'responded' as const : 'unread' as const,
+      status: index < answeredCount ? 'responded' as const : 'unread' as const,
       weekStart: range.from.slice(0, 10),
-      questionKey: 'priority',
       createdAt: typeof now === 'string' ? now : now.toISOString(),
-      respondedAt: answered ? typeof now === 'string' ? now : now.toISOString() : null,
-    }] : []), {
+      respondedAt: index < answeredCount ? typeof now === 'string' ? now : now.toISOString() : null,
+    })), {
       id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
       kind: 'digest',
       title: 'Your weekly plan is ready to shape',
