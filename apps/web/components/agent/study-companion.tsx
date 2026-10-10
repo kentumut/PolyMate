@@ -211,7 +211,11 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
         {error && <p className="mb-3 text-sm text-[#9e3e38]" role="alert">{error}</p>}
         <form onSubmit={event => void sendMessage(event)} className="flex items-end gap-2 border-t border-[#e5eae4] pt-4">
           <label htmlFor="agent-message" className="sr-only">Message PolyMate</label>
-          <textarea id="agent-message" value={input} onChange={event => setInput(event.target.value)} maxLength={4000} rows={2} disabled={busy} placeholder="Ask about course dates, effort, or when you are free…" className="min-h-12 flex-1 resize-y rounded-xl border border-[#cbd7ce] px-3 py-2 text-sm outline-none focus:border-[#658071] disabled:opacity-60" />
+          <textarea id="agent-message" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => {
+            if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            void sendMessage();
+          }} maxLength={4000} rows={2} disabled={busy} placeholder="Ask about course dates, effort, or when you are free…" className="min-h-12 flex-1 resize-y rounded-xl border border-[#cbd7ce] px-3 py-2 text-sm outline-none focus:border-[#658071] disabled:opacity-60" />
           <button disabled={busy || !input.trim()} className="rounded-xl bg-[#173b32] px-4 py-3 text-sm font-medium text-white disabled:opacity-50">Send</button>
         </form>
         <p className="mt-3 text-center text-xs text-[#748278]">Your plan. Your approval. Your calendar.</p>
