@@ -11,6 +11,7 @@ import {
   demoMoodleSnapshot,
   demoMovedBlock,
   demoTimeline,
+  demoTradeoffExplanation,
   demoVolunteerMemory,
   demoWeekRange,
 } from '../apps/web/lib/demo-fixtures';
@@ -62,6 +63,19 @@ describe('guided chat demo', () => {
     expect(timeline.blocks.every(block => busy.every(event => !overlaps(block, event)))).toBe(true);
     expect(wednesday).toHaveLength(0);
     expect(volunteering.validUntil).toBe(range.to);
+  });
+
+  it('explains the actual draft trade-off without implying a calendar write', () => {
+    const explanation = demoTradeoffExplanation(demoTimeline(NOW), {
+      sessionMinutes: 50,
+      style: 'spread',
+      commitment: 'volunteering',
+    });
+
+    expect(explanation).toContain('Monday 16:00');
+    expect(explanation).toContain('Wednesday volunteering');
+    expect(explanation).toContain('less buffer if a later session slips');
+    expect(explanation).toContain('calendar is still unchanged');
   });
 
   it('offers complete onboarding choices and a response-required proactive coach', () => {
