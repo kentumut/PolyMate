@@ -32,10 +32,12 @@ Enable the OpenAI-compatible chat-completions endpoint on the Gateway and config
       "moodle_schedule_assignment_timeline",
       "polymate_check_connections",
       "polymate_get_calendar",
-       "polymate_move_study_block",
-       "polymate_get_study_progress",
-       "polymate_link_study_session",
-       "polymate_report_study_progress",
+      "polymate_create_study_block",
+      "polymate_edit_study_block",
+      "polymate_move_study_block",
+      "polymate_get_study_progress",
+      "polymate_link_study_session",
+      "polymate_report_study_progress",
       "cron",
     ],
   },
@@ -48,10 +50,12 @@ Enable the OpenAI-compatible chat-completions endpoint on the Gateway and config
           "moodle_schedule_assignment_timeline",
           "polymate_check_connections",
           "polymate_get_calendar",
-           "polymate_move_study_block",
-           "polymate_get_study_progress",
-           "polymate_link_study_session",
-           "polymate_report_study_progress",
+          "polymate_create_study_block",
+          "polymate_edit_study_block",
+          "polymate_move_study_block",
+          "polymate_get_study_progress",
+          "polymate_link_study_session",
+          "polymate_report_study_progress",
         ] },
       },
       "polymate-scheduler": { tools: { allow: ["cron"] } },
@@ -67,6 +71,8 @@ Enable the OpenAI-compatible chat-completions endpoint on the Gateway and config
 The app calls `/v1/chat/completions` with a signed, owner-scoped session key. The plugin signs tool callbacks to PolyMate. Scheduler mutations call `/tools/invoke` using the isolated `polymate-scheduler` agent; generated jobs target the configured student agent, use only their registered read-only tools, and have no delivery route. OpenClaw's HTTP invoke API treats its bearer credential as full operator access, so its Gateway must stay private and the agent/tool allowlists above must be kept narrow. Run `pnpm db:migrate` to add the owner-scoped automation registration and calendar-subscription tables (migrations 0002 and 0003).
 
 ## Supported behavior
+
+The chat lives on `/calendar` beside the weekly calendar and Google/Moodle connection cards. The subscription card previews Moodle events without AI or Google. Calendar event cards show source links, retrieval time and feed limitations; dates are planning targets, not independently verified deadlines. The agent asks for effort estimates and explicit availability, previews a sealed timeline, and only writes after explicit consent. Partial plans require their own choice. The agent can also create one explicitly requested study block or edit an existing block after reading its current owner-scoped event and etag. Confirmed, failed, and uncertain writes are shown per block; the calendar reloads after a write attempt. Retrieved Moodle text is always treated as untrusted source content. The calendar retains manual study-block creation, editing, completion and deletion, and the separate assignment-entry panel. Confirmed AI calendar writes refresh the same interactive calendar. Manually entered assignments are not yet an AI planning source.
 
 ### Interactive local progress
 
@@ -86,11 +92,13 @@ Progress/link tools are not background automation tools. This increment does not
 
 The chat lives in the Chat view of `/calendar`, alongside separate Calendar and Settings views. The subscription card previews Moodle events without AI or Google. Calendar event cards show source links, retrieval time and feed limitations; dates are planning targets, not independently verified deadlines. The agent asks for effort estimates and explicit availability, previews a sealed timeline, and only writes after explicit consent. Partial plans require their own choice. Confirmed, failed, and uncertain writes are shown per block; the calendar reloads after a write attempt. Retrieved Moodle text is always treated as untrusted source content. The calendar retains manual study-block creation, editing, completion and deletion, and the separate assignment-entry panel. Confirmed AI calendar writes refresh the same interactive calendar. Manually entered assignments are not yet an AI planning source.
 
+The agent can also create one explicitly requested study block or edit an existing block after reading its current owner-scoped event and etag. The PolyMate calendar remains available without Google; when Google is connected, its events are shown as a read-only overlay.
+
 The shared `AutomationScheduler` interface is exported from `@polymate/core/agent/automations`; `agentAutomationScheduler` in `apps/web/lib/agent-automations.ts` implements registration and owner-scoped cancellation for Moodle monitoring and progress jobs. Background callbacks are bound to the persisted Gateway job ID and stored tool allowlist. Scheduled reads resolve the registered owner's encrypted calendar subscription on the server, without browser cookies. Only registered read tools are permitted. Disconnecting removes access for later runs. No background write tool is exposed.
 
 The application stores up to 12 conversation messages per owner, limits each retained message to 4,000 characters, and expires idle history after one hour. Browser history displays up to 40 messages. Each request creates a fresh signed OpenClaw session so callbacks from timed-out turns cannot use a later turn's authorization; bounded prior messages and current draft details are supplied as untrusted conversation data. The model-facing `planToken` is the short timeline ID; the backend resolves it to the owner’s retained sealed payload. The sealed payload stays server-side. Exact chat approvals such as “schedule it” use the displayed timeline ID through the same authenticated scheduling action as the preview button, without a model round trip. Commands containing revisions remain in chat. The backend still checks the current draft, expiry, and separate partial approval. OpenClaw runs the model/tool loop for other messages. Configure Gateway retention to prune completed per-turn sessions.
 
-Live tool-call context, move retries, history, and the current sealed preview are held in process memory; use one web replica. Session affinity alone is insufficient if the same owner can reach multiple replicas. A web restart or expired 30-minute plan clears the preview, so the student must request a fresh one. Revised drafts reset consent; failed and uncertain schedules preserve the same sealed token and operation IDs. Existing blocks are moved through the owner-scoped calendar update service, using their actual event ID and etag; uncertain moves retain the original etag and operation ID for one hour. Personal events cannot be moved.
+Live tool-call context, direct-write retries, history, and the current sealed preview are held in process memory; use one web replica. Session affinity alone is insufficient if the same owner can reach multiple replicas. A web restart or expired 30-minute plan clears the preview, so the student must request a fresh one. Revised drafts reset consent; failed and uncertain schedules preserve the same sealed token and operation IDs. Direct creates use stable operation IDs for uncertain retries. Existing blocks are edited through the owner-scoped calendar update service, using their actual event ID and etag; uncertain edits retain the original etag and operation ID for one hour. Personal events cannot be edited.
 
 ## Verification and current limits
 

@@ -8,6 +8,7 @@
     ".": "./src/connection.ts",
     "./google-oauth": "./src/google-oauth.ts",
     "./calendar-operations": "./src/calendar-operations.ts",
+    "./calendar-events": "./src/calendar-events.ts",
     "./agent-automations": "./src/agent-automations.ts",
     "./moodle-calendar": "./src/moodle-calendar.ts",
     "./planning": "./src/planning.ts"

@@ -7,9 +7,16 @@ import { POST as complete } from '../apps/web/app/api/calendar/events/[id]/compl
 import { GET as csrf } from '../apps/web/app/api/calendar/csrf/route';
 import { CalendarBusyError } from '../packages/core/calendar/operations';
 import { syncStudyCalendarRead } from '../packages/db/src/study-progress';
+import type { CalendarEvent } from '@polymate/contracts/calendar';
 
-const mocks = vi.hoisted(() => ({ token: vi.fn(), begin: vi.fn(), finish: vi.fn(), lock: vi.fn() }));
-vi.mock('../packages/db/src/google-oauth', () => ({ getValidAccessToken: mocks.token }));
+const mocks = vi.hoisted(() => ({ token: vi.fn(), connection: vi.fn(), ensureUser: vi.fn(), begin: vi.fn(), finish: vi.fn(), lock: vi.fn(),
+  listEvents: vi.fn(), findEvent: vi.fn(), createEvent: vi.fn(), updateEvent: vi.fn(), completeEvent: vi.fn(), deleteEvent: vi.fn() }));
+vi.mock('../packages/db/src/google-oauth', () => ({ getValidAccessToken: mocks.token, getConnectionStatus: mocks.connection, ensureUser: mocks.ensureUser }));
+vi.mock('../packages/db/src/calendar-events', () => ({
+  listStandaloneCalendarEvents: mocks.listEvents, findStandaloneCalendarEvent: mocks.findEvent,
+  createStandaloneCalendarEvent: mocks.createEvent, updateStandaloneCalendarEvent: mocks.updateEvent,
+  completeStandaloneCalendarEvent: mocks.completeEvent, deleteStandaloneCalendarEvent: mocks.deleteEvent,
+}));
 vi.mock('../packages/db/src/study-progress', () => ({ observeStudyCalendarChange: vi.fn(), syncStudyCalendarRead: vi.fn(), reserveBlockAssignment: vi.fn() }));
 vi.mock('../packages/db/src/calendar-operations', () => ({ calendarOperationStore: {
   withOwnerLock: (owner: string, run: () => Promise<unknown>) => mocks.lock(owner, run),
@@ -25,6 +32,7 @@ const request = (method: string, body: unknown, changes: Record<string, string> 
   method, headers: { ...headers, ...changes }, body: JSON.stringify(body),
 });
 const context = { params: Promise.resolve({ id: 'personal' }) };
+let localEvents: Map<string, CalendarEvent>;
 
 beforeEach(() => {
   vi.stubEnv('NODE_ENV', 'test');
@@ -32,7 +40,28 @@ beforeEach(() => {
   vi.stubEnv('MANAGED_PROXY_ONLY', 'true');
   vi.stubEnv('APP_ORIGIN', origin);
   vi.stubEnv('GOOGLE_ENABLED', 'true');
+  localEvents = new Map();
   mocks.token.mockReset().mockResolvedValue('owner-access-token');
+  mocks.connection.mockReset().mockResolvedValue({ connected: true });
+  mocks.ensureUser.mockReset().mockResolvedValue(undefined);
+  mocks.listEvents.mockReset().mockImplementation(async (_ownerId, range) => [...localEvents.values()].filter(event => event.startAt < range.to && event.endAt > range.from));
+  mocks.findEvent.mockReset().mockImplementation(async (_ownerId, id) => localEvents.get(id) ?? null);
+  mocks.createEvent.mockReset().mockImplementation(async (_owner, id, value) => {
+    const event: CalendarEvent = { id, ...value, timezone: 'Europe/Zurich', allDay: false, source: 'polymate', editable: true, completion: 'open', etag: '"1"' };
+    localEvents.set(id, event); return event;
+  });
+  mocks.updateEvent.mockReset().mockImplementation(async (_ownerId, id, changes, expectedVersion) => {
+    const current = localEvents.get(id); if (!current || current.etag !== `"${expectedVersion}"`) return null;
+    const event = { ...current, ...changes, etag: `"${expectedVersion + 1}"` }; localEvents.set(id, event); return event;
+  });
+  mocks.completeEvent.mockReset().mockImplementation(async (_ownerId, id, expectedVersion) => {
+    const current = localEvents.get(id); if (!current || current.etag !== `"${expectedVersion}"`) return null;
+    const event = { ...current, completion: 'done' as const, etag: `"${expectedVersion + 1}"` }; localEvents.set(id, event); return event;
+  });
+  mocks.deleteEvent.mockReset().mockImplementation(async (_ownerId, id, expectedVersion) => {
+    const current = localEvents.get(id); if (!current || current.etag !== `"${expectedVersion}"`) return false;
+    return localEvents.delete(id);
+  });
   mocks.begin.mockReset().mockResolvedValue(null);
   mocks.finish.mockReset().mockResolvedValue(undefined);
   mocks.lock.mockReset().mockImplementation((_owner: string, run: () => Promise<unknown>) => run());
@@ -59,7 +88,7 @@ describe('authenticated calendar API', () => {
     expect(mocks.begin).not.toHaveBeenCalled();
   });
 
-  it('uses only the resolved owner token and records that owner for a create', async () => {
+  it('uses the resolved owner and records that owner for a create', async () => {
     const fetcher = vi.fn(async (_url, init) => init.method === 'GET'
       ? Response.json({ items: [] }) : Response.json({ ...JSON.parse(init.body), etag: '"new"' }));
     vi.stubGlobal('fetch', fetcher);
@@ -67,15 +96,16 @@ describe('authenticated calendar API', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ operationId, status: 'synced', event: { source: 'polymate' } });
     const owner = resolveOwner(new Headers(headers));
-    expect(mocks.token).toHaveBeenCalledWith(owner);
+    expect(mocks.ensureUser).toHaveBeenCalledWith(owner);
     expect(mocks.begin).toHaveBeenCalledWith(expect.objectContaining({ ownerId: owner.userId }));
     for (const [url, init] of fetcher.mock.calls) {
       expect(String(url)).toContain('/calendars/primary/events');
       expect(init.headers.authorization).toBe('Bearer owner-access-token');
+      expect(init.method).toBe('GET');
     }
   });
 
-  it('rejects personal-event update, complete and delete without a Google write', async () => {
+  it('rejects non-PolyMate event mutations without an external write', async () => {
     const fetcher = vi.fn(async () => Response.json({ id: 'personal', etag: '"old"', summary: 'Lecture',
       start: { dateTime: block.startAt }, end: { dateTime: block.endAt } }));
     vi.stubGlobal('fetch', fetcher);
@@ -85,11 +115,10 @@ describe('authenticated calendar API', () => {
       await complete(request('POST', action), context),
       await DELETE(request('DELETE', action), context),
     ]) {
-      expect(response.status).toBe(403);
-      expect(await response.json()).toMatchObject({ status: 'failed', error: { code: 'forbidden' } });
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ status: 'failed', error: { code: 'not_found' } });
     }
-    expect(fetcher).toHaveBeenCalledTimes(3);
-    for (const call of fetcher.mock.calls as unknown as [URL, RequestInit][]) expect(call[1].method).toBe('GET');
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it('reports a held owner lock as a retryable 409 without logging or writing', async () => {
@@ -103,16 +132,13 @@ describe('authenticated calendar API', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it('returns 202 when a write is uncertain, with no-store headers', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
-      if (init.method === 'POST') throw new TypeError('timeout');
-      if (String(_url).includes('/events/')) return Response.json({}, { status: 404 });
-      return Response.json({ items: [] });
-    }));
+  it('returns a no-store failure when local persistence fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ items: [] })));
+    mocks.createEvent.mockRejectedValueOnce(new Error('database unavailable'));
     const response = await POST(request('POST', { operationId, block }));
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(500);
     expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(await response.json()).toMatchObject({ operationId, status: 'unknown' });
+    expect(await response.json()).toMatchObject({ operationId, status: 'failed', error: { code: 'unknown' } });
   });
 
   it('still lists Google events when progress metadata sync fails', async () => {

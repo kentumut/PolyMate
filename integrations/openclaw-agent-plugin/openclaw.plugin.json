@@ -21,6 +21,8 @@
       "polymate_link_study_session",
       "polymate_report_study_progress",
       "polymate_get_calendar",
+      "polymate_create_study_block",
+      "polymate_edit_study_block",
       "polymate_move_study_block"
     ]
   }

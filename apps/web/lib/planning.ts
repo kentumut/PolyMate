@@ -3,12 +3,11 @@ import { isDeepStrictEqual } from 'node:util';
 import { ContractError, type OperationResult } from '@polymate/contracts/calendar';
 import { assertPlanCurrent, type PlanningRequest, type PlanningState, type StoredStudyPlan } from '@polymate/contracts/planning';
 import { assertStudyPlanFits, planStudyWeek, type LinkedStudyEvent } from '@polymate/core/scheduling/planner';
-import type { CalendarService } from '@polymate/core/calendar';
 import type { OwnerContext } from '@polymate/core/identity';
 import { listAssignments } from '@polymate/db/assignments';
 import { findCalendarOperation, listUnresolvedCalendarOperations } from '@polymate/db/calendar-operations';
 import { getStudyPlan, getStudyPreferences, linkedStudyBlocks, saveStudyPlan, updateStudyPlan, withPlanningLock } from '@polymate/db/planning';
-import { calendarServiceFor } from './calendar-route';
+import { calendarServiceFor, type OwnerCalendar } from './calendar-route';
 import { observeStudyCalendarChange } from '@polymate/db/study-progress';
 
 const publicState = (preferences: PlanningState['preferences'], snapshot: StoredStudyPlan | null): PlanningState => ({
@@ -25,7 +24,7 @@ export async function readPlanningState(ownerId: string): Promise<PlanningState>
   return publicState(preferences, snapshot);
 }
 
-async function currentLinkedEvents(ownerId: string, calendar: CalendarService, excludingPlanId?: string): Promise<LinkedStudyEvent[]> {
+async function currentLinkedEvents(ownerId: string, calendar: OwnerCalendar, excludingPlanId?: string): Promise<LinkedStudyEvent[]> {
   const links = await linkedStudyBlocks(ownerId, excludingPlanId);
   const events: LinkedStudyEvent[] = [];
   for (const { assignmentId, eventId } of links) {
@@ -93,7 +92,7 @@ export async function executePlanning(owner: OwnerContext, input: PlanningReques
           continue;
         }
       }
-      // CalendarService rechecks Google conflicts under its owner lock before each new write.
+      // The owner-bound calendar rechecks conflicts under its operation lock before each new write.
       const result = await calendar.createStudyBlock({ title: block.title, startAt: block.startAt, endAt: block.endAt }, block.operationId);
       await observeStudyCalendarChange(owner.userId, 'create', result.event?.id ?? null, result);
       results.push(result);

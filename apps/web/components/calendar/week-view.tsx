@@ -2,10 +2,11 @@
 
 import type { CalendarEvent } from '@polymate/contracts/calendar';
 import { shiftWeek, weekRange, zonedDateKey, type DateRange } from '@polymate/contracts/time';
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react';
 import type { ProposedBlock, UnscheduledWork } from './plan-overlay';
 import {
-  allDayEventsFor, eventLabel, formatTime, formatWeekLabel, nowOffset, placeDayEvents, proposedLabel, visibleHours, weekDays, type PlacedEvent,
+  allDayEventsFor, calendarSelectionRange, eventLabel, formatTime, formatWeekLabel, nowOffset, placeDayEvents,
+  proposedLabel, snappedGridMinute, visibleHours, weekDays, type PlacedEvent,
 } from './week-layout';
 
 export type WeekViewProps = {
@@ -27,7 +28,11 @@ export type WeekViewProps = {
   onSelect: (eventId: string) => void;
   onRangeChange: (range: DateRange) => void;
   onRetry?: () => void;
+  /** Opens creation with a mouse-dragged time range. */
+  onTimeRangeSelect?: (startAt: string, endAt: string) => void;
 };
+
+type DragSelection = { dayIndex: number; anchorMinute: number; focusMinute: number };
 
 const HOUR_HEIGHT = 56;
 const COLUMNS = 'grid-cols-[48px_1fr] md:grid-cols-[48px_repeat(7,minmax(0,1fr))]';
@@ -44,7 +49,7 @@ const isProposed = (item: WeekItem): item is ProposedBlock => 'kind' in item && 
 
 export function WeekView({
   range, events, loading = false, error, notice, selectedId, proposed = NO_PROPOSALS, assignmentLabels = NO_LABELS, unscheduled,
-  now: nowProp, onSelect, onRangeChange, onRetry,
+  now: nowProp, onSelect, onRangeChange, onRetry, onTimeRangeSelect,
 }: WeekViewProps) {
   // The server and browser clocks can differ; reveal live time markers after hydration.
   const hydrated = useSyncExternalStore(subscribeToHydration, clientHydrated, serverHydrated);
@@ -66,17 +71,45 @@ export function WeekView({
   const hasAllDay = events.some(event => event.allDay);
   const hourCount = hours.end - hours.start;
   const isCurrentWeek = todayIndex >= 0;
+  const [dragSelection, setDragSelection] = useState<DragSelection | null>(null);
+  const canDrag = Boolean(onTimeRangeSelect) && !loading && !error;
 
   function changeRange(next: DateRange) {
     setFocusedDay(null);
+    setDragSelection(null);
     onRangeChange(next);
+  }
+
+  function gridMinute(event: ReactPointerEvent<HTMLDivElement>): number {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return snappedGridMinute(event.clientY - rect.top, rect.height, hours);
+  }
+
+  function startDrag(event: ReactPointerEvent<HTMLDivElement>, dayIndex: number) {
+    if (!canDrag || event.pointerType !== 'mouse' || event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const minute = Math.min(gridMinute(event), hours.end * 60 - 15);
+    setDragSelection({ dayIndex, anchorMinute: minute, focusMinute: minute });
+  }
+
+  function moveDrag(event: ReactPointerEvent<HTMLDivElement>, dayIndex: number) {
+    if (!dragSelection || dragSelection.dayIndex !== dayIndex || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    setDragSelection({ ...dragSelection, focusMinute: gridMinute(event) });
+  }
+
+  function finishDrag(event: ReactPointerEvent<HTMLDivElement>, dayIndex: number) {
+    if (!dragSelection || dragSelection.dayIndex !== dayIndex) return;
+    const selection = calendarSelectionRange(days[dayIndex], dragSelection.anchorMinute, gridMinute(event));
+    setDragSelection(null);
+    onTimeRangeSelect?.(selection.startAt, selection.endAt);
   }
 
   return <section className="overflow-hidden rounded-2xl border border-[#dce3db] bg-white" aria-label="Weekly calendar">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0eb] px-4 py-4 sm:px-6">
       <div>
         <h2 className="font-semibold" aria-live="polite">{formatWeekLabel(range)}</h2>
-        <p className="mt-1 text-xs text-[#748278]">Europe/Zurich · Google Calendar</p>
+        <p className="mt-1 text-xs text-[#748278]">Europe/Zurich · PolyMate Calendar</p>
       </div>
       <nav className="flex items-center gap-1" aria-label="Week navigation">
         <button type="button" onClick={() => changeRange(shiftWeek(range, -1))} aria-label="Previous week"
@@ -135,8 +168,11 @@ export function WeekView({
           const placed = placeDayEvents(items, day, hours);
           const nowAt = nowProp || hydrated ? nowOffset(current, day, hours) : null;
           return <div key={day.key} role="group" aria-label={day.weekday + ' ' + day.dayOfMonth}
-            className={`relative border-l border-[#edf0eb] ${index === todayIndex ? 'bg-[#fafcf8]' : ''} ${index === mobileDay ? '' : 'hidden md:block'}`}
+            onPointerDown={event => startDrag(event, index)} onPointerMove={event => moveDrag(event, index)}
+            onPointerUp={event => finishDrag(event, index)} onPointerCancel={() => setDragSelection(null)}
+            className={`relative border-l border-[#edf0eb] ${index === todayIndex ? 'bg-[#fafcf8]' : ''} ${index === mobileDay ? '' : 'hidden md:block'} ${canDrag ? 'cursor-crosshair select-none' : ''}`}
             style={{ height: hourCount * HOUR_HEIGHT, backgroundImage: `repeating-linear-gradient(to bottom, #edf0eb 0 1px, transparent 1px ${HOUR_HEIGHT}px)` }}>
+            {dragSelection?.dayIndex === index && <SelectionPreview selection={dragSelection} hours={hours} />}
             {placed.map(item => {
               const { event } = item;
               return isProposed(event)
@@ -157,12 +193,24 @@ export function WeekView({
     </div>
 
     <footer className="flex flex-wrap gap-4 border-t border-[#edf0eb] px-6 py-3 text-[11px] text-[#617269]" aria-label="Legend">
-      <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-l-[3px] border-[#9aa79f] bg-[#eef1ec]" />Your Google events (read-only)</span>
+      {events.some(event => event.source === 'google-personal') && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-l-[3px] border-[#9aa79f] bg-[#eef1ec]" />Google events (read-only)</span>}
       <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#2f6b55]" />PolyMate study block</span>
       <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border border-dashed border-[#2f6b55] bg-[#e4efe7]" />Done</span>
       {proposed.length > 0 && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-2 border-dashed border-[#c08a2b] bg-[#fffaf0]" />Proposed, not in Google yet</span>}
+      {onTimeRangeSelect && <span className="ml-auto hidden md:inline">Drag across an empty time slot to add a block</span>}
     </footer>
   </section>;
+}
+
+function SelectionPreview({ selection, hours }: { selection: DragSelection; hours: { start: number; end: number } }) {
+  const start = Math.min(selection.anchorMinute, selection.focusMinute);
+  const end = selection.anchorMinute === selection.focusMinute ? start + 50 : Math.max(selection.anchorMinute, selection.focusMinute);
+  const span = (hours.end - hours.start) * 60;
+  const label = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+  return <div className="pointer-events-none absolute inset-x-0 z-10 mx-0.5 rounded-md border border-[#2f6b55] bg-[#dcebe1]/90 px-1.5 py-1 text-[11px] font-semibold text-[#173b32] shadow-sm"
+    style={{ top: `${((start - hours.start * 60) / span) * 100}%`, height: `${Math.max(((end - start) / span) * 100, 1)}%` }} aria-hidden="true">
+    {label(start)}–{label(end)}
+  </div>;
 }
 
 function eventClasses(event: CalendarEvent, selected: boolean): string {

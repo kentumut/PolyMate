@@ -3,7 +3,7 @@ import type { DateRange } from './time';
 export type EventSource = 'google-personal' | 'polymate';
 export type Completion = 'open' | 'done';
 
-/** One event in the student's primary Google calendar, as every PolyMate surface sees it. */
+/** One event shown in the student's PolyMate calendar, including optional read-only overlays. */
 export type CalendarEvent = Readonly<{
   id: string;
   title: string;
@@ -13,7 +13,7 @@ export type CalendarEvent = Readonly<{
   timezone: string;
   allDay: boolean;
   source: EventSource;
-  /** Only PolyMate-owned study blocks can be changed. Personal events are read-only busy time. */
+  /** PolyMate-owned events can be changed; optional external events are read-only busy time. */
   editable: boolean;
   completion: Completion;
   etag: string;

@@ -56,7 +56,7 @@ try {
     assert.equal(await dialog(page).getByLabel('End time', { exact: true }).inputValue(), '10:50');
     await dialog(page).getByRole('button', { name: 'Create', exact: true }).evaluate(button => { button.click(); button.click(); });
     assert.equal(await dialog(page).getByRole('button', { name: 'Creating…' }).isDisabled(), true);
-    await success(page);
+    await dialog(page).waitFor({ state: 'hidden' });
     assert.equal(await count(page), 1);
     assert.deepEqual(await request(page), { action: 'create', input: {
       title: 'Attempt questions 1–2', startAt: '2026-10-09T08:00:00.000Z', endAt: '2026-10-09T08:50:00.000Z', timezone: 'Europe/Zurich',
@@ -70,7 +70,7 @@ try {
     assert.equal(await dialog(page).getByLabel('End time', { exact: true }).inputValue(), '12:15');
     await dialog(page).getByLabel('Title').fill('New task');
     await dialog(page).getByRole('button', { name: 'Save', exact: true }).click();
-    await success(page);
+    await dialog(page).waitFor({ state: 'hidden' });
     const sent = await request(page);
     assert.equal(sent.action, 'update');
     assert.equal(sent.eventId, 'fixture-study-block');
@@ -79,7 +79,6 @@ try {
     assert.equal(sent.input.endAt, '2026-10-09T10:15:00.000Z');
     const updated = await saved(page);
     assert.notEqual(updated.etag, sent.expectedEtag);
-    await dialog(page).getByRole('button', { name: 'Close', exact: true }).click();
     await open(page, 'edit');
     assert.equal(await dialog(page).getByLabel('Title').inputValue(), 'New task');
     assert.equal(await dialog(page).getByLabel('Start time', { exact: true }).inputValue(), '11:00');

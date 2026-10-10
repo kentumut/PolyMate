@@ -350,7 +350,7 @@ describe('agent progress drafts and confirmations', () => {
     expect((await calendar.readStudyBlock(selected.id)).startAt).toBe(args.startAt);
     const response = agentResponseBody('The move failed!', turn, owner.userId);
     expect(response.reloadCalendar).toBe(true);
-    expect(response.reply).toContain('Google Calendar confirmed 1 block');
+    expect(response.reply).toContain('Your calendar saved 1 block');
     expect(response.reply).toContain('Local progress history could not be refreshed');
     expect(response.cards.at(-1)?.data).toMatchObject({ progressSync: 'pending', result: { complete: true } });
     endAgentTurn(turn.sessionKey);
@@ -363,7 +363,7 @@ describe('agent progress drafts and confirmations', () => {
     const result = await tool(turn.sessionKey, 'polymate_move_study_block', { eventId: event.id, startAt: '2026-10-15T09:00:00Z', endAt: '2026-10-15T09:50:00Z' });
     expect(result.result).toMatchObject({ status: 'failed', progressSync: 'not_attempted' });
     expect(mocks.observe).not.toHaveBeenCalled();
-    expect(agentResponseBody('Done!', turn, owner.userId).reply).toContain('Google Calendar confirmed 0 blocks');
+    expect(agentResponseBody('Done!', turn, owner.userId).reply).toContain('Your calendar saved 0 blocks');
     endAgentTurn(turn.sessionKey);
   });
 });

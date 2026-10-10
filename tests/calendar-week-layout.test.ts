@@ -3,7 +3,7 @@ import type { CalendarEvent } from '../packages/contracts/src/calendar';
 import { weekRange } from '../packages/contracts/src/time';
 import { sampleWeekEvents } from '../packages/core/calendar/fake-client';
 import {
-  allDayEventsFor, formatWeekLabel, nowOffset, placeDayEvents, visibleHours, weekDays,
+  allDayEventsFor, calendarSelectionRange, formatWeekLabel, nowOffset, placeDayEvents, snappedGridMinute, visibleHours, weekDays,
 } from '../apps/web/components/calendar/week-layout';
 
 const range = weekRange(new Date('2026-10-09T12:00:00Z'));
@@ -62,5 +62,12 @@ describe('week layout', () => {
     expect(nowOffset(now, days[4], { start: 8, end: 20 })).toBeCloseTo((270 / 720) * 100);
     expect(nowOffset(now, days[3], { start: 8, end: 20 })).toBeNull();
     expect(nowOffset(new Date('2026-10-09T20:30:00Z'), days[4], { start: 8, end: 20 })).toBeNull();
+  });
+
+  it('snaps pointer positions and resolves dragged ranges in Zurich', () => {
+    expect(snappedGridMinute(70, 560, { start: 8, end: 18 })).toBe(9 * 60 + 15);
+    expect(calendarSelectionRange(days[0], 10 * 60 + 30, 9 * 60)).toEqual({
+      startAt: '2026-10-05T07:00:00.000Z', endAt: '2026-10-05T08:30:00.000Z',
+    });
   });
 });

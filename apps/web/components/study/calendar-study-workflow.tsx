@@ -22,6 +22,7 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
   const [open, setOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [initialStartAt, setInitialStartAt] = useState<string>();
+  const [initialEndAt, setInitialEndAt] = useState<string>();
   const [result, setResult] = useState<StudyBlockOperationResult>();
   const [ready, setReady] = useState(false);
   const [recoveryError, setRecoveryError] = useState('');
@@ -91,7 +92,18 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
         ? new Date(Math.ceil(now / 900000) * 900000).toISOString()
         : zonedTimeToInstant({ ...zonedParts(range.from), hour: 9, minute: 0 }).toISOString();
       setInitialStartAt(start);
+      setInitialEndAt(undefined);
     }
+    setOpen(true);
+  }
+
+  function showRange(startAt: string, endAt: string) {
+    if (disabled) return;
+    setSelectedEvent(null);
+    setAssignmentSelection(null);
+    setResult(undefined);
+    setInitialStartAt(startAt);
+    setInitialEndAt(endAt);
     setOpen(true);
   }
 
@@ -137,7 +149,7 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
 
   return <div className="min-w-0 space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="text-sm text-[#617269]">{sample ? 'Sample workflow — changes stay in memory.' : 'Manage your PolyMate study blocks. Personal events stay read-only.'}</p>
+      <p className="text-sm text-[#617269]">{sample ? 'Sample workflow — changes stay in memory.' : 'Manage your PolyMate calendar. Google events appear read-only when connected.'}</p>
       <div className="flex gap-2">
         <button type="button" onClick={() => setReloadKey(key => key + 1)} className="rounded-lg border border-[#c8d3c8] bg-white px-3 py-2 text-sm">Refresh calendar</button>
         <button type="button" disabled={disabled} onClick={() => show(null)} className="rounded-lg bg-[#173b32] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Add study block</button>
@@ -153,9 +165,10 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
     </div>}
     {pendingReport && !open && <p role="status" className="rounded-lg border border-[#c8d3c8] bg-white p-3 text-sm">A progress report is unconfirmed. <button type="button" disabled={progressBusy} onClick={retryReport} className="underline">Retry the original report</button></p>}
     {progressNotice && !open && <p role="status" className="text-sm">{progressNotice}</p>}
-    {!open && result && !blocking && <p role="status" className="text-sm text-[#617269]">{result.status === 'synced' ? sample ? 'Sample calendar change confirmed.' : 'Google Calendar change confirmed.' : result.error?.message}</p>}
-    <CalendarPanel {...overlay} client={readClient} sample={sample} onSelect={event => show(event)} onRangeChange={setRange} reloadKey={reloadKey + externalReloadKey} />
-    <StudyBlockDialog open={open} selectedEvent={selectedEvent} initialStartAt={initialStartAt}
+    {!open && result && !blocking && <p role="status" className="text-sm text-[#617269]">{result.status === 'synced' ? sample ? 'Sample calendar change confirmed.' : 'Calendar change saved.' : result.error?.message}</p>}
+    <CalendarPanel {...overlay} client={readClient} sample={sample} onSelect={event => show(event)} onRangeChange={setRange}
+      onTimeRangeSelect={disabled ? undefined : showRange} reloadKey={reloadKey + externalReloadKey} />
+    <StudyBlockDialog open={open} selectedEvent={selectedEvent} initialStartAt={initialStartAt} initialEndAt={initialEndAt}
       onClose={() => setOpen(false)} onCreate={input => perform(async () => {
         if (assignmentSelection && workspace) {
           const assignment = workspace.data?.assignments.find(item => item.id === assignmentSelection.id);

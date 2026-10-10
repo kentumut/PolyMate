@@ -62,7 +62,7 @@ export async function readAgentProgress(owner: OwnerContext, args: Record<string
       await syncStudyCalendarRead(owner.userId, [event], observedAt);
       state = await studyProgressStore.state(owner.userId);
       const current = state.links.find(link => link.eventId === event.id && !link.deleted);
-      refresh = current?.etag === event.etag && current.startAt === event.startAt && current.endAt === event.endAt
+      refresh = current && current.etag === event.etag && current.startAt === event.startAt && current.endAt === event.endAt
         ? { status: 'fresh' } : { status: 'unavailable', message: 'The session changed during refresh. Read this session again before reporting.' };
     } catch (error) {
       refresh = { status: 'unavailable', message: error instanceof GoogleNotConnectedError

@@ -6,6 +6,7 @@ import type { PoolClient } from 'pg';
 
 const session = new AsyncLocalStorage<PoolClient>();
 const queries = () => session.getStore() ?? getPool();
+export function calendarOperationSessionClient(): PoolClient | undefined { return session.getStore(); }
 
 type Row = {
   operation_id: string;

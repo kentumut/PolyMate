@@ -3,9 +3,10 @@ import type { OAuthStateStore } from '@polymate/core/google-auth';
 import { refreshAccessToken } from '@polymate/core/google-auth';
 import { decryptSecret, encryptSecret } from '@polymate/core/google-auth/crypto';
 import { getPool } from './connection';
+import { calendarOperationSessionClient } from './calendar-operations';
 
 export async function ensureUser(owner: OwnerContext): Promise<void> {
-  const result = await getPool().query(
+  const result = await (calendarOperationSessionClient() ?? getPool()).query(
     `INSERT INTO users (id, external_identity, display_name)
      VALUES ($1, $2, $3)
      ON CONFLICT (id) DO UPDATE

@@ -3,7 +3,7 @@
 **Working name:** ETH Campus Companion  
 **Product:** AI-assisted student life web application  
 **Audience:** ETH Zurich students  
-**Version:** 0.1 · 9 October 2026  
+**Version:** 0.2 · 9 October 2026
 **Purpose:** Hackathon product and implementation specification
 
 ## 1. Product concept
@@ -29,6 +29,8 @@ Students must search separate course catalogues, programme documents, lab websit
 ## 2. Hackathon scope
 
 The MVP must demonstrate all four helpers through one coherent journey. Depth is concentrated in the study planner; the other helpers share a recommendation pipeline and card UI.
+
+**Implementation priority:** Chat is the primary interface and highest-priority feature for the four-hour MVP. Waves 1–2 deliver a working conversation, routing to all four helpers, grounded inline result cards, and contextual follow-ups. Dedicated planner and discovery screens are later enhancements. The current timeboxed scope in TIMELINE.md governs sprint delivery; the requirements below describe the broader product target.
 
 **Assumptions:** English-first responsive web app; one explicitly selected ETH study programme and regulation version; one target semester; a small curated dataset; no existing ETH integration credentials. These are implementation assumptions, not verified access arrangements.
 
@@ -137,17 +139,52 @@ Saved opportunities do not become busy calendar blocks until the student explici
 
 ## 5. Data sources and ingestion
 
-The following public resources were identified on 9 October 2026. Their existence is verified; API access, scraping permission, licensing, completeness, and reliable machine-readable formats still require integration checks.
+The following public resources were identified on 9 October 2026. VVZ API documentation and sample read requests have been checked; access arrangements and formats for the other sources still require integration checks. Source licensing, completeness, and operational limits must be reviewed before expanding beyond the hackathon.
 
 | Domain | Candidate source | MVP ingestion approach |
 |---|---|---|
-| Courses | [ETH Course Catalogue (VVZ)](https://ethz.ch/students/en/studies/academic-support/course-catalogue.html) and [catalogue](https://vvz.ethz.ch/Vorlesungsverzeichnis/gesamtverzeichnis.view?lang=en) | Import selected semester records with course codes and provenance |
+| Courses | [VVZ API](https://vvzapi.ch/docs), with original [ETH catalogue](https://vvz.ethz.ch/Vorlesungsverzeichnis/gesamtverzeichnis.view?lang=en) links | Primary catalogue integration: retrieve semester-specific learning units and teaching schedules through the API; cache a demo snapshot |
 | Programme requirements | Official study regulations and study guide for the selected programme | Manually encode and review a limited rule set; retain document version and section references |
 | Lab projects | Selected lab pages, such as [Programming Methodology student projects](https://www.pm.inf.ethz.ch/education/student-projects.html); [ETH project guidance](https://ethz.ch/students/en/studies/study-abroad/project-traineeship/projects.html) also points to SiROP | Curate listings from two or three labs; investigate SiROP access separately |
 | Events | [ETH event search](https://ethz.ch/en/news-and-events/events.html) | Import a small upcoming event set; add student association sources later |
 | Internships | [ETH Career Center job portal directory](https://ethz.ch/studierende/de/karriere/Startseite_CareerCenter/Exploration_Stellensuche/Stellenplattformen.html), including ETH get hired | Verify access to actual listings; curate permitted public employer listings or use labelled synthetic fixtures |
 
 **Ingestion pipeline:** fetch/import → extract → schema validation → normalise dates and identifiers → deduplicate → attach provenance → store → index.
+
+### VVZ API integration
+
+**Base URL:** `https://vvzapi.ch`. Contract: [OpenAPI schema](https://vvzapi.ch/openapi.json). Use documented versioned endpoints; avoid experimental `/api/v0` routes.
+
+| Request | Integration role |
+|---|---|
+| `GET /api/v1/misc/semesters` | Populate the semester selector from available data |
+| `GET /api/v1/unit/list` | Discover learning-unit IDs using semester, section, level, title, language, credit, or other supported filters |
+| `GET /api/v1/unit/{unit_id}/get` | Load catalogue details for each selected ID |
+| `GET /api/v1/course/get/{unit_id}` | Load teaching components and their time slots |
+| `GET /api/v1/unit/{unit_id}/sections` | Retrieve catalogue section associations |
+| `GET /api/v1/section/{section_id}/get` | Inspect section hierarchy and linked learning units |
+
+**Import sequence:** Get available semesters → choose `semkez` → page through unit IDs using `limit` and `offset` → hydrate unit details and teaching components → normalise and cache. The unit list returns IDs, not full course records. Use bounded request concurrency and stop pagination on an empty or short page.
+
+Example verified discovery request:
+
+```http
+GET https://vvzapi.ch/api/v1/unit/list?semkez=2026W&department=5&limit=1
+```
+
+On 9 October 2026 this returned learning-unit ID `202500`; its detail response identified “Exploiting and Reasoning about Concurrency”, course number `263-2816-00L`, and 6 credits. This is a connectivity check, not a recommended course or eligibility check. The teaching response for this example had no time slots, illustrating why timetable completeness must be explicit.
+
+**Mapping and validation:**
+
+- Keep API `id`, `semkez`, and course `number` separately. Do not assume course number plus semester is unique; preserve distinct learning-unit records. Completed-course equivalences require a separate reviewed mapping.
+- Map titles, `credits`, language, abstract/content/objectives, restrictions, and `scraped_at` into the local course schema. Preserve original text and handle nullable fields.
+- Map teaching `timeslots` and group time slots into meeting records, accounting for specific dates, semester halves, and biweekly patterns. Unresolved recurrence or group selection produces ‘Needs review’.
+- Keep the API's `semkez` identifier; display student-friendly spring/autumn labels. Use the semester list to avoid requesting an unavailable future semester.
+- Preserve both upstream scrape time and our retrieval time. Construct original VVZ detail links using the learning-unit ID and semester.
+- Catalogue sections support programme/category discovery but do not prove degree compliance. Department filtering alone is insufficient because programmes can include courses from other departments.
+- Prerequisites are not exposed as a dedicated structured prerequisite field in the checked learning-unit schema. Review relevant source text and programme documents before encoding deterministic prerequisite rules.
+
+Fetch through the application backend; validate responses against the checked contract, cache by semester and unit ID, and retain the last successful snapshot. Handle missing records, null schedules, validation failures, timeouts, and rate-limit responses without discarding the saved plan. No credential was needed for the sample reads; this does not establish a service-level guarantee or unrestricted usage.
 
 Each source adapter handles its own schema and failures. Invalid records are quarantined for review. Store source URL, source item ID where available, publication/update date if supplied, retrieval time, and extraction status. Fetch time alone does not establish that a listing is still open.
 
@@ -210,7 +247,7 @@ Suggested endpoints:
 | Entity | Important fields |
 |---|---|
 | StudentProfile | user ID, programme/version, degree stage, interests, skills, completed course IDs, goals, availability, preferences |
-| Course | ID/code, semester, title, credits, category mapping, prerequisites, language, meeting occurrences, source |
+| Course | local ID, VVZ learning-unit ID, course number, semkez/semester, title, credits, category mapping, reviewed prerequisites, language, teaching/group meeting occurrences, upstream scrape time, source |
 | ProgrammeRule | programme/version, rule type, required courses/categories, credit bounds, source section, review status |
 | StudyPlan | owner, semester, selected and locked course IDs, constraints, time blocks, validation findings, version |
 | Opportunity | ID, type, title, organisation, description, tags, requirements, dates, location, status, source |
@@ -250,6 +287,7 @@ Use a clean student-facing visual style, responsive layouts, readable typography
 |---|---|
 | Onboarding | A student can create and edit a profile and use a sample profile without personal documents |
 | Course planning | Selected courses exist in the selected semester snapshot; credits are correct; supported curriculum and prerequisite checks run |
+| VVZ API import | Semester-filtered unit IDs are paginated and hydrated; upstream IDs and scrape times are retained; null schedules and source failures are handled |
 | Schedule checking | Known time overlaps are flagged; incomplete schedules produce ‘Needs review’ |
 | Replanning | Locked courses remain selected, or the app explains why the resulting constraints are infeasible |
 | Project discovery | Returned cards are source-backed; skill gaps and unconfirmed availability are visible |

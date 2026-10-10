@@ -10,6 +10,7 @@ export type StudyBlockDialogProps = {
   open: boolean;
   selectedEvent: StudyBlockDialogEvent | null;
   initialStartAt?: string;
+  initialEndAt?: string;
   onClose: () => void;
   onCreate: (input: StudyBlockInput) => Promise<StudyBlockOperationResult>;
   onUpdate?: (eventId: string, input: StudyBlockInput, expectedEtag: string) => Promise<StudyBlockOperationResult>;
@@ -32,7 +33,7 @@ export function StudyBlockDialog(props: StudyBlockDialogProps) {
   return props.open ? <StudyBlockDialogForm key={props.selectedEvent ? `event:${props.selectedEvent.id}` : 'create'} {...props} /> : null;
 }
 
-function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate, onUpdate, onComplete, onDelete, onReconcile, operationResult, fixtureMode = false,
+function StudyBlockDialogForm({ selectedEvent, initialStartAt, initialEndAt, onClose, onCreate, onUpdate, onComplete, onDelete, onReconcile, operationResult, fixtureMode = false,
   creationFields, extraContent, writeBlocked = false, externalSubmitting = false, reportedCompletion = false, onRequestReschedule }: StudyBlockDialogProps) {
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -43,7 +44,7 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
   const wasConfirmingDelete = useRef(false);
   // Snapshot the loaded event: refreshes must not silently advance the draft's ETag.
   const [loadedEvent] = useState(() => selectedEvent ? { ...selectedEvent } : null);
-  const [fields, setFields] = useState(() => loadedEvent ? existingStudyBlockFields(loadedEvent) : initialStudyBlockFields(initialStartAt));
+  const [fields, setFields] = useState(() => loadedEvent ? existingStudyBlockFields(loadedEvent) : initialStudyBlockFields(initialStartAt, initialEndAt));
   const [errors, setErrors] = useState<StudyBlockErrors>({});
   const [endEdited, setEndEdited] = useState(false);
   const [result, setResult] = useState<StudyBlockOperationResult | null>(null);
@@ -80,6 +81,10 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
     else if (wasConfirmingDelete.current) deleteTriggerRef.current?.focus();
     wasConfirmingDelete.current = confirmingDelete;
   }, [confirmingDelete]);
+
+  useEffect(() => {
+    if ((action === 'create' || action === 'update') && status === 'synced') onClose();
+  }, [action, onClose, status]);
 
   useEffect(() => {
     onRequestReschedule?.(() => {
@@ -172,7 +177,7 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
   const pendingLabel = action === 'delete' ? 'Deleting…' : action === 'complete' ? 'Marking done…' : action === 'update' ? 'Saving…' : 'Creating…';
   const successLabel = action === 'delete' ? 'Deleted' : action === 'complete' ? 'Marked done' : action === 'update' ? 'Updated' : 'Created';
   const message = status === 'pending' ? pendingLabel
-    : status === 'synced' ? fixtureMode ? `Fixture block ${successLabel.toLowerCase()}. No Google event was saved.` : `${successLabel} in Google Calendar.`
+    : status === 'synced' ? fixtureMode ? `Fixture block ${successLabel.toLowerCase()}. No persistent event was saved.` : `${successLabel} in your calendar.`
     : status === 'unknown' ? 'We could not confirm whether this change was saved. Refresh the calendar before trying again.'
     : status === 'failed' ? currentResult?.error?.message || `The block could not be ${successLabel.toLowerCase()}. Review your connection and try again.`
     : '';
@@ -205,9 +210,9 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
     <p id={`${id}-description`} className="mt-2 text-sm leading-6 text-[#617269]">{confirmingDelete ? 'Review the saved block before deleting it.' : readOnly ? 'This event is read-only here.' : editing ? 'Change the title or move this study block.' : 'Choose your study time.'} All times are in Europe/Zurich.</p>
     {editing && <p className="mt-2 text-sm text-[#617269]">Completion: {completed ? 'Done' : 'Open'}</p>}
     {loadedEvent?.allDay && <p className="mt-2 text-sm text-[#617269]">All-day commitment. The end date is exclusive.</p>}
-    {fixtureMode && <p className="mt-3 rounded-lg bg-[#e8ede5] p-3 text-sm">Development fixture — no Google Calendar writes.</p>}
+    {fixtureMode && <p className="mt-3 rounded-lg bg-[#e8ede5] p-3 text-sm">Development fixture — changes are not persisted.</p>}
     {confirmingDelete && loadedEvent ? <section className="mt-6 space-y-5" aria-label="Deletion confirmation">
-      <p className="font-medium">Delete “{loadedEvent.title}” from {fixtureMode ? 'the fixture calendar' : 'Google Calendar'}?</p>
+      <p className="font-medium">Delete “{loadedEvent.title}” from {fixtureMode ? 'the fixture calendar' : 'your calendar'}?</p>
       <p className="text-sm text-[#617269]">{savedTimeFormatter.format(new Date(loadedEvent.startAt))} – {savedTimeFormatter.format(new Date(loadedEvent.endAt))} (Europe/Zurich)</p>
       {dirty && <p className="text-sm text-[#617269]">Unsaved edits will not be saved. Delete applies to the saved block shown above.</p>}
       {feedback}

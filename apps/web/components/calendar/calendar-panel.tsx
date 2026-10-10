@@ -11,17 +11,18 @@ import { WeekView, type WeekViewProps } from './week-view';
 export type CalendarPanelProps = {
   /** Share the read client with the study workflow, especially for in-memory samples. */
   client?: CalendarClient;
-  /** Use the labelled in-memory sample calendar instead of Google (local development only). */
+  /** Use the labelled in-memory sample calendar instead of the persistent calendar. */
   sample?: boolean;
   /** Receives the selected event, e.g. to open Catalin's study-block dialog. */
   onSelect?: (event: CalendarEvent) => void;
   /** Change this value to reload the visible week after a mutation. */
   reloadKey?: string | number;
   onRangeChange?: (range: DateRange) => void;
+  onTimeRangeSelect?: (startAt: string, endAt: string) => void;
 } & Pick<WeekViewProps, 'proposed' | 'assignmentLabels' | 'unscheduled'>;
 
 /** Loads the visible week through the shared CalendarClient and owns navigation/selection state. */
-export function CalendarPanel({ client: suppliedClient, sample = false, onSelect, reloadKey, onRangeChange, ...overlay }: CalendarPanelProps) {
+export function CalendarPanel({ client: suppliedClient, sample = false, onSelect, reloadKey, onRangeChange, onTimeRangeSelect, ...overlay }: CalendarPanelProps) {
   const [defaultClient] = useState<CalendarClient>(() => suppliedClient ?? (sample ? new FakeCalendarClient(undefined, 250) : new HttpCalendarClient()));
   const client = suppliedClient ?? defaultClient;
   const [range, setRange] = useState<DateRange>(() => weekRange());
@@ -53,7 +54,8 @@ export function CalendarPanel({ client: suppliedClient, sample = false, onSelect
   return <div className="min-w-0 space-y-3">
     <WeekView {...overlay} range={range} events={events} loading={loading} error={loading ? null : loaded?.error} selectedId={selectedId}
       notice={sample ? FAKE_CALENDAR_LABEL : undefined}
-      onSelect={select} onRangeChange={next => { setRange(next); onRangeChange?.(next); }} onRetry={() => setAttempt(n => n + 1)} />
+      onSelect={select} onRangeChange={next => { setRange(next); onRangeChange?.(next); }} onRetry={() => setAttempt(n => n + 1)}
+      onTimeRangeSelect={onTimeRangeSelect} />
     {selected && !onSelect && <p className="rounded-xl border border-[#dce3db] bg-white px-4 py-3 text-sm" role="status">
       {eventLabel(selected, overlay.assignmentLabels?.get(selected.id))}
     </p>}

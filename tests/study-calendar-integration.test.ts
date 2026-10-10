@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from '../apps/web/node_modules/next/server';
-import type { OperationResult } from '@polymate/contracts/calendar';
+import type { CalendarEvent, OperationResult } from '@polymate/contracts/calendar';
 import type { OperationRecord } from '../packages/core/calendar/operations';
 import type { GoogleEvent } from '../packages/core/calendar/google-api';
 import { POST as create } from '../apps/web/app/api/calendar/study-blocks/route';
@@ -14,8 +14,14 @@ import { createStudyCalendarClient } from '../apps/web/components/study/study-ca
 import { resolveOwner } from '../packages/core/src/identity';
 import { eventIdForOperation } from '../packages/core/calendar/mapping';
 
-const mocks = vi.hoisted(() => ({ token: vi.fn(), begin: vi.fn(), finish: vi.fn(), find: vi.fn(), list: vi.fn() }));
-vi.mock('../packages/db/src/google-oauth', () => ({ getValidAccessToken: mocks.token }));
+const mocks = vi.hoisted(() => ({ token: vi.fn(), connection: vi.fn(), ensureUser: vi.fn(), begin: vi.fn(), finish: vi.fn(), find: vi.fn(), list: vi.fn(),
+  listEvents: vi.fn(), findEvent: vi.fn(), createEvent: vi.fn(), updateEvent: vi.fn(), completeEvent: vi.fn(), deleteEvent: vi.fn() }));
+vi.mock('../packages/db/src/google-oauth', () => ({ getValidAccessToken: mocks.token, getConnectionStatus: mocks.connection, ensureUser: mocks.ensureUser }));
+vi.mock('../packages/db/src/calendar-events', () => ({
+  listStandaloneCalendarEvents: mocks.listEvents, findStandaloneCalendarEvent: mocks.findEvent,
+  createStandaloneCalendarEvent: mocks.createEvent, updateStandaloneCalendarEvent: mocks.updateEvent,
+  completeStandaloneCalendarEvent: mocks.completeEvent, deleteStandaloneCalendarEvent: mocks.deleteEvent,
+}));
 vi.mock('../packages/db/src/study-progress', () => ({ observeStudyCalendarChange: vi.fn(), syncStudyCalendarRead: vi.fn(), reserveBlockAssignment: vi.fn() }));
 vi.mock('../packages/db/src/calendar-operations', () => ({
   calendarOperationStore: { withOwnerLock: (_owner: string, run: () => Promise<unknown>) => run(), begin: mocks.begin, finish: mocks.finish },
@@ -26,10 +32,10 @@ const origin = 'https://polymate.test';
 const identity = 'student@example.test';
 const input = { title: 'Attempt questions 1–2', startAt: '2026-10-12T09:00:00.000Z', endAt: '2026-10-12T09:50:00.000Z', timezone: 'Europe/Zurich' as const };
 let ledger: Map<string, { record: OperationRecord; result: OperationResult | null }>;
-let events: Map<string, GoogleEvent>;
+let events: Map<string, CalendarEvent>;
+let googleEvents: Map<string, GoogleEvent>;
 let cookie: string;
 let version: number;
-let loseInsertReply: boolean;
 let unavailableReadback: boolean;
 
 const google = vi.fn<typeof fetch>(async (url, init) => {
@@ -38,21 +44,16 @@ const google = vi.fn<typeof fetch>(async (url, init) => {
   const method = init?.method ?? 'GET';
   if (method === 'GET' && id) {
     if (unavailableReadback) return Response.json({ error: { message: 'Read unavailable' } }, { status: 503 });
-    return events.has(id) ? Response.json(events.get(id)) : Response.json({}, { status: 404 });
+    return googleEvents.has(id) ? Response.json(googleEvents.get(id)) : Response.json({}, { status: 404 });
   }
-  if (method === 'GET') return Response.json({ items: [...events.values()] });
-  if (method === 'POST') {
-    const event = { ...JSON.parse(init!.body as string), etag: `"v${++version}"` } as GoogleEvent;
-    events.set(event.id!, event);
-    if (loseInsertReply) throw new TypeError('Reply lost after Google applied the insert.');
-    return Response.json(event);
-  }
-  const saved = events.get(id);
+  if (method === 'GET') return Response.json({ items: [...googleEvents.values()] });
+  if (method === 'POST') throw new Error('Google is a read-only overlay.');
+  const saved = googleEvents.get(id);
   if (!saved) return Response.json({}, { status: 404 });
   if (new Headers(init?.headers).get('if-match') !== saved.etag) return Response.json({}, { status: 412 });
-  if (method === 'DELETE') { events.delete(id); return new Response(null, { status: 204 }); }
+  if (method === 'DELETE') { googleEvents.delete(id); return new Response(null, { status: 204 }); }
   const next = { ...saved, ...JSON.parse(init!.body as string), etag: `"v${++version}"` };
-  events.set(id, next);
+  googleEvents.set(id, next);
   return Response.json(next);
 });
 
@@ -83,10 +84,31 @@ const routeFetcher: typeof fetch = async (path, init) => {
 beforeEach(() => {
   vi.stubEnv('NODE_ENV', 'test'); vi.stubEnv('AUTH_MODE', 'managed-proxy'); vi.stubEnv('MANAGED_PROXY_ONLY', 'true');
   vi.stubEnv('APP_ORIGIN', origin); vi.stubEnv('GOOGLE_ENABLED', 'true');
-  cookie = 'polymate_calendar_csrf=nonce'; version = 1; loseInsertReply = false; unavailableReadback = false;
-  events = new Map([['personal', { id: 'personal', etag: '"p1"', summary: 'Lecture', start: { dateTime: '2026-10-12T15:00:00Z' }, end: { dateTime: '2026-10-12T16:00:00Z' } }]]);
+  cookie = 'polymate_calendar_csrf=nonce'; version = 1; unavailableReadback = false;
+  events = new Map();
+  googleEvents = new Map([['personal', { id: 'personal', etag: '"p1"', summary: 'Lecture', start: { dateTime: '2026-10-12T15:00:00Z' }, end: { dateTime: '2026-10-12T16:00:00Z' } }]]);
   ledger = new Map(); google.mockClear(); vi.stubGlobal('fetch', google);
   mocks.token.mockReset().mockResolvedValue('test-access-token');
+  mocks.connection.mockReset().mockResolvedValue({ connected: true });
+  mocks.ensureUser.mockReset().mockResolvedValue(undefined);
+  mocks.listEvents.mockReset().mockImplementation(async (_ownerId, range) => [...events.values()].filter(event => event.startAt < range.to && event.endAt > range.from));
+  mocks.findEvent.mockReset().mockImplementation(async (_ownerId, id) => events.get(id) ?? null);
+  mocks.createEvent.mockReset().mockImplementation(async (_owner, id, value) => {
+    const event: CalendarEvent = { id, ...value, timezone: 'Europe/Zurich', allDay: false, source: 'polymate', editable: true, completion: 'open', etag: '"1"' };
+    events.set(id, event); return event;
+  });
+  mocks.updateEvent.mockReset().mockImplementation(async (_ownerId, id, changes, expectedVersion) => {
+    const current = events.get(id); if (!current || current.etag !== `"${expectedVersion}"`) return null;
+    const event = { ...current, ...changes, etag: `"${expectedVersion + 1}"` }; events.set(id, event); return event;
+  });
+  mocks.completeEvent.mockReset().mockImplementation(async (_ownerId, id, expectedVersion) => {
+    const current = events.get(id); if (!current || current.etag !== `"${expectedVersion}"`) return null;
+    const event = { ...current, completion: 'done' as const, etag: `"${expectedVersion + 1}"` }; events.set(id, event); return event;
+  });
+  mocks.deleteEvent.mockReset().mockImplementation(async (_ownerId, id, expectedVersion) => {
+    const current = events.get(id); if (!current || current.etag !== `"${expectedVersion}"`) return false;
+    return events.delete(id);
+  });
   mocks.begin.mockReset().mockImplementation(async record => {
     const prior = ledger.get(record.operationId);
     if (prior) return prior;
@@ -105,7 +127,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
-describe('dialog adapter → authenticated routes → Google service (stubbed transport)', () => {
+describe('dialog adapter → authenticated routes → standalone calendar service', () => {
   it('creates, moves, completes, reloads, and deletes through the decided flat contract', async () => {
     const client = createStudyCalendarClient({ fetcher: routeFetcher });
     expect(await client.loadUnresolved()).toEqual([]);
@@ -119,18 +141,18 @@ describe('dialog adapter → authenticated routes → Google service (stubbed tr
     expect(reloaded.events).toEqual(expect.arrayContaining([expect.objectContaining({ id: done.event!.id, completion: 'done' })]));
     expect((await client.onDelete(done.event!.id, done.event!.etag)).status).toBe('synced');
     expect(events.has(done.event!.id)).toBe(false);
-    expect(events.has('personal')).toBe(true);
+    expect(googleEvents.has('personal')).toBe(true);
   });
 
   it('protects personal events and rejects stale ETags', async () => {
     const client = createStudyCalendarClient({ fetcher: routeFetcher });
-    expect((await client.onUpdate('personal', input, '"p1"')).error?.code).toBe('forbidden');
-    expect((await client.onComplete('personal', '"p1"')).error?.code).toBe('forbidden');
-    expect((await client.onDelete('personal', '"p1"')).error?.code).toBe('forbidden');
+    expect((await client.onUpdate('google_personal', input, '"p1"')).error?.code).toBe('not_found');
+    expect((await client.onComplete('google_personal', '"p1"')).error?.code).toBe('not_found');
+    expect((await client.onDelete('google_personal', '"p1"')).error?.code).toBe('not_found');
     const created = await client.onCreate(input);
     const stale = await client.onUpdate(created.event!.id, { ...input, title: 'Changed' }, '"outdated"');
     expect(stale.error?.code).toBe('conflict');
-    expect(events.get(created.event!.id)?.summary).toBe(input.title);
+    expect(events.get(created.event!.id)?.title).toBe(input.title);
   });
 
   it('retries a definite overlap failure with a new attempt ID after availability changes', async () => {
@@ -138,25 +160,27 @@ describe('dialog adapter → authenticated routes → Google service (stubbed tr
     const conflict = { ...input, startAt: '2026-10-12T15:00:00Z', endAt: '2026-10-12T15:50:00Z' };
     const failed = await client.onCreate(conflict);
     expect(failed.error?.code).toBe('overlap');
-    events.delete('personal');
+    googleEvents.delete('personal');
     const retried = await client.retryFailed(failed.operationId);
     expect(retried.status).toBe('synced');
     expect(retried.operationId).not.toBe(failed.operationId);
   });
 
-  it('recovers an uncertain insert after page reload and reconciles using reads, without a second insert', async () => {
-    loseInsertReply = true; unavailableReadback = true;
-    const first = createStudyCalendarClient({ fetcher: routeFetcher });
-    const unknown = await first.onCreate(input);
-    expect(unknown.status).toBe('unknown');
+  it('recovers a pending local create from durable event state without a second insert', async () => {
+    const operationId = '00000000-0000-4000-8000-000000000001';
+    const owner = resolveOwner(new Headers({ 'x-user-id': identity }));
+    const id = eventIdForOperation(operationId);
+    events.set(id, { id, title: input.title, startAt: input.startAt, endAt: input.endAt, timezone: 'Europe/Zurich', allDay: false,
+      source: 'polymate', editable: true, completion: 'open', etag: '"1"' });
+    ledger.set(operationId, { record: { operationId, ownerId: owner.userId, kind: 'create', targetEventId: id, expectedEtag: null,
+      intendedChange: { title: input.title, startAt: input.startAt, endAt: input.endAt } }, result: null });
+    const createCount = mocks.createEvent.mock.calls.length;
     const reloaded = createStudyCalendarClient({ fetcher: routeFetcher });
-    expect(await reloaded.loadUnresolved()).toEqual([expect.objectContaining({ operationId: unknown.operationId, status: 'unknown' })]);
-    expect((await reloaded.onDelete('personal', '"p1"')).status).toBe('unknown');
-    unavailableReadback = false;
-    const confirmed = await reloaded.reconcile(unknown.operationId);
+    expect(await reloaded.loadUnresolved()).toEqual([expect.objectContaining({ operationId, status: 'pending' })]);
+    const confirmed = await reloaded.reconcile(operationId);
     expect(confirmed.status).toBe('synced');
     expect(reloaded.getBlockingOperation()).toBeNull();
-    expect(google.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+    expect(mocks.createEvent).toHaveBeenCalledTimes(createCount);
   });
 
   it('never exposes another student’s operation or writes while reconciling a crashed pending record', async () => {
@@ -174,7 +198,7 @@ describe('dialog adapter → authenticated routes → Google service (stubbed tr
     expect(google.mock.calls.every(([, init]) => init?.method === 'GET')).toBe(true);
   });
 
-  it('rejects missing CSRF, client-selected owners, and unsupported timezones before Google writes', async () => {
+  it('rejects missing CSRF, client-selected owners, and unsupported timezones before calendar writes', async () => {
     const operationId = '00000000-0000-4000-8000-000000000001';
     const headers = { 'x-user-id': identity, origin, cookie, 'content-type': 'application/json', 'x-csrf-token': 'nonce' };
     for (const [body, changes, status] of [
