@@ -131,10 +131,12 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [stoppable, setStoppable] = useState(false);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [confirmedProgress, setConfirmedProgress] = useState<ReadonlySet<string>>(new Set());
   const nextId = useRef(0);
+  const inFlight = useRef<AbortController | null>(null);
 
   function hrefFor(nextView: WorkspaceView) {
     const params = new URLSearchParams(searchParams.toString());
@@ -163,7 +165,11 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       : undefined;
     const id = ++nextId.current;
     setMessages(previous => [...previous, { id, role: 'user', text, cards: [] }].slice(-40) as ChatMessage[]);
-    setInput(''); setBusy(true); setError('');
+    if (!action) setInput('');
+    // Only free-form turns can be stopped; scheduling and confirmations change the calendar and must finish.
+    const controller = action || scheduleAction ? null : new AbortController();
+    inFlight.current = controller;
+    setBusy(true); setStoppable(Boolean(controller)); setError('');
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (action && 'draftToken' in action) {
@@ -175,6 +181,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       const response = await fetch('/api/agent/chat', {
         method: 'POST', headers, credentials: 'same-origin', cache: 'no-store',
         body: JSON.stringify(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text }),
+        signal: controller?.signal,
       });
       const body = await response.json() as ChatResponse;
       if (!response.ok) throw new Error(body.error?.message ?? 'PolyMate could not answer. Try again.');
@@ -189,10 +196,21 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       if (body.reloadCalendar) setReloadKey(value => value + 1);
       if (body.reloadProgress) await workspace?.refresh();
     } catch (reason) {
+      if (controller?.signal.aborted) {
+        setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: 'Stopped.', cards: [] }].slice(-40) as ChatMessage[]);
+        return;
+      }
       const message = reason instanceof Error ? reason.message : 'PolyMate could not answer. Try again.';
       setError(message);
       if (action) setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: message, cards: [] }]);
-    } finally { setBusy(false); }
+    } finally {
+      if (inFlight.current === controller) inFlight.current = null;
+      setBusy(false); setStoppable(false);
+    }
+  }
+
+  function stopMessage() {
+    inFlight.current?.abort();
   }
 
   return <div className="min-h-dvh md:flex md:items-start">
@@ -249,8 +267,10 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
             if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
             event.preventDefault();
             void sendMessage();
-          }} maxLength={4000} rows={2} disabled={busy || sample} placeholder="Ask about course dates, progress, or when you are free…" className="min-h-12 flex-1 resize-y rounded-xl border border-[#cbd7ce] px-3 py-2 text-sm outline-none focus:border-[#658071] disabled:opacity-60" />
-          <button disabled={busy || sample || !input.trim()} className="rounded-xl bg-[#173b32] px-4 py-3 text-sm font-medium text-white disabled:opacity-50">Send</button>
+          }} maxLength={4000} rows={2} disabled={sample} placeholder="Ask about course dates, progress, or when you are free…" className="min-h-12 flex-1 resize-y rounded-xl border border-[#cbd7ce] px-3 py-2 text-sm outline-none focus:border-[#658071] disabled:opacity-60" />
+          {busy && !input.trim()
+            ? <button type="button" onClick={stopMessage} disabled={!stoppable} aria-label="Stop PolyMate" className="rounded-xl bg-[#173b32] px-4 py-3 text-sm font-medium text-white disabled:opacity-50">Stop</button>
+            : <button disabled={busy || sample || !input.trim()} className="rounded-xl bg-[#173b32] px-4 py-3 text-sm font-medium text-white disabled:opacity-50">Send</button>}
         </form>
         <p className="mt-3 text-center text-xs text-[#748278]">{sample ? 'AI chat uses the connected workspace and is unavailable in development sample mode.' : 'Your plan. Your progress. Your approval.'}</p>
       </section>
