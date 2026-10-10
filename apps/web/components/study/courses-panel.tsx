@@ -18,7 +18,7 @@ const lines = (value: string) => value.split('\n').map(item => item.trim()).filt
 const inputClass = 'mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/30';
 const examDate = (value: string) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00Z`));
 
-export function CoursesPanel({ sample, onAddAssignment }: { sample: boolean; onAddAssignment: () => void }) {
+export function CoursesPanel({ sample, demo = false, onAddAssignment }: { sample: boolean; demo?: boolean; onAddAssignment: () => void }) {
   const [courses, setCourses] = useState<Course[]>(sample ? sampleCourses : []);
   const [form, setForm] = useState<FormState>(() => blank());
   const [editing, setEditing] = useState(false);
@@ -85,6 +85,10 @@ export function CoursesPanel({ sample, onAddAssignment }: { sample: boolean; onA
   }
 
   return <div className="space-y-5">
+    {demo && <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+      <p className="text-xs font-semibold uppercase tracking-wide">Mentor demo · setup skills</p>
+      <p className="mt-1 text-sm leading-6">Try adding a course profile, or describe an assignment in one sentence and let Chat extract the deadline and effort.</p>
+    </section>}
     <section className="flex flex-col gap-5 rounded-xl border bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
       <div><h2 className="text-lg font-semibold">Courses and assignments</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Keep course workload and exam priorities here. For an assignment, tell PolyMate what you know in your own words—it will ask for anything missing and save it.</p></div>
       <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">

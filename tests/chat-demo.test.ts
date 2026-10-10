@@ -5,6 +5,7 @@ import { zonedParts, zonedTimeToInstant } from '../packages/contracts/src/time';
 import {
   DEMO_ONBOARDING_OPTIONS,
   demoCalendarEvents,
+  demoCapturedAssignment,
   demoCoachingState,
   demoCommitmentMemory,
   demoMoodleSnapshot,
@@ -33,11 +34,19 @@ describe('guided chat demo', () => {
     expect(AGENT_TOOL_NAMES).toEqual(expect.arrayContaining([
       'moodle_get_calendar_events',
       'polymate_remember_student_context',
+      'polymate_create_assignment',
       'polymate_get_calendar',
       'moodle_plan_assignment_timeline',
       'moodle_schedule_assignment_timeline',
       'polymate_move_study_block',
     ]));
+  });
+
+  it('captures the demo assignment at the intended Zurich wall time', () => {
+    const assignment = demoCapturedAssignment(NOW);
+    const due = zonedParts(assignment.dueAt);
+    expect(assignment).toMatchObject({ title: 'Computer Vision exercise sheet 4', estimatedMinutes: 180 });
+    expect(due).toMatchObject({ weekday: 4, hour: 18, minute: 0 });
   });
 
   it('builds a conflict-free draft before the fixture deadline and remembered commitment', () => {
@@ -62,8 +71,9 @@ describe('guided chat demo', () => {
     }
 
     const pending = demoCoachingState(NOW, [], true);
-    const answered = demoCoachingState(NOW, [], true, true);
-    expect(pending.messages.filter(message => message.requiresResponse && message.status !== 'responded')).toHaveLength(1);
+    const answered = demoCoachingState(NOW, [], true, 2);
+    expect(pending.messages.filter(message => message.requiresResponse && message.status !== 'responded')).toHaveLength(2);
+    expect(demoCoachingState(NOW, [], false).messages.filter(message => message.requiresResponse && message.status !== 'responded')).toHaveLength(1);
     expect(answered.messages.filter(message => message.requiresResponse && message.status !== 'responded')).toHaveLength(0);
   });
 

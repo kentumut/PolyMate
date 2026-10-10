@@ -37,7 +37,7 @@ export type CheckInDraft = Readonly<{
 
 const clock = new Intl.DateTimeFormat('en-GB', { timeZone: CALENDAR_TIMEZONE, hour: '2-digit', minute: '2-digit' });
 const weekday = new Intl.DateTimeFormat('en-GB', { timeZone: CALENDAR_TIMEZONE, weekday: 'long' });
-const dayMonth = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'long' });
+const dayMonth = new Intl.DateTimeFormat('en-GB', { timeZone: CALENDAR_TIMEZONE, day: 'numeric', month: 'long' });
 
 const quote = (text: string, max = 80) => `“${text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text}”`;
 const titleOf = (text: string) => text.slice(0, 120);

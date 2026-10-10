@@ -334,7 +334,7 @@
   },
   {
     "name": "polymate_create_assignment",
-    "description": "Save a local assignment only after the student asked to add or track it and Chat knows its title, exact deadline, and total estimated effort. Ask only for missing details. Never invent a deadline or silently choose an effort estimate; the student must state or accept it. The application supplies the owner and a stable retry ID.",
+    "description": "Save a local assignment only after the student asked to add or track it and Chat knows its title, exact Europe/Zurich deadline, and total estimated effort. Ask only for missing details. Never invent a deadline or silently choose an effort estimate; the student must state or accept it. Convert the Zurich wall time with its correct daylight-saving offset. The application supplies the owner and a stable retry ID.",
     "parameters": {
       "type": "object",
       "properties": {
