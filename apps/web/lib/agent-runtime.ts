@@ -77,6 +77,7 @@ export type ActiveTurn = {
   privateValues: Set<string>;
   expiresAt: number;
 };
+type PendingCreate = { operationId: string; expiresAt: number; block?: StudyBlockInput; relocatedFrom?: StudyBlockInput };
 type RuntimeState = {
   activeTurns: Map<string, ActiveTurn>;
   pendingPlans: Map<string, PendingPlan>;
@@ -84,7 +85,7 @@ type RuntimeState = {
   schedulingOwners: Set<string>;
   histories: Map<string, { messages: Array<{ role: 'user' | 'assistant'; content: string }>; updatedAt: number }>;
   pendingMoves: Map<string, { operationId: string; etag: string; expiresAt: number; sessionRevision?: number }>;
-  pendingCreates: Map<string, { operationId: string; expiresAt: number }>;
+  pendingCreates: Map<string, PendingCreate>;
   pendingDeletes: Map<string, { operationId: string; etag: string; expiresAt: number }>;
   /** Per owner: agent writes that may have reached the calendar in the last 24 hours, keyed by operation ID. */
   agentWrites: Map<string, Map<string, { kind: AgentWriteKind; at: number }>>;
@@ -475,36 +476,56 @@ async function foregroundTool(turn: ActiveTurn, name: AgentToolName, args: Recor
     }
     if (name === 'polymate_create_study_block') {
       const block = parseStudyBlockInput(argsWithoutUndefined(args, ['title', 'startAt', 'endAt']));
-      assertAgentWriteRange(block.startAt, block.endAt);
       const createKey = JSON.stringify([turn.owner.userId, block]);
       const existing = runtime.pendingCreates.get(createKey);
+      // Existing operations are reconciled with their original ID, even if their requested time has passed.
+      if (!existing) assertAgentWriteRange(block.startAt, block.endAt);
       if (!isCreateBlockRequest(turn.message) && !followsUpOnRequest(turn.message, previousUserMessages(turn), isCreateBlockRequest) && !(existing && isRetryRequest(turn.message))) throw new AgentRequestError('The student has not asked to add a study block. Ask what they would like to add.');
-      const pending = existing ?? { operationId: randomUUID(), expiresAt: Date.now() + 60 * 60_000 };
+      let pending: PendingCreate = existing ?? { operationId: randomUUID(), expiresAt: Date.now() + 60 * 60_000, block };
       assertWriteBudget(turn.owner.userId, 'create', [pending.operationId]);
       runtime.pendingCreates.set(createKey, pending);
       const calendar = calendarServiceFor(turn.owner);
-      let result = await calendar.createStudyBlock(block, pending.operationId);
-      recordWrites(turn.owner.userId, 'create', [pending.operationId], [result]);
-      if (result.status === 'synced' || result.status === 'failed') runtime.pendingCreates.delete(createKey);
+      const execute = async (input: StudyBlockInput, operation: PendingCreate) => {
+        try {
+          const result = await calendar.createStudyBlock(input, operation.operationId);
+          recordWrites(turn.owner.userId, 'create', [operation.operationId], [result]);
+          if (result.status === 'synced' || result.status === 'failed') {
+            // Original and shifted arguments both resolve to the same operation while it is uncertain.
+            for (const [key, value] of runtime.pendingCreates) if (value === operation) runtime.pendingCreates.delete(key);
+          }
+          return result;
+        } catch (error) {
+          // A thrown response may follow a committed write. Retain its identity and count it conservatively.
+          recordWrites(turn.owner.userId, 'create', [operation.operationId], [{ status: 'unknown' }]);
+          throw error;
+        }
+      };
+      let placed = pending.block ?? block;
+      let relocatedFrom = pending.relocatedFrom;
+      let result = await execute(placed, pending);
+      let noFreeSlot = false;
       // A taken slot is not a dead end: place the same block, same length, in the nearest free slot.
-      let placed = block;
-      let relocatedFrom: StudyBlockInput | undefined;
-      if (result.status === 'failed' && result.error?.code === 'overlap') {
+      if (!relocatedFrom && result.status === 'failed' && result.error?.code === 'overlap') {
         const slot = await findFreeSlotFor(calendar, block);
+        noFreeSlot = !slot;
         if (slot) {
-          const shifted = { ...block, ...slot };
-          const shiftedOperationId = randomUUID();
-          assertWriteBudget(turn.owner.userId, 'create', [shiftedOperationId]);
-          const retried = await calendar.createStudyBlock(shifted, shiftedOperationId);
-          recordWrites(turn.owner.userId, 'create', [shiftedOperationId], [retried]);
-          if (retried.status === 'unknown') runtime.pendingCreates.set(JSON.stringify([turn.owner.userId, shifted]), { operationId: shiftedOperationId, expiresAt: Date.now() + 60 * 60_000 });
-          if (retried.status !== 'failed') { result = retried; placed = shifted; relocatedFrom = block; }
+          placed = { ...block, ...slot };
+          relocatedFrom = block;
+          pending = { operationId: randomUUID(), expiresAt: pending.expiresAt, block: placed, relocatedFrom };
+          assertWriteBudget(turn.owner.userId, 'create', [pending.operationId]);
+          // Register before execution so lost replies cannot produce a fresh operation on retry.
+          runtime.pendingCreates.set(createKey, pending);
+          runtime.pendingCreates.set(JSON.stringify([turn.owner.userId, placed]), pending);
+          result = await execute(placed, pending);
         }
       }
       turn.cards.push({ kind: 'schedule', data: { result: { results: [result], complete: result.status === 'synced' }, createdBlock: placed, ...(relocatedFrom ? { relocatedFrom } : {}) } });
       turn.consecutiveFailures = 0;
-      if (relocatedFrom) return { ...result, relocated: { requested: { startAt: relocatedFrom.startAt, endAt: relocatedFrom.endAt }, placed: { startAt: placed.startAt, endAt: placed.endAt }, reason: 'The requested time was taken, so the block was placed in the nearest free slot. Tell the student the new time.' } };
-      if (result.status === 'failed' && result.error?.code === 'overlap') return { ...result, hint: 'No free slot of this length was found in the next 14 days. Suggest splitting the work into shorter blocks or another period.' };
+      if (relocatedFrom) return { ...result, relocated: { requested: { startAt: relocatedFrom.startAt, endAt: relocatedFrom.endAt }, placed: { startAt: placed.startAt, endAt: placed.endAt }, reason: result.status === 'synced'
+        ? 'The requested time was taken. Placement in the nearest free slot is confirmed; tell the student the new time.'
+        : result.status === 'failed' ? 'The requested time was taken, but the attempt at the free slot failed. Explain the returned error; no placement is confirmed.'
+          : 'The requested time was taken. Placement at the free slot is unconfirmed. Do not claim it was saved or start another write; retry the same operation to check its outcome.' } };
+      if (noFreeSlot) return { ...result, hint: 'No free slot of this length was found in the next 14 days. Suggest splitting the work into shorter blocks or another period.' };
       return result;
     }
     if (name === 'polymate_edit_study_block') {
@@ -827,8 +848,17 @@ export function agentResponseBody(reply: string, turn: ActiveTurn, ownerId: stri
     reply = writes.every(write => write.result.complete)
       ? `Your calendar ${verb} ${synced} block${synced === 1 ? '' : 's'}. Review the confirmed ${verb === 'deleted' ? 'blocks' : 'times'} below.`
       : `Your calendar ${verb} ${synced} block${synced === 1 ? '' : 's'}. ${results.some(result => result.status === 'unknown') ? 'At least one write is uncertain. ' : ''}The request is incomplete; review the results below. The same draft is retained for safe retries while it remains valid.`;
-    const shifted = turn.cards.flatMap(card => card.kind === 'schedule' ? [card.data as { relocatedFrom?: { startAt: string }; createdBlock?: { startAt: string; endAt: string } }] : []).find(data => data.relocatedFrom && data.createdBlock);
-    if (shifted) reply += ` That time was already taken, so the block was placed in the nearest free slot instead (${shifted.createdBlock!.startAt} to ${shifted.createdBlock!.endAt}).`;
+    for (const card of turn.cards) {
+      if (card.kind !== 'schedule') continue;
+      const shifted = card.data as { relocatedFrom?: { startAt: string }; createdBlock?: { startAt: string; endAt: string }; result: { results: Array<{ status: string }> } };
+      if (!shifted.relocatedFrom || !shifted.createdBlock) continue;
+      const times = `${shifted.createdBlock.startAt} to ${shifted.createdBlock.endAt}`;
+      reply += shifted.result.results.every(result => result.status === 'synced')
+        ? ` The requested time was already taken, so the block was placed in the nearest free slot instead (${times}).`
+        : shifted.result.results.every(result => result.status === 'failed')
+          ? ` The requested time was taken, but the attempt at the free slot (${times}) failed; no placement is confirmed.`
+          : ` The requested time was taken. Placement at the free slot (${times}) is unconfirmed; retry the same operation to check its outcome.`;
+    }
     if (turn.cards.some(card => card.kind === 'schedule' && (card.data as { progressSync?: string }).progressSync === 'pending')) {
       reply += ' Local progress history could not be refreshed yet. Synchronization will be retried on the next progress refresh; the confirmed move does not need to be repeated.';
     }

@@ -144,7 +144,10 @@ function ScheduleCard({ data }: { data: unknown }) {
         return block ? <span className="block">{block.title} · {dateTime(block.startAt)}–{dateTime(block.endAt)}</span> : null;
       })()}<strong className="capitalize">{item.status}</strong>{item.error?.message ? ` — ${item.error.message}` : ''}</span>
     </li>)}</ul> : <p className="mt-2 text-sm text-[#617269]">No calendar writes were confirmed.</p>}
-    {value.relocatedFrom && <p className="mt-3 text-sm text-[#617269]">{dateTime(value.relocatedFrom.startAt)} was already taken, so this block was placed in the nearest free slot.</p>}
+    {value.relocatedFrom && <p className="mt-3 text-sm text-[#617269]">{dateTime(value.relocatedFrom.startAt)} was already taken. {results.length > 0 && results.every(result => result.status === 'synced')
+      ? 'This block was placed in the nearest free slot.'
+      : results.length > 0 && results.every(result => result.status === 'failed') ? 'The attempt at the free slot failed; no placement is confirmed.'
+        : 'Placement at the free slot is unconfirmed. Retry the same operation to check its outcome.'}</p>}
     {unattempted.length > 0 && <ul className="mt-3 space-y-1 text-sm text-[#8a5a26]">{unattempted.map(block => <li key={block.operationId}>{block.title} · {dateTime(block.startAt)} — not attempted</li>)}</ul>}
     {value.result?.complete && <p className="mt-3 text-sm font-medium text-[#173b32]">{value.movedBlock ? 'The move was saved to your calendar.' : value.deletedBlocks ? 'The selected blocks were deleted from your calendar.' : 'All planned blocks were saved to your calendar.'}</p>}
     {value.progressSync === 'pending' && <p className="mt-3 text-sm text-[#8a5a26]">Local progress history could not be refreshed yet. Refresh progress to retry synchronization; the confirmed Google move does not need to be repeated.</p>}
