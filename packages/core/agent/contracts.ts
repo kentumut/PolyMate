@@ -5,6 +5,7 @@ export const AGENT_TOOL_NAMES = [
   'moodle_plan_assignment_timeline',
   'moodle_schedule_assignment_timeline',
   'polymate_check_connections',
+  'polymate_remember_student_context',
   'polymate_get_calendar',
   'polymate_create_study_block',
   'polymate_edit_study_block',

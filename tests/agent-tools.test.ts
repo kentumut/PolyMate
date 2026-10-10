@@ -17,11 +17,13 @@ const mocks = vi.hoisted(() => ({
   progressState: vi.fn(),
   syncStudyCalendarRead: vi.fn(),
   observeStudyCalendarChange: vi.fn(),
+  rememberStudentContext: vi.fn(),
 }));
 vi.mock('../apps/web/lib/moodle', () => ({ executeMoodleTool: mocks.executeMoodleTool, moodleConnectionAvailable: mocks.moodleConnectionAvailable, calendarSnapshotForOwner: mocks.calendarSnapshotForOwner }));
 vi.mock('../packages/db/src/google-oauth', () => ({ getConnectionStatus: mocks.getConnectionStatus }));
 vi.mock('../packages/db/src/agent-automations', () => ({ findAutomationForGatewayJob: mocks.findAutomationForGatewayJob }));
 vi.mock('../packages/db/src/study-progress', () => ({ studyProgressStore: { state: mocks.progressState }, syncStudyCalendarRead: mocks.syncStudyCalendarRead, observeStudyCalendarChange: mocks.observeStudyCalendarChange }));
+vi.mock('../packages/db/src/coaching', () => ({ rememberStudentContext: mocks.rememberStudentContext }));
 vi.mock('../apps/web/lib/calendar-route', () => ({ calendarServiceFor: () => mocks, calendarError: () => Response.json({ error: { message: 'Calendar unavailable.' } }, { status: 502 }) }));
 
 import { AGENT_SYSTEM_INSTRUCTIONS, agentResponseBody, beginAgentTurn, callOpenClawAgent, dispatchOpenClawTool, endAgentTurn, parseAgentToolArguments, publicPendingPlan, scheduleCurrentPlan } from '../apps/web/lib/agent-runtime';
@@ -64,6 +66,7 @@ describe('PolyMate agent tool routing', () => {
     mocks.progressState.mockReset().mockResolvedValue({ assignments: [], links: [], reports: [], pendingCompletions: [] });
     mocks.syncStudyCalendarRead.mockReset().mockResolvedValue(undefined);
     mocks.observeStudyCalendarChange.mockReset().mockResolvedValue(undefined);
+    mocks.rememberStudentContext.mockReset().mockResolvedValue({ id: '99999999-9999-4999-8999-999999999999', category: 'plan', content: 'Busy Tuesday at 19:00.', validUntil: null, createdAt: '2026-10-10T06:00:00.000Z' });
   });
   afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
@@ -90,6 +93,21 @@ describe('PolyMate agent tool routing', () => {
     expect(isExplicitDeleteConsent("Don't delete my study blocks.")).toBe(false);
     expect(isExplicitDeleteConsent('What would deleting a block do?')).toBe(false);
     expect(isExplicitDeleteConsent('Show my calendar.')).toBe(false);
+  });
+
+  it('persists only memory supported by an exact quote from the current student message', async () => {
+    const request = new NextRequest('https://poly.example/api/agent/chat', { method: 'POST', headers: { origin: 'https://poly.example' }, body: '{}' });
+    const { turn } = beginAgentTurn(request, owner, { message: 'I am busy Tuesday at 19:00 next week.' });
+    const unsupported = await signedCall(turn.sessionKey, 'polymate_remember_student_context', {
+      category: 'plan', content: 'Busy all week.', sourceText: 'I am busy all week.',
+    });
+    expect(unsupported.error?.message).toContain('exact quote');
+    const saved = await signedCall(turn.sessionKey, 'polymate_remember_student_context', {
+      category: 'plan', content: 'Busy Tuesday at 19:00.', sourceText: 'busy Tuesday at 19:00', validUntil: '2026-10-18T00:00:00.000Z',
+    });
+    expect(saved.result).toMatchObject({ saved: true });
+    expect(mocks.rememberStudentContext).toHaveBeenCalledWith(owner, expect.objectContaining({ content: 'Busy Tuesday at 19:00.' }));
+    endAgentTurn(turn.sessionKey);
   });
 
   it('passes the original authenticated request to Moodle and hides the plan token from browser state', async () => {

@@ -5,6 +5,8 @@ import { readBoundedText } from '@polymate/core/agent/http';
 import { calendarError } from '@/lib/calendar-route';
 import { moodleError } from '@/lib/moodle';
 import { assertAgentCsrf } from '@/lib/agent-csrf';
+import { listActiveStudentMemories } from '@polymate/db/coaching';
+import { listCourses } from '@polymate/db/courses';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -46,7 +48,16 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
     const { turn, message } = beginAgentTurn(request, owner, body);
     try {
-      const reply = await callOpenClawAgent({ sessionKey: turn.sessionKey, message, signal: request.signal, history: turn.history, draftContext: turn.draftContext });
+      const [memories, courses] = await Promise.all([listActiveStudentMemories(owner.userId), listCourses(owner.userId)]);
+      const memoryContext = memories.map(item => `- [${item.category}] ${item.content}${item.validUntil ? ` (valid until ${item.validUntil})` : ''}`);
+      const courseContext = courses.map(course => [
+        `- [course] ${course.name}; exam date ${course.examDate}; ${course.lectureHoursPerWeek} lecture hours/week; ${course.exerciseSessionCount} exercise sessions at ${course.exerciseSessionMinutes} minutes each.`,
+        `  Must solve: ${course.examPrep.must.join('; ') || 'none listed'}.`,
+        `  Optional: ${course.examPrep.optional.join('; ') || 'none listed'}.`,
+        `  Not required: ${course.examPrep.not_required.join('; ') || 'none listed'}.`,
+      ].join('\n'));
+      const persistentContext = [...memoryContext, ...courseContext].join('\n') || undefined;
+      const reply = await callOpenClawAgent({ sessionKey: turn.sessionKey, message, signal: request.signal, history: turn.history, draftContext: turn.draftContext, persistentContext });
       return Response.json(agentResponseBody(reply, turn, owner.userId), { headers: { 'Cache-Control': 'no-store' } });
     } finally { endAgentTurn(turn.sessionKey); }
   } catch (error) {
