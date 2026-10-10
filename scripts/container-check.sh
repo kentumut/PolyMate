@@ -41,7 +41,7 @@ try {
   const count = await client.query("select count(*)::int as count from polymate_migration_probe");
   const failed = await client.query("select to_regclass($1) as name", ["polymate_failed_migration_probe"]);
   if (count.rows[0].count !== 1 || failed.rows[0].name !== null) throw new Error("Migration repeatability or rollback failed.");
-  for (const table of ["study_preferences", "study_plans", "study_plan_blocks", "calendar_import_collections", "calendar_import_entries", "calendar_import_previews", "calendar_import_confirmations"]) {
+  for (const table of ["study_preferences", "study_plans", "study_plan_blocks", "calendar_import_collections", "calendar_import_entries", "calendar_import_previews", "calendar_import_confirmations", "student_onboarding"]) {
     const found = await client.query("select to_regclass($1) as name", [table]);
     if (found.rows[0].name === null) throw new Error(`Planning/import migration did not create ${table}.`);
   }
@@ -58,8 +58,23 @@ const owner = await response.json();
 if (owner.displayName !== 'Test Student' || !owner.userId || owner.externalId) {
   throw new Error('Unexpected identity response.');
 }
+const identityHeaders = { 'X-User-Id': 'test-student@ethz.ch' };
+const onboardingBefore = await fetch(`${base}/api/onboarding`, { headers: identityHeaders });
+if (!onboardingBefore.ok || (await onboardingBefore.json()).completed !== false) {
+  throw new Error('First-time onboarding state failed.');
+}
+const onboarding = await fetch(`${base}/api/onboarding`, {
+  method: 'POST',
+  headers: { ...identityHeaders, origin: 'https://07.hackathon.ethz.ch', 'content-type': 'application/json' },
+  body: JSON.stringify({ goal: 'deadline', sessionMinutes: 50, coachCadence: 'proactive' }),
+});
+if (!onboarding.ok || (await onboarding.json()).completed !== true) {
+  throw new Error('First-time onboarding completion failed.');
+}
 const page = await fetch(`${base}/calendar`, { headers: { 'X-User-Id': 'test-student@ethz.ch' } });
-if (!page.ok || !(await page.text()).includes('aria-label="Weekly calendar"')) throw new Error('Calendar shell failed.');
+if (!page.ok || !(await page.text()).includes('Preparing your study space')) throw new Error('Authenticated study space shell failed.');
+const calendar = await fetch(`${base}/calendar?demo=1&view=calendar`);
+if (!calendar.ok || !(await calendar.text()).includes('aria-label="Weekly calendar"')) throw new Error('Calendar shell failed.');
 NODE
 BACKUP_DIR="/tmp/$COMPOSE_PROJECT_NAME-backups" scripts/backup.sh
 snapshot="$(find "/tmp/$COMPOSE_PROJECT_NAME-backups" -name database.dump -print -quit)"
