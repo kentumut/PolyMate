@@ -57,19 +57,22 @@ describe('semester planning agent', () => {
   });
 
   it('requires readiness inspection and rejects recommendations in past semesters', () => {
-    const candidates = new Map([['2026W:101', course], ['2027S:101', { ...course, semester: '2027S' }]]);
+    const candidates = new Map([['2026W:101', course], ['2027S:102', { ...course, id: 102, semester: '2027S' }]]);
     const plan = { major: 'Machine Intelligence' as const, minor: 'Computer Graphics', activeSemester: '2027S', targetCredits: 30, courses: [] };
     const proposal = verifiedProposal({
       summary: 'Add candidates.',
       recommendations: [
         { unitId: 101, semester: '2026W', reason: 'Past course.', readiness: 'ready', readinessEvidence: 'Preparation is satisfied.' },
-        { unitId: 101, semester: '2027S', reason: 'Not inspected.', readiness: 'ready', readinessEvidence: 'Unsupported claim.' },
+        { unitId: 102, semester: '2027S', reason: 'Not inspected.', readiness: 'ready', readinessEvidence: 'Unsupported claim.' },
       ],
       cautions: [],
     }, candidates as never, plan, new Set());
 
     expect(proposal.courses).toEqual([]);
-    expect(proposal.cautions.at(-1)).toContain('prerequisite/readiness evidence');
+    expect(proposal.cautions).toEqual(expect.arrayContaining([
+      expect.stringContaining('not inspected'),
+      expect.stringContaining('before the active semester'),
+    ]));
   });
 
   it('does not automatically insert conditional recommendations', () => {
@@ -82,6 +85,7 @@ describe('semester planning agent', () => {
 
     expect(proposal.courses).toEqual([]);
     expect(proposal.summary).toContain('readiness');
+    expect(proposal.cautions.at(-1)).toContain('conditional or unknown');
   });
 
   it('infers degree advancement and balances the saved semester timeline', () => {
@@ -103,6 +107,7 @@ describe('semester planning agent', () => {
         { semester: '2027W', credits: 20, relation: 'active' },
         { semester: '2028S', credits: 10, relation: 'future' },
       ],
+      assumedAdmissionBaseline: expect.stringContaining('bachelor-level admission background'),
     });
   });
 });
