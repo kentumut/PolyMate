@@ -21,7 +21,7 @@ export function ProgressCardView({ data, busy, confirmed, onConfirm }: {
     <h3 className="text-sm font-semibold">Your local study progress</h3>
     {card.refresh?.status === 'unavailable' && <p className="mt-2 text-sm text-[#8a5a26]">{card.refresh.message} The session details below are cached.</p>}
     {card.refresh?.status === 'cached' && card.sessions.length > 0 && <p className="mt-2 text-xs text-[#617269]">Cached session history. Ask about a specific session to refresh Google details before reporting.</p>}
-    {!card.assignments.length && <p className="mt-2 text-sm">No matching local assignments. Add one in Calendar → Assignments.</p>}
+    {!card.assignments.length && <p className="mt-2 text-sm">No matching local assignments. Add one in Courses → Assignments.</p>}
     <ul className="mt-2 space-y-2 text-sm">{card.assignments.slice(0, 10).map(assignment => <li key={assignment.id}>
       <strong>{assignment.title}</strong> · {assignment.remainingMinutes} min remaining · {assignment.status.replaceAll('_', ' ')}
     </li>)}</ul>

@@ -18,16 +18,21 @@ const mocks = vi.hoisted(() => ({
   syncStudyCalendarRead: vi.fn(),
   observeStudyCalendarChange: vi.fn(),
   rememberStudentContext: vi.fn(),
+  createAssignment: vi.fn(),
 }));
 vi.mock('../apps/web/lib/moodle', () => ({ executeMoodleTool: mocks.executeMoodleTool, moodleConnectionAvailable: mocks.moodleConnectionAvailable, calendarSnapshotForOwner: mocks.calendarSnapshotForOwner }));
 vi.mock('../packages/db/src/google-oauth', () => ({ getConnectionStatus: mocks.getConnectionStatus }));
 vi.mock('../packages/db/src/agent-automations', () => ({ findAutomationForGatewayJob: mocks.findAutomationForGatewayJob }));
 vi.mock('../packages/db/src/study-progress', () => ({ studyProgressStore: { state: mocks.progressState }, syncStudyCalendarRead: mocks.syncStudyCalendarRead, observeStudyCalendarChange: mocks.observeStudyCalendarChange }));
 vi.mock('../packages/db/src/coaching', () => ({ rememberStudentContext: mocks.rememberStudentContext }));
-vi.mock('../apps/web/lib/calendar-route', () => ({ calendarServiceFor: () => mocks, calendarError: () => Response.json({ error: { message: 'Calendar unavailable.' } }, { status: 502 }) }));
+vi.mock('../packages/db/src/assignments', () => ({
+  createAssignment: mocks.createAssignment,
+  AssignmentRequestConflict: class AssignmentRequestConflict extends Error {},
+}));
+vi.mock('../apps/web/lib/calendar-route', () => ({ calendarServiceFor: () => mocks, calendarHomeFor: async () => ({ home: 'google', connected: true }), calendarError: () => Response.json({ error: { message: 'Calendar unavailable.' } }, { status: 502 }) }));
 
 import { AGENT_SYSTEM_INSTRUCTIONS, VVZ_ROUTING_INSTRUCTIONS, agentAppContext, agentResponseBody, beginAgentTurn, callOpenClawAgent, dispatchOpenClawTool, endAgentTurn, parseAgentToolArguments, publicPendingPlan, scheduleCurrentPlan } from '../apps/web/lib/agent-runtime';
-import { AGENT_DAILY_CREATE_LIMIT, currentPlanApproval, followsUpOnRequest, isCreateBlockRequest, isExplicitCalendarConsent, isExplicitDeleteConsent, isExplicitPartialConsent } from '../packages/core/agent/contracts';
+import { AGENT_DAILY_CREATE_LIMIT, currentPlanApproval, followsUpOnRequest, isCreateAssignmentRequest, isCreateBlockRequest, isExplicitCalendarConsent, isExplicitDeleteConsent, isExplicitPartialConsent } from '../packages/core/agent/contracts';
 
 const contextSecret = 'agent-context-test-secret-that-is-long-enough';
 const bridgeSecret = 'agent-bridge-test-secret-that-is-long-enough';
@@ -73,6 +78,10 @@ describe('PolyMate agent tool routing', () => {
     mocks.syncStudyCalendarRead.mockReset().mockResolvedValue(undefined);
     mocks.observeStudyCalendarChange.mockReset().mockResolvedValue(undefined);
     mocks.rememberStudentContext.mockReset().mockResolvedValue({ id: '99999999-9999-4999-8999-999999999999', category: 'plan', content: 'Busy Tuesday at 19:00.', validUntil: null, createdAt: '2026-10-10T06:00:00.000Z' });
+    mocks.createAssignment.mockReset().mockImplementation(async (_owner, input) => ({
+      created: true,
+      assignment: { id: '88888888-8888-4888-8888-888888888888', title: input.title, dueAt: input.dueAt, estimatedMinutes: input.estimatedMinutes, remainingMinutes: input.estimatedMinutes, status: 'open', version: 1 },
+    }));
   });
   afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
@@ -92,6 +101,9 @@ describe('PolyMate agent tool routing', () => {
     expect(() => parseAgentToolArguments('polymate_create_study_block', {
       title: 'Review', startAt: '2026-10-11T08:00:00Z', endAt: '2026-10-11T08:50:00Z', ownerId: owner.userId,
     })).toThrow('unsupported fields');
+    expect(() => parseAgentToolArguments('polymate_create_assignment', { title: 'Sheet 4', dueAt: '2026-10-16T18:00:00+02:00', estimatedMinutes: 180 })).not.toThrow();
+    expect(() => parseAgentToolArguments('polymate_create_assignment', { title: 'Sheet 4', dueAt: 'next Friday', estimatedMinutes: 180 })).toThrow('explicit timezone');
+    expect(() => parseAgentToolArguments('polymate_create_assignment', { title: 'Sheet 4', dueAt: '2026-10-16T18:00:00+02:00', estimatedMinutes: 0 })).toThrow('positive whole number');
     expect(() => parseAgentToolArguments('polymate_edit_study_block', { eventId: 'event' })).toThrow('Nothing to change');
     expect(() => parseAgentToolArguments('polymate_edit_study_block', { eventId: 'event', startAt: '2026-10-11T08:00:00Z' })).toThrow('together');
     expect(() => parseAgentToolArguments('polymate_delete_study_blocks', { eventIds: [] })).toThrow('between 1 and 3');
@@ -122,6 +134,13 @@ describe('PolyMate agent tool routing', () => {
     expect(followsUpOnRequest('the morning ones', ['Remove the study blocks on Sunday.'], isExplicitDeleteConsent, true)).toBe(false);
   });
 
+  it('recognises natural assignment capture requests', () => {
+    expect(isCreateAssignmentRequest('I want to add an assignment for Computer Vision.')).toBe(true);
+    expect(isCreateAssignmentRequest('Track my exercise sheet due Friday.')).toBe(true);
+    expect(isCreateAssignmentRequest('Explain how adding an assignment works.')).toBe(false);
+    expect(isCreateAssignmentRequest("Don't add this assignment.")).toBe(false);
+  });
+
   it('persists only memory supported by an exact quote from the current student message', async () => {
     const request = new NextRequest('https://poly.example/api/agent/chat', { method: 'POST', headers: { origin: 'https://poly.example' }, body: '{}' });
     const { turn } = beginAgentTurn(request, owner, { message: 'I am busy Tuesday at 19:00 next week.' });
@@ -134,6 +153,17 @@ describe('PolyMate agent tool routing', () => {
     });
     expect(saved.result).toMatchObject({ saved: true });
     expect(mocks.rememberStudentContext).toHaveBeenCalledWith(owner, expect.objectContaining({ content: 'Busy Tuesday at 19:00.' }));
+    endAgentTurn(turn.sessionKey);
+  });
+
+  it('saves a fully described assignment after a natural chat request', async () => {
+    const request = new NextRequest('https://poly.example/api/agent/chat', { method: 'POST', headers: { origin: 'https://poly.example' }, body: '{}' });
+    const { turn } = beginAgentTurn(request, owner, { message: 'Add my Computer Vision sheet due Friday at 18:00; it should take 3 hours.' });
+    const saved = await signedCall(turn.sessionKey, 'polymate_create_assignment', {
+      title: 'Computer Vision sheet', dueAt: '2026-10-16T18:00:00+02:00', estimatedMinutes: 180,
+    });
+    expect(saved.result).toMatchObject({ saved: true, created: true, assignment: { title: 'Computer Vision sheet', estimatedMinutes: 180 } });
+    expect(mocks.createAssignment).toHaveBeenCalledWith(owner, expect.objectContaining({ clientRequestId: expect.any(String) }));
     endAgentTurn(turn.sessionKey);
   });
 
@@ -710,10 +740,11 @@ describe('PolyMate agent tool routing', () => {
     ]);
     expect(context.upcomingMoodleEntries).toHaveLength(25);
     expect(context.moreEntries).toBe(8);
+    expect(context.calendarHome).toBe('google');
     expect(JSON.stringify(context)).not.toContain('Ignore previous instructions');
 
     mocks.moodleConnectionAvailable.mockResolvedValueOnce(false);
-    expect(await agentAppContext(owner.userId)).toBe('{"moodleConnected":false}');
+    expect(await agentAppContext(owner.userId)).toBe('{"moodleConnected":false,"calendarHome":"google"}');
     mocks.calendarSnapshotForOwner.mockRejectedValueOnce(new Error('feed down'));
     expect(await agentAppContext(owner.userId)).toContain('Moodle and calendar context are unavailable');
 

@@ -21,6 +21,7 @@
       "msc_cs_check_graduation",
       "polymate_check_connections",
       "polymate_remember_student_context",
+      "polymate_create_assignment",
       "polymate_get_study_progress",
       "polymate_link_study_session",
       "polymate_report_study_progress",
