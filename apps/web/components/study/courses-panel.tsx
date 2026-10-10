@@ -1,7 +1,7 @@
 'use client';
 
 import type { Course, ExamPrepPriority } from '@polymate/contracts/courses';
-import { CalendarClock, Clock3, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { CalendarClock, ClipboardPlus, Clock3, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { DEMO_COURSES } from '@/lib/demo-fixtures';
@@ -18,7 +18,7 @@ const lines = (value: string) => value.split('\n').map(item => item.trim()).filt
 const inputClass = 'mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/30';
 const examDate = (value: string) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00Z`));
 
-export function CoursesPanel({ sample }: { sample: boolean }) {
+export function CoursesPanel({ sample, onAddAssignment }: { sample: boolean; onAddAssignment: () => void }) {
   const [courses, setCourses] = useState<Course[]>(sample ? sampleCourses : []);
   const [form, setForm] = useState<FormState>(() => blank());
   const [editing, setEditing] = useState(false);
@@ -84,20 +84,14 @@ export function CoursesPanel({ sample }: { sample: boolean }) {
     finally { setBusy(false); }
   }
 
-  const totalLectureHours = courses.reduce((sum, course) => sum + course.lectureHoursPerWeek, 0);
-  const nextExam = [...courses].sort((a, b) => a.examDate.localeCompare(b.examDate))[0];
-
   return <div className="space-y-5">
     <section className="flex flex-col gap-5 rounded-xl border bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-      <div><h2 className="text-lg font-semibold">Course context</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Tell PolyMate how much work each course takes and what matters for the exam. This context informs Chat without adding calendar events.</p></div>
-      <Button type="button" onClick={startNew}><Plus aria-hidden="true" /> Add course</Button>
+      <div><h2 className="text-lg font-semibold">Courses and assignments</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Keep each course’s workload and exam priorities here, then add its concrete deadlines below. PolyMate uses both in Chat and planning.</p></div>
+      <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+        <Button type="button" variant="outline" onClick={startNew}><Plus aria-hidden="true" /> Add course</Button>
+        <Button type="button" onClick={onAddAssignment}><ClipboardPlus aria-hidden="true" /> Add assignment</Button>
+      </div>
     </section>
-
-    <dl className="grid gap-3 sm:grid-cols-3">
-      <div className="rounded-xl border bg-card p-4"><dt className="text-xs text-muted-foreground">Tracked courses</dt><dd className="mt-1 text-2xl font-semibold">{courses.length}</dd></div>
-      <div className="rounded-xl border bg-card p-4"><dt className="text-xs text-muted-foreground">Lectures each week</dt><dd className="mt-1 text-2xl font-semibold">{totalLectureHours}<span className="ml-1 text-sm font-normal text-muted-foreground">hours</span></dd></div>
-      <div className="rounded-xl border bg-card p-4"><dt className="text-xs text-muted-foreground">Next exam</dt><dd className="mt-1 text-sm font-semibold">{nextExam ? nextExam.name : 'Nothing scheduled'}</dd>{nextExam && <p className="mt-1 text-xs text-muted-foreground">{examDate(nextExam.examDate)}</p>}</div>
-    </dl>
 
     {formOpen && <form id="course-editor" onSubmit={save} className="scroll-mt-20 rounded-xl border bg-card shadow-sm md:scroll-mt-4">
       <div className="flex items-start justify-between gap-4 border-b px-5 py-4"><div><h2 className="font-semibold">{editing ? `Edit ${form.name}` : 'Add a course'}</h2><p className="mt-1 text-sm text-muted-foreground">Workload first, then exam scope.</p></div><Button type="button" size="icon" variant="ghost" onClick={reset} aria-label="Close course editor"><X aria-hidden="true" /></Button></div>

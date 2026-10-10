@@ -6,7 +6,7 @@ import { currentPlanApproval } from '@polymate/core/agent/contracts';
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
 import type { CalendarEvent } from '@polymate/contracts/calendar';
 import type { OnboardingProfile, OnboardingState } from '@polymate/contracts/onboarding';
-import { ArrowLeft, ArrowUp, Check, ClipboardPlus, GraduationCap, RotateCcw, Sparkles, Square } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Check, GraduationCap, RotateCcw, Sparkles, Square } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -295,7 +295,6 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
   const [coachRefreshKey, setCoachRefreshKey] = useState(0);
   const [coachOutstanding, setCoachOutstanding] = useState(0);
   const [nextEvent, setNextEvent] = useState<CalendarEvent | null>(null);
-  const [assignmentsOpen, setAssignmentsOpen] = useState(false);
   const [demoStage, setDemoStage] = useState<DemoStage>(demo ? 'onboarding' : 'brief');
   const [demoProfile, setDemoProfile] = useState<DemoProfile | null>(null);
   const [demoCommitment, setDemoCommitment] = useState<DemoCommitment>('volunteering');
@@ -665,8 +664,8 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
     timeZone: 'Europe/Zurich', weekday: 'long', hour: '2-digit', minute: '2-digit',
   }).format(new Date(nextEvent.startAt)) : null;
   const pageTitle = view === 'calendar' ? 'Calendar' : view === 'courses' ? 'Courses' : view === 'planner' ? 'Semester plan' : 'Settings';
-  const pageDescription = view === 'calendar' ? 'Your week, deadlines, and study blocks in one place.'
-    : view === 'courses' ? 'Workload, exam scope, and preparation priorities for each course.'
+  const pageDescription = view === 'calendar' ? 'Your scheduled study blocks and connected calendar events.'
+    : view === 'courses' ? 'Course workload, assignments, and exam preparation priorities.'
       : view === 'planner' ? 'Choose courses that fit your major, minor, and graduation path.'
       : 'Connections and preferences for your study space.';
   const demoRange = demo ? demoWeekRange(demoEpoch) : null;
@@ -690,7 +689,6 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4 sm:px-6">
         <p className="truncate text-sm font-medium">{view === 'chat' ? <>Chat {demo && <span className="ml-2 rounded-full bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Demo</span>}</> : <>PolyMate <span className="text-muted-foreground">/ {pageTitle}</span></>}</p>
         <div className="flex items-center gap-1">
-          {view === 'calendar' && <Button type="button" size="sm" aria-label="Add assignment" onClick={() => { setAssignmentsOpen(true); window.dispatchEvent(new Event('polymate-add-assignment')); }}><ClipboardPlus aria-hidden="true" /><span className="hidden sm:inline">Add assignment</span></Button>}
           {view === 'courses' && <Button asChild size="sm" variant="outline"><a href={hrefFor('planner')} aria-label="Open semester plan" onClick={event => navigate(event, 'planner')}><GraduationCap aria-hidden="true" /><span className="hidden sm:inline">Semester plan</span></a></Button>}
           {view === 'planner' && <Button asChild size="sm" variant="ghost"><a href={hrefFor('courses')} aria-label="Back to courses" onClick={event => navigate(event, 'courses')}><ArrowLeft aria-hidden="true" /><span className="hidden sm:inline">Courses</span></a></Button>}
           <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswered}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} chats={demo ? [] : chats.chats} activeChatId={chatId} disabled={busy} onOpenChat={demo ? undefined : chat => void openChat(chat.id)} onNewChat={demo ? undefined : newChat} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
@@ -705,19 +703,14 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
         </header>}
 
         {/* Keep panels mounted so navigation preserves drafts, forms, and calendar state. */}
-        <section aria-label="Calendar" className={view === 'calendar' ? 'space-y-5' : 'hidden'}>
+        <section aria-label="Calendar" className={view === 'calendar' ? 'block' : 'hidden'}>
           <div className="min-w-0"><CalendarStudyWorkflow sample={sample} demo={demo} externalReloadKey={reloadKey} initialDate={demoRange?.from} /></div>
-          <details open={assignmentsOpen} onToggle={event => setAssignmentsOpen(event.currentTarget.open)} className="group rounded-xl border bg-card shadow-sm">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 text-sm font-medium [&::-webkit-details-marker]:hidden">
-              <span>Assignments <span className="ml-2 hidden font-normal text-muted-foreground sm:inline">Deadlines and effort estimates</span></span>
-              <span className="text-xl leading-none text-muted-foreground transition-transform group-open:rotate-45" aria-hidden="true">+</span>
-            </summary>
-            <div className="border-t [&>section]:border-0 [&>section]:bg-transparent"><AssignmentsPanel sample={sample} onCalendarChange={() => setReloadKey(value => value + 1)} /></div>
-          </details>
-          {sample && <p className="text-xs text-muted-foreground">{demo ? 'Guided demo calendar. Changes stay in this browser and reset on reload.' : 'Development sample calendar. Changes stay in memory.'}</p>}
         </section>
 
-        <section aria-label="Courses" className={view === 'courses' ? 'block' : 'hidden'}><CoursesPanel sample={sample} /></section>
+        <section aria-label="Courses" className={view === 'courses' ? 'space-y-6' : 'hidden'}>
+          <CoursesPanel sample={sample} onAddAssignment={() => document.getElementById('add-course-assignment')?.click()} />
+          <AssignmentsPanel sample={sample} onCalendarChange={() => setReloadKey(value => value + 1)} />
+        </section>
 
         <section aria-label="Semester planning" className={view === 'planner' ? '' : 'hidden'}>
           <SemesterPlanner sample={sample} onRecommend={openRecommendation} />
