@@ -1,0 +1,9 @@
+[Unit]
+Description=Check PolyMate container health every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target
