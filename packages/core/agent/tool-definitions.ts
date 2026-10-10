@@ -50,7 +50,7 @@ export const AGENT_TOOL_DEFINITIONS = [
   },
   {
     name: 'polymate_create_study_block',
-    description: 'Create one PolyMate study block only when the student explicitly asks to add it. Supply a clear title and exact start/end instants. The application supplies the owner and a stable retry operation ID.',
+    description: 'Create one PolyMate study block the student asked for, as soon as the date and times are known; do not ask for a second confirmation. Supply a clear title and exact start/end instants. The application supplies the owner and a stable retry operation ID.',
     parameters: {
       type: 'object', properties: { title: { type: 'string' }, startAt: OFFSET_INSTANT_SCHEMA, endAt: OFFSET_INSTANT_SCHEMA },
       required: ['title', 'startAt', 'endAt'], additionalProperties: false,
