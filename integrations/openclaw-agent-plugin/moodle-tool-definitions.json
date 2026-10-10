@@ -10,7 +10,7 @@
   },
   {
     "name": "moodle_plan_assignment_timeline",
-    "description": "Draft study blocks before calendar dates for entries explicitly selected by the student, using their estimated effort and availability. Calendar dates are not independently verified assignment deadlines. Checks Google and Moodle event conflicts. Returns a planToken draft reference; copy it exactly when scheduling.",
+    "description": "Draft study blocks before calendar dates for entries explicitly selected by the student, using their estimated effort and availability. Calendar dates are not independently verified assignment deadlines. Checks Google and Moodle event conflicts. A timeline holds at most 20 study blocks; for more work, plan a shorter period first. Returns a planToken draft reference; copy it exactly when scheduling.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -492,7 +492,7 @@
   },
   {
     "name": "polymate_delete_study_blocks",
-    "description": "Delete existing PolyMate study blocks only when the student explicitly asks to delete or remove them. First retrieve their eventIds using polymate_get_calendar, then pass every block to delete in a single call. Personal Google events are read-only and cannot be deleted. The application supplies the owner, current etags, and stable retry operation IDs.",
+    "description": "Delete existing PolyMate study blocks only when the student explicitly asks to delete or remove them. First retrieve their eventIds using polymate_get_calendar, then pass at most 3 blocks in a single call; each student message allows at most 3 deletions. Personal Google events are read-only and cannot be deleted. The application supplies the owner, current etags, and stable retry operation IDs.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -502,7 +502,7 @@
             "type": "string"
           },
           "minItems": 1,
-          "maxItems": 50,
+          "maxItems": 3,
           "uniqueItems": true
         }
       },
