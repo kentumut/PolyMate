@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { spawnSync } from 'node:child_process';
-import { gatewayConfiguration, OPENCLAW_VERSION, DEFAULT_MODEL } from './openclaw-config.mjs';
+import { gatewayConfiguration, OPENCLAW_VERSION, DEFAULT_MODEL, DEFAULT_THINKING } from './openclaw-config.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const local = resolve(root, '.local/openclaw');
@@ -52,6 +52,7 @@ if (command === 'setup') {
   chmodSync(webPath, 0o600);
   mkdirSync(state, { recursive: true, mode: 0o700 });
   writeFileSync(env.OPENCLAW_CONFIG_PATH, JSON.stringify(gatewayConfiguration({ model: provider.POLYMATE_LLM_MODEL || DEFAULT_MODEL,
+    thinking: provider.POLYMATE_LLM_THINKING || DEFAULT_THINKING, fastMode: provider.POLYMATE_LLM_FAST === 'true',
     pluginPath, workspace: resolve(state, 'workspace') }), null, 2) + '\n', { mode: 0o600 });
   console.log('Local gateway configured. Add your key in .local/openclaw/provider.env, run pnpm agent:start, and restart pnpm dev.');
 } else if (command === 'start' || command === 'validate') {

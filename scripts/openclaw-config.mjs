@@ -2,10 +2,15 @@ import { readFileSync } from 'node:fs';
 
 export const OPENCLAW_VERSION = '2026.9.9';
 export const DEFAULT_MODEL = 'openai/gpt-5.6-terra';
+// Planning turns are tool-driven; deeper reasoning mostly adds latency.
+export const DEFAULT_THINKING = 'low';
+export const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'];
 
 /** No provider or operator secrets are serialized into this configuration. */
-export function gatewayConfiguration({ model = DEFAULT_MODEL, pluginPath, workspace, bind = 'loopback', port = 18789 }) {
+export function gatewayConfiguration({ model = DEFAULT_MODEL, thinking = DEFAULT_THINKING, fastMode = false, pluginPath, workspace, bind = 'loopback', port = 18789 }) {
   if (!/^openai\/[a-zA-Z0-9._-]+$/.test(model)) throw new Error('Choose an openai/<model-id> model.');
+  if (!THINKING_LEVELS.includes(thinking)) throw new Error(`Choose a thinking level: ${THINKING_LEVELS.join(', ')}.`);
+  if (typeof fastMode !== 'boolean') throw new Error('fastMode must be true or false.');
   const manifest = JSON.parse(readFileSync(new URL('../integrations/openclaw-agent-plugin/openclaw.plugin.json', import.meta.url), 'utf8'));
   const tools = manifest.contracts.tools;
   return {
@@ -14,7 +19,7 @@ export function gatewayConfiguration({ model = DEFAULT_MODEL, pluginPath, worksp
     agents: {
       ownership: 'explicit',
       defaults: { model: { primary: model }, models: { [model]: { agentRuntime: { id: 'openclaw' } } },
-        workspace, skipBootstrap: true, userTimezone: 'Europe/Zurich', skills: [], heartbeat: { every: '0m' } },
+        workspace, skipBootstrap: true, userTimezone: 'Europe/Zurich', thinkingDefault: thinking, fastModeDefault: fastMode, skills: [], heartbeat: { every: '0m' } },
       entries: { main: { tools: { allow: tools } }, 'polymate-scheduler': { tools: { allow: ['cron'] } } },
     },
     tools: { allow: [...tools, 'cron'] },

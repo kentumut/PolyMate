@@ -32,6 +32,8 @@ export function validateConfiguration(env) {
       if (Buffer.byteLength(env[key] ?? '') < 32) errors.push(`${key} must contain at least 32 bytes when OPENCLAW_ENABLED=true.`);
     }
     if (env.POLYMATE_LLM_MODEL && !/^openai\/[a-zA-Z0-9._-]+$/.test(env.POLYMATE_LLM_MODEL)) errors.push('POLYMATE_LLM_MODEL must be openai/<model-id>.');
+    if (env.POLYMATE_LLM_THINKING && !['off', 'minimal', 'low', 'medium', 'high'].includes(env.POLYMATE_LLM_THINKING)) errors.push('POLYMATE_LLM_THINKING must be off, minimal, low, medium, or high.');
+    if (env.POLYMATE_LLM_FAST && !['true', 'false'].includes(env.POLYMATE_LLM_FAST)) errors.push('POLYMATE_LLM_FAST must be true or false.');
   }
   return errors;
 }

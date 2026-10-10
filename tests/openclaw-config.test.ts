@@ -21,4 +21,14 @@ describe('gateway deployment policy', () => {
     expect(config.agents.defaults.models['openai/gpt-5.5'].agentRuntime.id).toBe('openclaw');
     expect(() => gatewayConfiguration({ model: 'openai/../../secret' })).toThrow();
   });
+  it('defaults to low thinking without priority processing, and validates overrides', () => {
+    const config = gatewayConfiguration({ pluginPath: '/plugin', workspace: '/workspace' });
+    expect(config.agents.defaults.thinkingDefault).toBe('low');
+    expect(config.agents.defaults.fastModeDefault).toBe(false);
+    const tuned = gatewayConfiguration({ thinking: 'minimal', fastMode: true, pluginPath: '/plugin', workspace: '/workspace' });
+    expect(tuned.agents.defaults.thinkingDefault).toBe('minimal');
+    expect(tuned.agents.defaults.fastModeDefault).toBe(true);
+    expect(() => gatewayConfiguration({ thinking: 'ultra', pluginPath: '/plugin', workspace: '/workspace' })).toThrow();
+    expect(() => gatewayConfiguration({ fastMode: 'true', pluginPath: '/plugin', workspace: '/workspace' })).toThrow();
+  });
 });

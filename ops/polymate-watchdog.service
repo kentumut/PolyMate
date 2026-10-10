@@ -1,0 +1,10 @@
+[Unit]
+Description=Restart unhealthy PolyMate containers
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=viscon
+WorkingDirectory=/home/viscon/polymate
+ExecStart=/home/viscon/polymate/scripts/watchdog.sh
