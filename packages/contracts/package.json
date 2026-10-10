@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./assignments": "./src/assignments.ts",
     "./calendar": "./src/calendar.ts",
     "./time": "./src/time.ts",
     "./http-client": "./src/http-client.ts",

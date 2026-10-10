@@ -1,24 +1,14 @@
+import { STUDY_BLOCK_TITLE_MAX, validateStudyInterval } from '@polymate/contracts/calendar';
+import type { CalendarEvent, OperationResult, StudyBlockInput as CalendarStudyBlockInput } from '@polymate/contracts/calendar';
+
 export const STUDY_TIMEZONE = 'Europe/Zurich' as const;
 
-export type StudyBlockInput = {
-  title: string;
-  startAt: string;
-  endAt: string;
+export type StudyBlockInput = CalendarStudyBlockInput & {
   timezone: typeof STUDY_TIMEZONE;
 };
 
-// Component-local boundary matching TEAM_SCHEDULE until shared contracts land.
-export type StudyBlockDialogEvent = {
-  id: string;
-  title: string;
-  startAt: string;
-  endAt: string;
-  timezone: string;
-  source: 'google-personal' | 'polymate';
-  editable: boolean;
-  completion: 'open' | 'done';
-  etag: string;
-};
+// Allow older dialog fixtures to omit allDay while sharing the canonical event fields.
+export type StudyBlockDialogEvent = Omit<CalendarEvent, 'allDay'> & Partial<Pick<CalendarEvent, 'allDay'>>;
 
 /** Deletion targets the saved event even if its session is already completed. */
 export function deletionTarget(loadedEvent: StudyBlockDialogEvent | null, currentEvent: StudyBlockDialogEvent | null) {
@@ -34,10 +24,8 @@ export function completionTarget(loadedEvent: StudyBlockDialogEvent | null, curr
   return deletionTarget(loadedEvent, currentEvent);
 }
 
-// Structural callback boundary until Dogancem publishes OperationResult.
-export type StudyBlockOperationResult = {
-  operationId: string;
-  status: 'pending' | 'synced' | 'failed' | 'unknown';
+// Also represent pre-service transport/session errors in the UI.
+export type StudyBlockOperationResult = Omit<OperationResult, 'event' | 'error'> & {
   event?: StudyBlockDialogEvent;
   error?: { message: string; code?: string; recoverable?: boolean };
 };
@@ -125,6 +113,7 @@ export function validateStudyBlock(fields: StudyBlockFields):
   { input: StudyBlockInput; errors?: never } | { errors: StudyBlockErrors; input?: never } {
   const errors: StudyBlockErrors = {};
   if (!fields.title.trim()) errors.title = 'Enter a title for your study block.';
+  else if (fields.title.trim().length > STUDY_BLOCK_TITLE_MAX) errors.title = `Keep the title under ${STUDY_BLOCK_TITLE_MAX} characters.`;
   if (!validDate(fields.date)) errors.date = 'Choose a valid date.';
   if (!validDate(fields.endDate)) errors.endDate = 'Choose a valid end date.';
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(fields.startTime)) errors.startTime = 'Choose a valid start time.';
@@ -141,6 +130,9 @@ export function validateStudyBlock(fields: StudyBlockFields):
   }
   if ('instant' in start && 'instant' in end && Date.parse(end.instant) <= Date.parse(start.instant)) {
     errors.endTime = 'End time must be after start time.';
+  } else if ('instant' in start && 'instant' in end) {
+    try { validateStudyInterval(start.instant, end.instant); }
+    catch (error) { errors.endTime = error instanceof Error ? error.message : 'Choose a valid study duration.'; }
   }
   if (Object.keys(errors).length || !('instant' in start) || !('instant' in end)) return { errors };
   return { input: { title: fields.title.trim(), startAt: start.instant, endAt: end.instant, timezone: STUDY_TIMEZONE } };

@@ -6,7 +6,7 @@ The shared `CalendarEvent` / `CalendarClient` contract, fake client, HTTP client
 
 ## Consumers
 
-Yildirim and Catalin should import `@polymate/contracts/calendar` and use `HttpCalendarClient` from `@polymate/contracts/http-client`. The route names and wire bodies are listed in `packages/contracts/README.md`. Catalin's initial `/api/calendar/study-blocks` adapter must switch to these agreed `/api/calendar/events` endpoints and `{ operationId, block }` create body. Kent composes these callbacks into the calendar page. This PR does not compose the teammate UI modules.
+Yildirim and Catalin import `@polymate/contracts/calendar`. `HttpCalendarClient` from `@polymate/contracts/http-client` supports the original `/api/calendar/events` contract. The integrated study workflow uses Catalin's flat `/api/calendar/study-blocks` contract, whose routes delegate to the same calendar service. Both sets of wire bodies are listed in `packages/contracts/README.md`. `CalendarStudyWorkflow` composes the view and dialog on `/calendar`; owner-scoped operation listing and reconciliation support recovery after reload. Live acceptance is still required.
 
 ## Write safety
 

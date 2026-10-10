@@ -190,6 +190,24 @@ export function parseActionRequest(value: unknown): StudyBlockActionRequest {
   return { operationId: parseOperationId(body.operationId), expectedEtag: parseEtag(body.expectedEtag) };
 }
 
+/** Flat dialog wire contract; delegates interval/title validation to the service contract. */
+export function parseDialogCreateRequest(value: unknown): CreateStudyBlockRequest {
+  const body = record(value, 'request');
+  only(body, ['operationId', 'title', 'startAt', 'endAt', 'timezone'], 'request');
+  if (body.timezone !== 'Europe/Zurich') throw new ContractError('timezone must be Europe/Zurich.');
+  return { operationId: parseOperationId(body.operationId), block: parseStudyBlockInput({ title: body.title, startAt: body.startAt, endAt: body.endAt }) };
+}
+
+export function parseDialogUpdateRequest(value: unknown): UpdateStudyBlockRequest {
+  const body = record(value, 'request');
+  only(body, ['operationId', 'expectedEtag', 'title', 'startAt', 'endAt', 'timezone'], 'request');
+  if (body.timezone !== 'Europe/Zurich') throw new ContractError('timezone must be Europe/Zurich.');
+  return {
+    operationId: parseOperationId(body.operationId), expectedEtag: parseEtag(body.expectedEtag),
+    changes: parseStudyBlockInput({ title: body.title, startAt: body.startAt, endAt: body.endAt }),
+  };
+}
+
 /** Builds a proposed block of the default length; the student still chooses the time. */
 export function proposeStudyBlock(startAt: string, title = 'Study block'): StudyBlockInput {
   const start = parseInstant(startAt, 'startAt');

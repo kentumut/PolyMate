@@ -18,6 +18,33 @@ type Row = {
   result: OperationResult | null;
 };
 
+function storedOperation(row: Row) {
+  return {
+    record: {
+      operationId: row.operation_id, ownerId: row.owner_id, kind: row.operation_kind,
+      targetEventId: row.target_event_id, expectedEtag: row.expected_etag, intendedChange: row.intended_change,
+    } satisfies OperationRecord,
+    result: row.status === 'pending' ? null : row.result,
+  };
+}
+
+export async function findCalendarOperation(ownerId: string, operationId: string) {
+  const result = await queries().query<Row>(
+    `SELECT operation_id, owner_id, operation_kind, target_event_id, expected_etag, intended_change, status, result
+     FROM calendar_operations WHERE operation_id = $1 AND owner_id = $2`, [operationId, ownerId],
+  );
+  return result.rows[0] ? storedOperation(result.rows[0]) : null;
+}
+
+export async function listUnresolvedCalendarOperations(ownerId: string): Promise<OperationResult[]> {
+  const result = await queries().query<Row>(
+    `SELECT operation_id, status, result FROM calendar_operations
+     WHERE owner_id = $1 AND status IN ('pending', 'unknown') ORDER BY created_at, operation_id`, [ownerId],
+  );
+  // Recovery returns only operation identity/status, never a different student's payload.
+  return result.rows.map(row => ({ operationId: row.operation_id, status: row.status, ...(row.result?.error ? { error: row.result.error } : {}) }));
+}
+
 /** calendar_operations-backed log (migration 0001). Rows are always scoped to the resolved owner. */
 export const calendarOperationStore: OperationStore = {
   async withOwnerLock<T>(ownerId: string, run: () => Promise<T>): Promise<T> {
@@ -58,13 +85,7 @@ export const calendarOperationStore: OperationStore = {
     const row = existing.rows[0];
     // An ID collision with another owner must not read or expose that owner's record.
     if (!row) return { record: { ...record, ownerId: '' }, result: null };
-    return {
-      record: {
-        operationId: row.operation_id, ownerId: row.owner_id, kind: row.operation_kind,
-        targetEventId: row.target_event_id, expectedEtag: row.expected_etag, intendedChange: row.intended_change,
-      },
-      result: row.status === 'pending' ? null : row.result,
-    };
+    return storedOperation(row);
   },
 
   async finish(ownerId: string, result: OperationResult) {

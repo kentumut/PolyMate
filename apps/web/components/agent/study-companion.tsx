@@ -2,7 +2,8 @@
 
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
 import { useRef, useState, type FormEvent } from 'react';
-import { CalendarPanel } from '@/components/calendar/calendar-panel';
+import { CalendarStudyWorkflow } from '@/components/study/calendar-study-workflow';
+import { AssignmentsPanel } from '@/components/study/assignments-panel';
 import { GoogleConnection } from '@/components/connections/google-connection';
 import { MoodleConnection } from '@/components/connections/moodle-connection';
 import { MoodleCalendarPreview } from '@/components/connections/moodle-calendar-preview';
@@ -146,6 +147,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     <section className="min-w-0 space-y-5">
       <MoodleConnection />
       <section className="rounded-2xl border border-[#dce3db] bg-white p-5 text-center"><h2 className="text-sm font-semibold">Google Calendar</h2><GoogleConnection /></section>
+      <AssignmentsPanel sample={sample} />
       <section className="flex min-h-[500px] flex-col rounded-2xl border border-[#dce3db] bg-white p-5 md:p-6" aria-labelledby="study-chat-title">
         <header className="border-b border-[#e5eae4] pb-4"><p className="text-[11px] font-semibold uppercase tracking-widest text-[#658071]">Your study companion</p>
           <h2 id="study-chat-title" className="mt-1 text-xl font-medium">Plan with PolyMate</h2>
@@ -175,7 +177,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     </section>
     <section className="min-w-0 rounded-2xl border border-[#dce3db] bg-white p-4 md:p-5" aria-label="Weekly calendar">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-lg font-medium">Your week</h2><span className="text-xs text-[#748278]">Europe/Zurich</span></div>
-      <CalendarPanel sample={sample} reloadKey={reloadKey} />
+      <CalendarStudyWorkflow sample={sample} externalReloadKey={reloadKey} />
       {sample && <p className="mt-3 text-xs text-[#8a5a26]">Development sample mode is on; Google writes appear only in a connected Google calendar.</p>}
     </section>
   </div>;

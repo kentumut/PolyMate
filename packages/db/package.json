@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./assignments": "./src/assignments.ts",
     ".": "./src/connection.ts",
     "./google-oauth": "./src/google-oauth.ts",
     "./calendar-operations": "./src/calendar-operations.ts",

@@ -9,17 +9,21 @@ import { eventLabel } from './week-layout';
 import { WeekView } from './week-view';
 
 export type CalendarPanelProps = {
+  /** Share the read client with the study workflow, especially for in-memory samples. */
+  client?: CalendarClient;
   /** Use the labelled in-memory sample calendar instead of Google (local development only). */
   sample?: boolean;
   /** Receives the selected event, e.g. to open Catalin's study-block dialog. */
   onSelect?: (event: CalendarEvent) => void;
   /** Change this value to reload the visible week after a mutation. */
   reloadKey?: string | number;
+  onRangeChange?: (range: DateRange) => void;
 };
 
 /** Loads the visible week through the shared CalendarClient and owns navigation/selection state. */
-export function CalendarPanel({ sample = false, onSelect, reloadKey }: CalendarPanelProps) {
-  const [client] = useState<CalendarClient>(() => sample ? new FakeCalendarClient(undefined, 250) : new HttpCalendarClient());
+export function CalendarPanel({ client: suppliedClient, sample = false, onSelect, reloadKey, onRangeChange }: CalendarPanelProps) {
+  const [defaultClient] = useState<CalendarClient>(() => suppliedClient ?? (sample ? new FakeCalendarClient(undefined, 250) : new HttpCalendarClient()));
+  const client = suppliedClient ?? defaultClient;
   const [range, setRange] = useState<DateRange>(() => weekRange());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -49,7 +53,7 @@ export function CalendarPanel({ sample = false, onSelect, reloadKey }: CalendarP
   return <div className="min-w-0 space-y-3">
     <WeekView range={range} events={events} loading={loading} error={loading ? null : loaded?.error} selectedId={selectedId}
       notice={sample ? FAKE_CALENDAR_LABEL : undefined}
-      onSelect={select} onRangeChange={setRange} onRetry={() => setAttempt(n => n + 1)} />
+      onSelect={select} onRangeChange={next => { setRange(next); onRangeChange?.(next); }} onRetry={() => setAttempt(n => n + 1)} />
     {selected && !onSelect && <p className="rounded-xl border border-[#dce3db] bg-white px-4 py-3 text-sm" role="status">
       {eventLabel(selected)}
     </p>}
