@@ -28,6 +28,26 @@ export type ChatMutation =
   | Readonly<{ action: 'pause_check_ins'; paused: boolean }>
   | Readonly<{ action: 'check_in_now' }>;
 
+/**
+ * One-line plain text for chat lists and notices. Assistant replies are Markdown, which the list
+ * shows as raw text, so links keep their label and emphasis, headings, bullets, and code fences drop away.
+ */
+export function chatPreviewText(markdown: string, max = 200): string {
+  const text = markdown
+    .replace(/```[^\n]*\n?/g, '')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s*(?:[-*_]\s*){3,}$/gm, '')
+    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/gm, '')
+    .replace(/(\*\*|__)(.+?)\1/g, '$2')
+    .replace(/(^|[^\w*])\*(?!\s)([^*\n]+?)\*(?!\w)/g, '$1$2')
+    .replace(/(^|[^\w_])_(?!\s)([^_\n]+?)_(?!\w)/g, '$1$2')
+    .replace(/~~(.+?)~~/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
+
 export function parseChatId(value: unknown): string {
   try { return parseOperationId(value); } catch { throw new ContractError('Chat ID is invalid.'); }
 }

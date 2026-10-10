@@ -1,14 +1,12 @@
 'use client';
 
 import type { CoachMessage, CoachingState, StudentMemory } from '@polymate/contracts/coaching';
-import type { ChatSummary } from '@polymate/contracts/chats';
-import { Bell, Brain, ChevronRight, LoaderCircle, MessagesSquare, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { Bell, Brain, ChevronRight, LoaderCircle, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
-import { cn } from '@/lib/utils';
 
 export type CoachReplyTarget = Pick<CoachMessage, 'id' | 'title' | 'body'>;
 
@@ -24,17 +22,10 @@ const sampleState: CoachingState = {
 const memoryLabel: Record<StudentMemory['category'], string> = {
   plan: 'Plan', preference: 'Preference', goal: 'Goal', constraint: 'Constraint', weekly_context: 'Weekly answer',
 };
-const chatTime = (value: string) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', weekday: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
-
-export function CoachInbox({ sample, sampleOverride, refreshKey, chats = [], activeChatId, disabled = false, onOpenChat, onNewChat, onRespond, onOutstandingChange }: {
+export function CoachInbox({ sample, sampleOverride, refreshKey, onRespond, onOutstandingChange }: {
   sample: boolean;
   sampleOverride?: CoachingState;
   refreshKey: number;
-  chats?: readonly ChatSummary[];
-  activeChatId?: string;
-  disabled?: boolean;
-  onOpenChat?: (chat: ChatSummary) => void;
-  onNewChat?: () => void;
   onRespond: (message: CoachReplyTarget) => void;
   onOutstandingChange?: (count: number) => void;
 }) {
@@ -61,8 +52,6 @@ export function CoachInbox({ sample, sampleOverride, refreshKey, chats = [], act
   const messages = state?.messages ?? [];
   const outstanding = messages.filter(item => item.requiresResponse && item.status !== 'responded' && item.status !== 'dismissed');
   const updates = messages.filter(item => !outstanding.includes(item)).slice(0, 3);
-  const unreadChats = chats.filter(chat => chat.unread && chat.id !== activeChatId).length;
-  const notificationCount = outstanding.length + unreadChats;
 
   useEffect(() => { onOutstandingChange?.(outstanding.length); }, [onOutstandingChange, outstanding.length]);
 
@@ -80,16 +69,15 @@ export function CoachInbox({ sample, sampleOverride, refreshKey, chats = [], act
 
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
-      <Button id="coach-notifications-trigger" type="button" variant={notificationCount ? 'outline' : 'ghost'} className={outstanding.length ? 'relative border-amber-300 bg-amber-50 text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900' : 'relative text-muted-foreground'} aria-label={outstanding.length ? `Inbox, ${outstanding.length} coach responses needed${unreadChats ? ` and ${unreadChats} unread chats` : ''}` : unreadChats ? `Inbox, ${unreadChats} unread chats` : 'Open chats and coaching'}>
-        <MessagesSquare aria-hidden="true" />
-        <span>Inbox</span>
-        {notificationCount > 0 && <><Badge variant={outstanding.length ? 'warning' : 'default'} className={cn('ml-0.5 px-1.5', outstanding.length && 'border-amber-400 bg-amber-100 text-amber-950 dark:bg-amber-900 dark:text-amber-100')}>{notificationCount}</Badge><span className={cn('absolute -right-1 -top-1 size-2.5 animate-pulse rounded-full ring-2 ring-background', outstanding.length ? 'bg-amber-500' : 'bg-primary')} /></>}
+      <Button id="coach-notifications-trigger" type="button" variant={outstanding.length ? 'outline' : 'ghost'} className={outstanding.length ? 'relative border-amber-300 bg-amber-50 text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900' : 'relative text-muted-foreground'} aria-label={outstanding.length ? `Coach, ${outstanding.length} responses needed` : 'Open coach'}>
+        <Bell aria-hidden="true" />
+        <span>Coach</span>
+        {outstanding.length > 0 && <><Badge variant="warning" className="ml-0.5 border-amber-400 bg-amber-100 px-1.5 text-amber-950 dark:bg-amber-900 dark:text-amber-100">{outstanding.length}</Badge><span className="absolute -right-1 -top-1 size-2.5 animate-pulse rounded-full bg-amber-500 ring-2 ring-background" /></>}
       </Button>
     </PopoverTrigger>
     <PopoverContent align="end" className="max-h-[min(42rem,calc(100dvh-5rem))] w-[min(26rem,calc(100vw-2rem))] overflow-y-auto p-0">
       <div className="sticky top-0 z-10 flex items-start justify-between gap-3 bg-popover px-4 py-4">
-        <div><p className="text-sm font-semibold">Chats &amp; coaching</p><p className="mt-1 text-xs text-muted-foreground">Conversations, questions, and remembered context.</p></div>
-        {onNewChat && <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => { setOpen(false); onNewChat(); }}><Plus aria-hidden="true" /> New chat</Button>}
+        <div><p className="text-sm font-semibold">Coach</p><p className="mt-1 text-xs text-muted-foreground">Questions, updates, and remembered context.</p></div>
       </div>
       <Separator />
 
@@ -114,16 +102,6 @@ export function CoachInbox({ sample, sampleOverride, refreshKey, chats = [], act
             </li>)}
           </ul>
         </section> : state && <div className="rounded-lg bg-muted p-3 text-sm"><p className="font-medium">You’re caught up</p><p className="mt-1 text-muted-foreground">No coaching questions need your response.</p></div>}
-
-        {onOpenChat && <section aria-labelledby="inbox-conversations-heading">
-          <div className="mb-2 flex items-center justify-between gap-2"><h2 id="inbox-conversations-heading" className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><MessagesSquare className="size-3.5" aria-hidden="true" /> Conversations</h2><span className="text-xs tabular-nums text-muted-foreground">{chats.length}</span></div>
-          {!chats.length ? <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">No previous conversations yet.</p> : <ul className="divide-y overflow-hidden rounded-lg border">{chats.map(chat => <li key={chat.id}>
-            <button type="button" disabled={disabled} onClick={() => { setOpen(false); onOpenChat(chat); }} aria-current={chat.id === activeChatId ? 'true' : undefined} className={cn('w-full px-3.5 py-3 text-left transition-colors hover:bg-muted/60 disabled:opacity-50', chat.id === activeChatId && 'bg-muted/60')}>
-              <span className="flex items-center justify-between gap-2"><span className={cn('flex min-w-0 items-center gap-1.5 text-sm', chat.unread ? 'font-semibold' : 'font-medium')}>{chat.origin === 'check_in' && <Sparkles className="size-3.5 shrink-0 text-muted-foreground" aria-label="Started by PolyMate" />}<span className="truncate">{chat.title}</span></span>{chat.unread ? <Badge className="shrink-0 px-1.5">New</Badge> : <span className="shrink-0 text-[11px] text-muted-foreground">{chatTime(chat.updatedAt)}</span>}</span>
-              <span className="mt-1 line-clamp-2 block text-xs leading-5 text-muted-foreground">{chat.preview}</span>
-            </button>
-          </li>)}</ul>}
-        </section>}
 
         {updates.length > 0 && <details className="group">
           <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium [&::-webkit-details-marker]:hidden">Recent updates <span className="text-muted-foreground">{updates.length}</span></summary>

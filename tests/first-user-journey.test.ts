@@ -68,7 +68,7 @@ beforeEach(() => {
   mocks.consumeState.mockResolvedValue(owner.userId);
   mocks.exchangeCode.mockResolvedValue({ accessToken: 'access-token', refreshToken: 'refresh-token', expiresAt: new Date('2026-10-10T13:00:00Z'), scopes: ['calendar.events.owned'] });
   mocks.verifyCalendar.mockResolvedValue(undefined);
-  mocks.saveConnection.mockResolvedValue(undefined);
+  mocks.saveConnection.mockResolvedValue({ created: false });
   mocks.connectionStatus.mockImplementation(async () => ({ connected: mocks.saveConnection.mock.calls.length > 0 }));
   mocks.validToken.mockResolvedValue('access-token');
   mocks.listMemories.mockImplementation(async () => [...mocks.memories]); mocks.listCourses.mockResolvedValue([]);

@@ -6,12 +6,11 @@ import { currentPlanApproval } from '@polymate/core/agent/contracts';
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
 import type { CalendarEvent } from '@polymate/contracts/calendar';
 import type { OnboardingProfile, OnboardingState } from '@polymate/contracts/onboarding';
-import { ArrowLeft, ArrowUp, Check, ClipboardPlus, GraduationCap, RotateCcw, Sparkles, Square } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Check, GraduationCap, RotateCcw, Sparkles, Square } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CalendarStudyWorkflow } from '@/components/study/calendar-study-workflow';
-import { AssignmentsPanel } from '@/components/study/assignments-panel';
 import { GoogleConnection } from '@/components/connections/google-connection';
 import { MoodleConnection } from '@/components/connections/moodle-connection';
 import { MoodleCalendarPreview } from '@/components/connections/moodle-calendar-preview';
@@ -25,9 +24,11 @@ import { CoursesPanel } from '@/components/study/courses-panel';
 import { Button } from '@/components/ui/button';
 import {
   DEMO_COURSES,
+  DEMO_ASSIGNMENT_CAPTURE_PROMPT,
   DEMO_ONBOARDING_OPTIONS,
   DEMO_PROMPTS,
   demoAssignment,
+  demoCapturedAssignment,
   demoCoachingState,
   demoCommitmentMemory,
   demoInitialMemories,
@@ -35,13 +36,14 @@ import {
   demoMovedBlock,
   demoScheduleCard,
   demoTimeline,
+  demoTradeoffExplanation,
   demoWeekRange,
   type DemoCommitment,
   type DemoPlanStyle,
   type DemoProfile,
   type DemoStage,
 } from '@/lib/demo-fixtures';
-import { CheckInNotice, CheckInSettings, useChats } from './chat-list';
+import { ChatHistoryRail, CheckInNotice, CheckInSettings, useChats } from './chat-list';
 import { fetchChat, unreadCheckIns } from './chat-client';
 
 type AgentCard = { kind: 'assignments' | 'timeline' | 'schedule' | 'connections' | 'progress'; data: unknown };
@@ -57,6 +59,7 @@ const TOOL_STATUS: Record<string, string> = {
   moodle_plan_assignment_timeline: 'Drafting your timeline…',
   moodle_schedule_assignment_timeline: 'Adding blocks to your calendar…',
   polymate_check_connections: 'Checking your connections…',
+  polymate_create_assignment: 'Saving your assignment…',
   polymate_get_calendar: 'Looking at your calendar…',
   polymate_create_study_block: 'Updating your calendar…',
   polymate_edit_study_block: 'Updating your calendar…',
@@ -131,7 +134,7 @@ function AssignmentCards({ data }: { data: unknown }) {
 
 function ScheduleCard({ data }: { data: unknown }) {
   if (!data || typeof data !== 'object') return null;
-  const value = data as { timeline?: AssignmentTimeline; progressSync?: string; movedBlock?: { title: string; startAt: string; endAt: string }; deletedBlocks?: Array<{ operationId: string; title: string; startAt: string; endAt: string }>; result?: { complete?: boolean; results?: Array<{ operationId: string; status: string; error?: { message?: string } }> } };
+  const value = data as { timeline?: AssignmentTimeline; progressSync?: string; movedBlock?: { title: string; startAt: string; endAt: string }; createdBlock?: { title: string; startAt: string; endAt: string }; relocatedFrom?: { startAt: string; endAt: string }; deletedBlocks?: Array<{ operationId: string; title: string; startAt: string; endAt: string }>; result?: { complete?: boolean; results?: Array<{ operationId: string; status: string; error?: { message?: string } }> } };
   const results = Array.isArray(value.result?.results) ? value.result.results : [];
   const attempted = new Set(results.map(item => item.operationId));
   const unattempted = value.timeline?.blocks.filter(block => !attempted.has(block.operationId)) ?? [];
@@ -140,10 +143,14 @@ function ScheduleCard({ data }: { data: unknown }) {
     {results.length ? <ul className="mt-2 space-y-2">{results.map((item, index) => <li key={`${item.operationId}-${index}`} className="flex gap-2 text-sm">
       <span aria-hidden="true">{item.status === 'synced' ? '✓' : item.status === 'unknown' ? '?' : '!'}</span>
       <span>{(() => {
-        const block = (value.timeline?.blocks ?? value.deletedBlocks)?.find(block => block.operationId === item.operationId) ?? value.movedBlock;
+        const block = (value.timeline?.blocks ?? value.deletedBlocks)?.find(block => block.operationId === item.operationId) ?? value.movedBlock ?? value.createdBlock;
         return block ? <span className="block">{block.title} · {dateTime(block.startAt)}–{dateTime(block.endAt)}</span> : null;
       })()}<strong className="capitalize">{item.status}</strong>{item.error?.message ? ` — ${item.error.message}` : ''}</span>
     </li>)}</ul> : <p className="mt-2 text-sm text-[#617269]">No calendar writes were confirmed.</p>}
+    {value.relocatedFrom && <p className="mt-3 text-sm text-[#617269]">{dateTime(value.relocatedFrom.startAt)} was already taken. {results.length > 0 && results.every(result => result.status === 'synced')
+      ? 'This block was placed in the nearest free slot.'
+      : results.length > 0 && results.every(result => result.status === 'failed') ? 'The attempt at the free slot failed; no placement is confirmed.'
+        : 'Placement at the free slot is unconfirmed. Retry the same operation to check its outcome.'}</p>}
     {unattempted.length > 0 && <ul className="mt-3 space-y-1 text-sm text-[#8a5a26]">{unattempted.map(block => <li key={block.operationId}>{block.title} · {dateTime(block.startAt)} — not attempted</li>)}</ul>}
     {value.result?.complete && <p className="mt-3 text-sm font-medium text-[#173b32]">{value.movedBlock ? 'The move was saved to your calendar.' : value.deletedBlocks ? 'The selected blocks were deleted from your calendar.' : 'All planned blocks were saved to your calendar.'}</p>}
     {value.progressSync === 'pending' && <p className="mt-3 text-sm text-[#8a5a26]">Local progress history could not be refreshed yet. Refresh progress to retry synchronization; the confirmed Google move does not need to be repeated.</p>}
@@ -157,11 +164,11 @@ function OtherCards({ cards, busy, confirmed, onConfirm }: { cards: AgentCard[];
       if (card.kind === 'assignments') return <AssignmentCards key={`assignments-${index}`} data={card.data} />;
       if (card.kind === 'schedule') return <ScheduleCard key={`schedule-${index}`} data={card.data} />;
       if (card.kind === 'connections' && card.data && typeof card.data === 'object') {
-        const value = card.data as { moodleConnected?: boolean; googleCalendarConnected?: boolean; standaloneCalendarAvailable?: boolean; backgroundMoodleAvailable?: boolean; note?: string };
+        const value = card.data as { moodleConnected?: boolean; googleCalendarConnected?: boolean; calendarHome?: 'polymate' | 'google'; standaloneCalendarAvailable?: boolean; backgroundMoodleAvailable?: boolean; note?: string };
         return <div key={`connections-${index}`} className="mt-3 rounded-xl bg-[#edf0e7] p-4 text-sm">
-          <p>PolyMate calendar: available.</p>
+          <p>Study blocks are saved to: {value.calendarHome === 'google' ? 'Google Calendar (also shown in PolyMate)' : 'the PolyMate calendar'}.</p>
           <p>Moodle calendar: {value.moodleConnected ? 'subscription connected' : 'not connected'}.</p>
-          <p>Optional Google overlay: {value.googleCalendarConnected ? 'connected' : 'not connected'}.</p>
+          <p>Google Calendar: {value.googleCalendarConnected ? 'connected' : 'not connected'}.</p>
           {!value.backgroundMoodleAvailable && <p className="mt-2 text-xs text-[#617269]">Connect a Moodle calendar subscription to enable scheduled calendar checks.</p>}
           {value.note && <p className="mt-2 text-xs text-[#617269]">{value.note}</p>}
         </div>;
@@ -256,7 +263,7 @@ function decisionsFor(stage: DemoStage): DemoDecision[] {
   return [];
 }
 
-function DemoGuide({ stage, busy, onRun, onApprove, onOpenCalendar }: { stage: DemoStage; busy: boolean; onRun: (prompt: string) => void; onApprove: () => void; onOpenCalendar: () => void }) {
+function DemoGuide({ stage, busy, coachOutstanding, tradeoffExplained, onRun, onApprove, onOpenCalendar, onOpenCourses, onDescribeAssignment, onOpenCoach }: { stage: DemoStage; busy: boolean; coachOutstanding: number; tradeoffExplained: boolean; onRun: (prompt: string) => void; onApprove: () => void; onOpenCalendar: () => void; onOpenCourses: () => void; onDescribeAssignment: () => void; onOpenCoach: () => void }) {
   const index = stage === 'complete' ? demoStages.length : demoStages.findIndex(item => item.id === stage);
   const decisions = decisionsFor(stage);
   return <section className="mb-3 rounded-xl border bg-muted/45 p-3" aria-label="Guided chat demo">
@@ -266,8 +273,13 @@ function DemoGuide({ stage, busy, onRun, onApprove, onOpenCalendar }: { stage: D
         {demoStages.map((item, itemIndex) => <li key={item.id} title={item.label} className={`h-1.5 w-7 rounded-full ${itemIndex < index ? 'bg-primary' : itemIndex === index ? 'bg-amber-500' : 'bg-border'}`}><span className="sr-only">{item.label}</span></li>)}
       </ol>
     </div>
+    <div className="mt-3 grid gap-2 sm:grid-cols-3" aria-label="Demo setup and coaching skills">
+      <button type="button" onClick={onOpenCourses} className="rounded-lg border bg-background px-3 py-2 text-left text-xs font-medium hover:bg-accent">Add a course</button>
+      <button type="button" onClick={onDescribeAssignment} className="rounded-lg border bg-background px-3 py-2 text-left text-xs font-medium hover:bg-accent">Describe an assignment</button>
+      <button type="button" onClick={onOpenCoach} className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left text-xs font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"><span>Coach check-ins</span><span className="rounded-full bg-amber-200 px-1.5 py-0.5 tabular-nums dark:bg-amber-800">{coachOutstanding}</span></button>
+    </div>
     {decisions.length > 0 && <div className="mt-3 grid grid-cols-2 gap-2">{decisions.map(decision => <button key={decision.label} type="button" disabled={busy} onClick={() => decision.approve ? onApprove() : onRun(decision.prompt!)} className="rounded-lg border bg-background p-2.5 text-left transition-colors hover:bg-accent disabled:opacity-50"><span className="block text-xs font-semibold sm:text-sm">{decision.label}</span><span className="mt-1 hidden text-xs text-muted-foreground sm:block">{decision.description}</span></button>)}</div>}
-    {stage === 'approve' && <p className="mt-2 text-xs text-muted-foreground">Only the approval choice writes to the calendar. The explanation choice leaves the draft untouched.</p>}
+    {stage === 'approve' && <p className={`mt-2 text-xs ${tradeoffExplained ? 'font-medium text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'}`} role="status">{tradeoffExplained ? 'Trade-off explained in Chat. The draft is still waiting for your decision.' : 'Only the approval choice writes to the calendar. The explanation choice leaves the draft untouched.'}</p>}
     {stage === 'complete' && <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="flex items-center gap-2 text-sm font-medium"><Check className="size-4" /> Demo complete</p><div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => window.location.reload()}><RotateCcw /> Restart</Button><Button type="button" size="sm" onClick={onOpenCalendar}>Open calendar</Button></div></div>}
   </section>;
 }
@@ -295,12 +307,12 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
   const [coachRefreshKey, setCoachRefreshKey] = useState(0);
   const [coachOutstanding, setCoachOutstanding] = useState(0);
   const [nextEvent, setNextEvent] = useState<CalendarEvent | null>(null);
-  const [assignmentsOpen, setAssignmentsOpen] = useState(false);
   const [demoStage, setDemoStage] = useState<DemoStage>(demo ? 'onboarding' : 'brief');
   const [demoProfile, setDemoProfile] = useState<DemoProfile | null>(null);
   const [demoCommitment, setDemoCommitment] = useState<DemoCommitment>('volunteering');
   const [demoPlanStyle, setDemoPlanStyle] = useState<DemoPlanStyle>('spread');
-  const [demoCoachAnswered, setDemoCoachAnswered] = useState(false);
+  const [demoTradeoffExplained, setDemoTradeoffExplained] = useState(false);
+  const [demoCoachAnswers, setDemoCoachAnswers] = useState(0);
   const [demoMemories, setDemoMemories] = useState(() => demo ? [] : demoInitialMemories(demoEpoch));
   const [onboardingStatus, setOnboardingStatus] = useState<'loading' | 'required' | 'complete' | 'error'>(demo || sample ? 'complete' : development ? 'required' : 'loading');
   const [onboardingBusy, setOnboardingBusy] = useState(false);
@@ -446,6 +458,15 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
 
     const profile = demoProfile ?? { goal: 'deadline', sessionMinutes: 50, coachCadence: 'weekly' } as const;
 
+    if (/\badd an assignment\b/i.test(text) && /computer vision exercise sheet 4/i.test(text)) {
+      if (!workspace) { reply('The demo assignment store is not available. Reload the demo and try again.'); return; }
+      const input = demoCapturedAssignment(demoEpoch);
+      const saved = await workspace.assignmentSource.client.createAssignment(input);
+      workspace.assignmentSaved(saved);
+      reply(`I understood the assignment without a form and saved it:\n\n- **${saved.title}**\n- Due **next Thursday at 18:00 (Europe/Zurich)**\n- **${saved.estimatedMinutes} minutes** estimated effort\n\nIn the live product, I ask only for details that are missing.`);
+      return;
+    }
+
     if (demoStage === 'brief') {
       const course = DEMO_COURSES[0];
       const examLens = /exam/i.test(text) || profile.goal === 'exam';
@@ -474,6 +495,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
       const style: DemoPlanStyle = /front[- ]?load/i.test(text) ? 'frontload' : 'spread';
       const timeline = demoTimeline(demoEpoch, { sessionMinutes: profile.sessionMinutes, style, commitment: demoCommitment });
       setDemoPlanStyle(style);
+      setDemoTradeoffExplained(false);
       setPendingPlan({ timeline, expiresAt: new Date(Date.parse(demoEpoch) + 30 * 60_000).toISOString() });
       const commitmentLabel = demoCommitment === 'volunteering' ? 'Wednesday volunteering' : 'Thursday rehearsal';
       reply(`I found **${timeline.blocks.length} × ${profile.sessionMinutes}-minute sessions** before the deadline and ${style === 'frontload' ? 'front-loaded the work into Monday and Tuesday' : 'spread the work across the available days'}. The draft avoids your Tuesday job, ${commitmentLabel}, and Friday climbing. **Nothing has been written to the calendar yet.**`);
@@ -483,8 +505,10 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
 
     if (demoStage === 'approve') {
       if (!action || 'draftToken' in action || !pendingPlan || !workspace) {
-        reply(/explain|why|trade-off/i.test(text)
-          ? `I chose a **${demoPlanStyle === 'frontload' ? 'front-loaded' : 'spread'}** plan using your ${profile.sessionMinutes}-minute preference. It finishes all 150 minutes before the deadline while protecting the commitment you asked me to remember. The calendar is still unchanged.`
+        const explainsTradeoff = /explain|why|trade-off/i.test(text);
+        if (explainsTradeoff && pendingPlan) setDemoTradeoffExplained(true);
+        reply(explainsTradeoff && pendingPlan
+          ? demoTradeoffExplanation(pendingPlan.timeline, { sessionMinutes: profile.sessionMinutes, style: demoPlanStyle, commitment: demoCommitment })
           : 'The draft is still unchanged. Choose **Approve all blocks** only when you want to write this exact plan.');
         return;
       }
@@ -571,7 +595,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
             validUntil: range.to, createdAt: demoEpoch,
           }]);
           setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: 'Thanks — I marked the coaching question answered and saved that response as context for this week. The guided demo can continue from the same step.', cards: [] }].slice(-40) as ChatMessage[]);
-          setDemoCoachAnswered(true);
+          setDemoCoachAnswers(value => value + 1);
           setCoachReply(null);
           setCoachRefreshKey(value => value + 1);
           return;
@@ -658,18 +682,18 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
     timeZone: 'Europe/Zurich', weekday: 'long', hour: '2-digit', minute: '2-digit',
   }).format(new Date(nextEvent.startAt)) : null;
   const pageTitle = view === 'calendar' ? 'Calendar' : view === 'courses' ? 'Courses' : view === 'planner' ? 'Semester plan' : 'Settings';
-  const pageDescription = view === 'calendar' ? 'Your week, deadlines, and study blocks in one place.'
-    : view === 'courses' ? 'Workload, exam scope, and preparation priorities for each course.'
+  const pageDescription = view === 'calendar' ? 'Your scheduled study blocks and connected calendar events.'
+    : view === 'courses' ? 'Course workload, assignments, and exam preparation priorities.'
       : view === 'planner' ? 'Choose courses that fit your major, minor, and graduation path.'
       : 'Connections and preferences for your study space.';
   const demoRange = demo ? demoWeekRange(demoEpoch) : null;
-  const demoCoach = demo ? demoCoachingState(demoEpoch, demoMemories, demoProfile?.coachCadence === 'proactive', demoCoachAnswered) : undefined;
+  const demoCoach = demo ? demoCoachingState(demoEpoch, demoMemories, demoProfile?.coachCadence === 'proactive', demoCoachAnswers) : undefined;
   const demoOnboarding = demo && demoStage === 'onboarding';
   const studentOnboarding = !demo && !sample && onboardingStatus !== 'complete';
   const onboardingActive = demoOnboarding;
 
   if (studentOnboarding) return <div className="flex min-h-dvh flex-col bg-muted/25">
-    <header className="flex h-16 shrink-0 items-center border-b bg-background px-5 sm:px-8"><Link href="/" className="flex items-center gap-2 text-sm font-semibold"><span className="grid size-8 place-items-center rounded-lg bg-foreground text-xs font-bold text-background">P</span>PolyMate</Link></header>
+    <header className="flex h-16 shrink-0 items-center border-b bg-background px-5 sm:px-8"><Link href="/" className="text-base font-semibold tracking-tight">PolyMate</Link></header>
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 py-8 sm:px-8">
       {onboardingStatus === 'required' && <StudentOnboarding demo={false} busy={onboardingBusy} error={onboardingError} onComplete={profile => void completeStudentOnboarding(profile)} />}
       {onboardingStatus === 'loading' && <div className="my-auto text-center"><p className="text-sm font-medium">Preparing your study space…</p><p className="mt-2 text-sm text-muted-foreground">Loading your saved preferences.</p></div>}
@@ -683,10 +707,10 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4 sm:px-6">
         <p className="truncate text-sm font-medium">{view === 'chat' ? <>Chat {demo && <span className="ml-2 rounded-full bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Demo</span>}</> : <>PolyMate <span className="text-muted-foreground">/ {pageTitle}</span></>}</p>
         <div className="flex items-center gap-1">
-          {view === 'calendar' && <Button type="button" size="sm" aria-label="Add assignment" onClick={() => { setAssignmentsOpen(true); window.dispatchEvent(new Event('polymate-add-assignment')); }}><ClipboardPlus aria-hidden="true" /><span className="hidden sm:inline">Add assignment</span></Button>}
+          <span className="mr-1 hidden rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground sm:inline" title="All dates and times use the fixed Europe/Zurich timezone">Europe/Zurich</span>
           {view === 'courses' && <Button asChild size="sm" variant="outline"><a href={hrefFor('planner')} aria-label="Open semester plan" onClick={event => navigate(event, 'planner')}><GraduationCap aria-hidden="true" /><span className="hidden sm:inline">Semester plan</span></a></Button>}
           {view === 'planner' && <Button asChild size="sm" variant="ghost"><a href={hrefFor('courses')} aria-label="Back to courses" onClick={event => navigate(event, 'courses')}><ArrowLeft aria-hidden="true" /><span className="hidden sm:inline">Courses</span></a></Button>}
-          <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswered}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} chats={demo ? [] : chats.chats} activeChatId={chatId} disabled={busy} onOpenChat={demo ? undefined : chat => void openChat(chat.id)} onNewChat={demo ? undefined : newChat} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
+          <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswers}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
         </div>
       </header>
       {!demo && view !== 'chat' && <CheckInNotice chats={waitingCheckIns} floating disabled={busy} onOpen={chat => void openChat(chat.id)} />}
@@ -698,25 +722,21 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
         </header>}
 
         {/* Keep panels mounted so navigation preserves drafts, forms, and calendar state. */}
-        <section aria-label="Calendar" className={view === 'calendar' ? 'space-y-5' : 'hidden'}>
+        <section aria-label="Calendar" className={view === 'calendar' ? 'block' : 'hidden'}>
           <div className="min-w-0"><CalendarStudyWorkflow sample={sample} demo={demo} externalReloadKey={reloadKey} initialDate={demoRange?.from} /></div>
-          <details open={assignmentsOpen} onToggle={event => setAssignmentsOpen(event.currentTarget.open)} className="group rounded-xl border bg-card shadow-sm">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 text-sm font-medium [&::-webkit-details-marker]:hidden">
-              <span>Assignments <span className="ml-2 hidden font-normal text-muted-foreground sm:inline">Deadlines and effort estimates</span></span>
-              <span className="text-xl leading-none text-muted-foreground transition-transform group-open:rotate-45" aria-hidden="true">+</span>
-            </summary>
-            <div className="border-t [&>section]:border-0 [&>section]:bg-transparent"><AssignmentsPanel sample={sample} onCalendarChange={() => setReloadKey(value => value + 1)} /></div>
-          </details>
-          {sample && <p className="text-xs text-muted-foreground">{demo ? 'Guided demo calendar. Changes stay in this browser and reset on reload.' : 'Development sample calendar. Changes stay in memory.'}</p>}
         </section>
 
-        <section aria-label="Courses" className={view === 'courses' ? 'block' : 'hidden'}><CoursesPanel sample={sample} /></section>
+        <section aria-label="Courses" className={view === 'courses' ? 'space-y-6' : 'hidden'}>
+          <CoursesPanel sample={sample} demo={demo} onAddAssignment={() => openRecommendation(demo ? DEMO_ASSIGNMENT_CAPTURE_PROMPT : 'I want to add an assignment (use Europe/Zurich time): ')} />
+        </section>
 
         <section aria-label="Semester planning" className={view === 'planner' ? '' : 'hidden'}>
           <SemesterPlanner sample={sample} />
         </section>
 
-        <section aria-labelledby="study-chat-title" className={view === 'chat' ? 'flex h-full min-h-0 flex-col' : 'hidden'}>
+        <div className={view === 'chat' ? 'flex h-full min-h-0 flex-col md:flex-row' : 'hidden'}>
+          <ChatHistoryRail chats={demo ? [] : chats.chats} activeChatId={chatId} demo={demo} disabled={busy || demo} onOpenChat={chat => void openChat(chat.id)} onNewChat={newChat} />
+        <section aria-labelledby="study-chat-title" className="flex min-h-0 min-w-0 flex-1 flex-col">
           <h2 id="study-chat-title" className="sr-only">Plan with PolyMate</h2>
           <div className="min-h-0 flex-1 overflow-y-auto" aria-live="polite" aria-relevant="additions text">
             <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 pb-8 pt-6 sm:px-6">
@@ -749,7 +769,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
             <div className="mx-auto max-w-3xl">
               {onboardingActive ? <p className="text-center text-xs text-muted-foreground">Choose one option in each group to continue.</p> : <>
               {error && <p className="mb-2 text-sm text-destructive" role="alert">{error}</p>}
-              {demo && <DemoGuide stage={demoStage} busy={busy} onRun={prompt => void sendMessage(undefined, undefined, prompt)} onApprove={() => void sendMessage(undefined, { allowPartial: false })} onOpenCalendar={() => { window.history.pushState(null, '', hrefFor('calendar')); window.scrollTo({ top: 0 }); }} />}
+              {demo && <DemoGuide stage={demoStage} busy={busy} coachOutstanding={coachOutstanding} tradeoffExplained={demoTradeoffExplained} onRun={prompt => void sendMessage(undefined, undefined, prompt)} onApprove={() => void sendMessage(undefined, { allowPartial: false })} onOpenCalendar={() => { window.history.pushState(null, '', hrefFor('calendar')); window.scrollTo({ top: 0 }); }} onOpenCourses={() => { window.history.pushState(null, '', hrefFor('courses')); window.scrollTo({ top: 0 }); }} onDescribeAssignment={() => openRecommendation(DEMO_ASSIGNMENT_CAPTURE_PROMPT)} onOpenCoach={() => document.getElementById('coach-notifications-trigger')?.click()} />}
               {!demo && view === 'chat' && waitingCheckIns.length > 0 && <div className="mb-2"><CheckInNotice chats={waitingCheckIns} floating={false} disabled={busy} onOpen={chat => void openChat(chat.id)} /></div>}
               {coachReply && <div className="mb-2 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40"><div><p className="text-xs font-medium text-amber-800 dark:text-amber-300">Answering your coach</p><p className="mt-1">{coachReply.body}</p></div><button type="button" onClick={() => setCoachReply(null)} className="shrink-0 text-xs underline">Cancel</button></div>}
               <form onSubmit={event => void sendMessage(event)} className="relative rounded-2xl border bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/30">
@@ -768,12 +788,13 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
             </div>
           </div>
         </section>
+        </div>
 
         <section aria-label="Settings" className={view === 'settings' ? 'grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]' : 'hidden'}>
           <MoodleConnection />
           <div className="space-y-5">
             {!sample && <CheckInSettings paused={chats.checkInsPaused} error={chats.error} disabled={busy} onPause={paused => void chats.setPaused(paused)} onCheckInNow={() => void checkInNow()} />}
-            <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-lg font-medium">Google Calendar</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Connect your primary calendar so PolyMate can protect existing commitments while it plans. Personal events remain read-only.</p><GoogleConnection demo={demo} /></section>
+            <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-lg font-medium">Google Calendar</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Connect your primary calendar so PolyMate can protect existing commitments while it plans, and choose whether study blocks are saved there. Personal events remain read-only.</p><GoogleConnection demo={demo} /></section>
             <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-sm font-medium">Your study space</h2><dl className="mt-4 space-y-4 text-sm"><div><dt className="text-xs text-muted-foreground">Signed in as</dt><dd className="mt-1 break-words">{ownerName}</dd></div><div><dt className="text-xs text-muted-foreground">Calendar timezone</dt><dd className="mt-1">Europe/Zurich</dd></div></dl></section>
           </div>
         </section>

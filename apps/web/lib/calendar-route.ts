@@ -3,17 +3,19 @@ import type { CalendarClient } from '@polymate/contracts/calendar';
 import type { DateRange } from '@polymate/contracts/time';
 import { GoogleApiError, GoogleCalendarApi, GoogleNotConnectedError, GoogleTransportError } from '@polymate/core/calendar/google-api';
 import { toCalendarEvent } from '@polymate/core/calendar/mapping';
+import { CalendarService, CalendarServiceError } from '@polymate/core/calendar';
+import { googleStudyBlockHome, moveStudyBlocks, toMovableBlock, type CalendarHome, type MoveOutcome, type StudyBlockHome } from '@polymate/core/calendar/home';
 import { StandaloneCalendarService, type StandaloneEventStore } from '@polymate/core/calendar/standalone';
 import { constantTimeEqual } from '@polymate/core/google-auth/crypto';
 import { assertSameOrigin, IdentityError, resolveOwner, type OwnerContext } from '@polymate/core/identity';
 import { CalendarBusyError } from '@polymate/core/calendar/operations';
 import type { ProgressCalendar } from '@polymate/core/progress';
-import { calendarOperationStore, findCalendarOperation } from '@polymate/db/calendar-operations';
+import { calendarOperationStore, findCalendarOperation, listUnresolvedCalendarOperations } from '@polymate/db/calendar-operations';
 import {
   completeStandaloneCalendarEvent, createStandaloneCalendarEvent, deleteStandaloneCalendarEvent,
-  findStandaloneCalendarEvent, listStandaloneCalendarEvents, updateStandaloneCalendarEvent,
+  findStandaloneCalendarEvent, listStandaloneCalendarEvents, putStandaloneCalendarEvent, removeStandaloneCalendarEvent, updateStandaloneCalendarEvent,
 } from '@polymate/db/calendar-events';
-import { ensureUser, getConnectionStatus, getValidAccessToken } from '@polymate/db/google-oauth';
+import { ensureUser, getConnectionStatus, getValidAccessToken, setCalendarHome } from '@polymate/db/google-oauth';
 import { observeStudyCalendarChange } from '@polymate/db/study-progress';
 import { ProgressError } from '@polymate/core/progress';
 import type { NextRequest, NextResponse } from 'next/server';
@@ -31,7 +33,7 @@ class CsrfError extends IdentityError {
   constructor() { super('Your session expired. Reload the page and try again.', 403); }
 }
 
-function assertCalendarMutation(request: NextRequest): void {
+export function assertCalendarMutation(request: NextRequest): void {
   assertSameOrigin(request);
   const cookie = request.cookies.get(CALENDAR_CSRF_COOKIE)?.value;
   const supplied = request.headers.get('x-csrf-token');
@@ -48,23 +50,117 @@ const standaloneEvents: StandaloneEventStore = {
   delete: deleteStandaloneCalendarEvent,
 };
 
-/** Always provides the PolyMate calendar; Google is an optional read-only overlay. */
+/** The student's chosen calendar: PolyMate, or Google with PolyMate showing the same blocks. */
 export type OwnerCalendar = CalendarClient & ProgressCalendar & {
   getStudyBlock(id: string): Promise<CalendarEvent | null>;
   listBusy(range: DateRange): Promise<CalendarEvent[]>;
 };
 
-export function calendarServiceFor(owner: OwnerContext): OwnerCalendar {
+type ConnectionStatus = { connected: boolean; calendarHome?: CalendarHome };
+
+function googleApiFor(owner: OwnerContext): GoogleCalendarApi {
+  return new GoogleCalendarApi({ accessToken: () => getValidAccessToken(owner) });
+}
+
+/** Reads the stored choice. Without Google configured, every student uses the PolyMate calendar. */
+export async function calendarHomeFor(ownerId: string): Promise<{ home: CalendarHome; connected: boolean }> {
+  if (process.env.GOOGLE_ENABLED !== 'true') return { home: 'polymate', connected: false };
+  const status: ConnectionStatus = await getConnectionStatus(ownerId);
+  return { home: status.calendarHome === 'google' ? 'google' : 'polymate', connected: status.connected };
+}
+
+function polymateCalendar(owner: OwnerContext, googleConnected: Promise<boolean>): OwnerCalendar {
   const googleEvents = process.env.GOOGLE_ENABLED === 'true' ? async (range: { from: string; to: string }) => {
-    if (!(await getConnectionStatus(owner.userId)).connected) return [];
-    const api = new GoogleCalendarApi({ accessToken: () => getValidAccessToken(owner) });
-    return (await api.list(range.from, range.to)).flatMap(event => {
+    if (!await googleConnected) return [];
+    return (await googleApiFor(owner).list(range.from, range.to)).flatMap(event => {
       const mapped = toCalendarEvent(event, owner.userId);
       if (!mapped || mapped.source === 'polymate') return [];
       return [{ ...mapped, id: `google_${mapped.id}` }];
     });
   } : null;
   return new StandaloneCalendarService(owner, standaloneEvents, calendarOperationStore, googleEvents);
+}
+
+async function resolveCalendar(owner: OwnerContext): Promise<OwnerCalendar> {
+  const { home, connected } = await calendarHomeFor(owner.userId);
+  // A Google home never falls back to PolyMate: a block written to the wrong calendar is worse
+  // than a clear "reconnect Google" error.
+  if (home === 'google') return new CalendarService(owner.userId, googleApiFor(owner), calendarOperationStore);
+  return polymateCalendar(owner, Promise.resolve(connected));
+}
+
+/**
+ * Owner-bound calendar for the student's chosen home. The choice is read once, on first use, so
+ * every call on one instance goes to the same calendar.
+ */
+export function calendarServiceFor(owner: OwnerContext): OwnerCalendar {
+  let backend: Promise<OwnerCalendar> | undefined;
+  const resolved = () => backend ??= resolveCalendar(owner);
+  return {
+    listWeek: async range => (await resolved()).listWeek(range),
+    listBusy: async range => (await resolved()).listBusy(range),
+    readStudyBlock: async id => (await resolved()).readStudyBlock(id),
+    getStudyBlock: async id => (await resolved()).getStudyBlock(id),
+    createStudyBlock: async (input, operationId) => (await resolved()).createStudyBlock(input, operationId),
+    updateStudyBlock: async (id, changes, etag, operationId) => (await resolved()).updateStudyBlock(id, changes, etag, operationId),
+    completeStudyBlock: async (id, etag, operationId) => (await resolved()).completeStudyBlock(id, etag, operationId),
+    deleteStudyBlock: async (id, etag, operationId) => (await resolved()).deleteStudyBlock(id, etag, operationId),
+  };
+}
+
+const UPCOMING_DAYS = 400;
+
+function upcomingRange(now = Date.now()): DateRange {
+  return { from: new Date(now).toISOString(), to: new Date(now + UPCOMING_DAYS * 86_400_000).toISOString() };
+}
+
+function studyBlockHome(owner: OwnerContext, home: CalendarHome): StudyBlockHome {
+  if (home === 'google') return googleStudyBlockHome(googleApiFor(owner), owner.userId);
+  return {
+    listOwnBlocks: async range => (await listStandaloneCalendarEvents(owner.userId, range)).map(toMovableBlock),
+    put: block => putStandaloneCalendarEvent(owner, block),
+    remove: id => removeStandaloneCalendarEvent(owner.userId, id),
+  };
+}
+
+export class CalendarHomeError extends Error {
+  constructor(readonly code: 'not_connected' | 'pending_operations' | 'incomplete', message: string, readonly status: number) {
+    super(message);
+    this.name = 'CalendarHomeError';
+  }
+}
+
+/** How many upcoming blocks a switch would move, so the student can confirm first. */
+export async function previewCalendarHome(owner: OwnerContext, to: CalendarHome): Promise<{ home: CalendarHome; upcomingBlocks: number }> {
+  const { home } = await calendarHomeFor(owner.userId);
+  if (home === to) return { home, upcomingBlocks: 0 };
+  return { home, upcomingBlocks: (await studyBlockHome(owner, home).listOwnBlocks(upcomingRange())).length };
+}
+
+/**
+ * Moves upcoming blocks to the new home, and only then records the new choice. A failed move keeps
+ * the old choice; blocks already moved stay hidden copies until a retry finishes the move.
+ * Holds the owner's calendar lock so no other calendar write can run in between.
+ */
+export async function switchCalendarHome(owner: OwnerContext, to: CalendarHome): Promise<{ home: CalendarHome } & MoveOutcome> {
+  if (to === 'google') {
+    if (process.env.GOOGLE_ENABLED !== 'true' || !(await getConnectionStatus(owner.userId)).connected) {
+      throw new CalendarHomeError('not_connected', 'Connect Google Calendar before saving study blocks there.', 409);
+    }
+  }
+  return calendarOperationStore.withOwnerLock(owner.userId, async () => {
+    const { home } = await calendarHomeFor(owner.userId);
+    if (home === to) return { home, total: 0, moved: 0, complete: true };
+    if ((await listUnresolvedCalendarOperations(owner.userId)).length) {
+      throw new CalendarHomeError('pending_operations', 'A calendar change is still unconfirmed. Check it in the calendar before switching.', 409);
+    }
+    const outcome = await moveStudyBlocks(studyBlockHome(owner, home), studyBlockHome(owner, to), upcomingRange());
+    if (!outcome.complete) {
+      throw new CalendarHomeError('incomplete', `Moved ${outcome.moved} of ${outcome.total} study blocks. Your blocks stay in the ${home === 'google' ? 'Google' : 'PolyMate'} calendar; try again to finish.`, 503);
+    }
+    await setCalendarHome(owner.userId, to);
+    return { home: to, ...outcome };
+  });
 }
 
 const STATUS_FOR: Record<string, number> = {
@@ -85,9 +181,11 @@ export function calendarError(error: unknown): Response {
   else if (error instanceof CalendarBusyError) [status, code, message] = [409, 'busy', error.message];
   else if (error instanceof ContractError) [status, code, message] = [422, 'validation', error.message];
   else if (error instanceof ProgressError) [status, code, message] = [error.code === 'not_found' ? 404 : error.code === 'forbidden' ? 403 : 409, error.code, error.message];
-  else if (error instanceof GoogleNotConnectedError) [status, code, message] = [409, 'not_connected', 'The optional Google Calendar overlay is not connected.'];
+  else if (error instanceof CalendarHomeError) [status, code, message] = [error.status, error.code, error.message];
+  else if (error instanceof CalendarServiceError) [status, code, message] = [STATUS_FOR[error.code] ?? 409, error.code, error.message];
+  else if (error instanceof GoogleNotConnectedError) [status, code, message] = [409, 'not_connected', 'Google Calendar is not connected. Reconnect it to see and change your study blocks.'];
   else if (error instanceof GoogleApiError || error instanceof GoogleTransportError) {
-    [status, code, message] = [503, 'google_unavailable', 'The optional Google Calendar overlay is not responding.'];
+    [status, code, message] = [503, 'google_unavailable', 'Google Calendar is not responding. Try again in a moment.'];
   } else console.error('Calendar route failed.', error instanceof Error ? error.name : typeof error);
   return Response.json({ error: { code, message } }, { status, headers: NO_STORE });
 }

@@ -2,14 +2,14 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'PolyMate — your study week',
+  title: 'PolyMate: your study week',
   description: 'A little structure. More room to learn. Your ETH study companion.',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="en" suppressHydrationWarning>
     <head>
-      <script dangerouslySetInnerHTML={{ __html: `try { if (localStorage.getItem('polymate-theme') === 'dark') document.documentElement.classList.add('dark'); } catch {}` }} />
+      <script dangerouslySetInnerHTML={{ __html: `try { if (localStorage.getItem('polymate-theme') === 'dark') document.documentElement.classList.add('dark'); for (const panel of ['sidebar', 'chats']) if (localStorage.getItem('polymate-' + panel) === 'collapsed') document.documentElement.dataset[panel] = 'collapsed'; } catch {}` }} />
     </head>
     <body>{children}</body>
   </html>;

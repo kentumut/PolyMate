@@ -1,7 +1,7 @@
 # Optional production gateway. No host ports: only the web container calls it.
 services:
   openclaw:
-    image: polymate-openclaw:${RELEASE_SHA:-development}
+    image: polymate-openclaw:${OPENCLAW_IMAGE_TAG:-${RELEASE_SHA:-development}}
     build:
       context: .
       dockerfile: integrations/openclaw-agent-plugin/Dockerfile

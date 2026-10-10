@@ -95,3 +95,22 @@ export async function deleteStandaloneCalendarEvent(ownerId: string, id: string,
   const result = await queries().query('DELETE FROM calendar_events WHERE owner_id = $1 AND id = $2 AND version = $3', [ownerId, id, expectedVersion]);
   return result.rowCount === 1;
 }
+
+/** Writes a block moved in from another calendar under its existing ID, so progress links stay attached. */
+export async function putStandaloneCalendarEvent(owner: OwnerContext, block: StudyBlockInput & { id: string; completion: Completion }): Promise<void> {
+  await ensureUser(owner);
+  const result = await queries().query(
+    `INSERT INTO calendar_events (id, owner_id, title, start_at, end_at, completion)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, start_at = EXCLUDED.start_at, end_at = EXCLUDED.end_at,
+       completion = EXCLUDED.completion, version = calendar_events.version + 1, updated_at = now()
+     WHERE calendar_events.owner_id = EXCLUDED.owner_id`,
+    [block.id, owner.userId, block.title, block.startAt, block.endAt, block.completion],
+  );
+  if (result.rowCount !== 1) throw new Error('This block ID belongs to a different calendar.');
+}
+
+/** Removes a block after it was moved to another calendar. */
+export async function removeStandaloneCalendarEvent(ownerId: string, id: string): Promise<void> {
+  await queries().query('DELETE FROM calendar_events WHERE owner_id = $1 AND id = $2', [ownerId, id]);
+}

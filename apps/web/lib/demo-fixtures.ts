@@ -1,4 +1,4 @@
-import type { Assignment } from '@polymate/contracts/assignments';
+import type { Assignment, AssignmentInput } from '@polymate/contracts/assignments';
 import type { CalendarEvent, OperationResult } from '@polymate/contracts/calendar';
 import type { CoachingState, StudentMemory } from '@polymate/contracts/coaching';
 import type { Course } from '@polymate/contracts/courses';
@@ -30,10 +30,12 @@ export const DEMO_ONBOARDING_OPTIONS = {
     { value: 30 as const, label: '30-minute sprints', description: 'More short sessions with breaks.' },
   ],
   coachCadence: [
-    { value: 'proactive' as const, label: 'Flag risks early', description: 'Coach asks when a decision needs you.' },
-    { value: 'weekly' as const, label: 'Weekly summary only', description: 'Keep coaching quiet unless requested.' },
+    { value: 'proactive' as const, label: 'Frequent check-ins', description: 'Follow up on risks, workload, and recent study sessions.' },
+    { value: 'weekly' as const, label: 'Weekly check-in', description: 'Use one structured planning review each week.' },
   ],
 } as const;
+
+export const DEMO_ASSIGNMENT_CAPTURE_PROMPT = 'I want to add an assignment: Computer Vision exercise sheet 4 is due next Thursday at 18:00 and should take about 3 hours. Use Zurich time.';
 
 export const DEMO_PROMPTS: Record<Exclude<DemoStage, 'onboarding' | 'approve' | 'complete'>, string> = {
   brief: 'What should I focus on this week?',
@@ -119,6 +121,11 @@ export function demoAssignment(now: Date | string): Assignment {
   };
 }
 
+export function demoCapturedAssignment(now: Date | string): AssignmentInput {
+  const range = nextDemoWeek(now);
+  return { title: 'Computer Vision exercise sheet 4', dueAt: at(range, 3, 18), estimatedMinutes: 180 };
+}
+
 export function demoMoodleSnapshot(now: Date | string): MoodleSnapshot {
   const range = nextDemoWeek(now);
   const dueAt = at(range, 4, 18);
@@ -177,6 +184,27 @@ export function demoTimeline(now: Date | string, options: { sessionMinutes?: Dem
   };
 }
 
+export function demoTradeoffExplanation(
+  timeline: AssignmentTimeline,
+  options: { sessionMinutes: DemoSessionMinutes; style: DemoPlanStyle; commitment: DemoCommitment },
+): string {
+  const slots = timeline.blocks.map(block => new Intl.DateTimeFormat('en-GB', {
+    timeZone: CALENDAR_TIMEZONE,
+    weekday: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(block.startAt))).join(', ');
+  const protectedCommitment = options.commitment === 'volunteering'
+    ? 'Wednesday volunteering'
+    : 'Thursday rehearsal';
+  const tradeoff = options.style === 'frontload'
+    ? 'The trade-off is a heavier Monday and Tuesday in exchange for a larger buffer before Friday’s deadline.'
+    : 'The trade-off is a lighter, more evenly paced week with less buffer if a later session slips.';
+
+  return `I chose **${slots}** for the ${timeline.blocks.length} × ${options.sessionMinutes}-minute sessions. Those slots avoid your Tuesday job, ${protectedCommitment}, and Friday climbing while finishing all 150 minutes before the deadline. **${tradeoff}** The calendar is still unchanged; you can approve this draft or revise the constraints.`;
+}
+
 export function demoMovedBlock(now: Date | string, target: DemoMoveTarget = 'friday-16', sessionMinutes: DemoSessionMinutes = 50) {
   const range = nextDemoWeek(now);
   const hour = target === 'friday-15' ? 15 : 16;
@@ -210,22 +238,31 @@ export function demoCommitmentMemory(now: Date | string, commitment: DemoCommitm
   };
 }
 
-export function demoCoachingState(now: Date | string, memories: StudentMemory[], proactive = false, answered = false): CoachingState {
+export function demoCoachingState(now: Date | string, memories: StudentMemory[], proactive = false, answeredCount = 0): CoachingState {
   const range = nextDemoWeek(now);
+  const checkIns = [{
+    id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+    kind: 'weekly_question' as const,
+    title: 'Confirm this week’s pressure point',
+    body: 'Is the Algorithms deadline still the priority, or has something changed?',
+    questionKey: 'priority',
+  }, ...(proactive ? [{
+    id: 'abababab-abab-4bab-8bab-abababababab',
+    kind: 'follow_up' as const,
+    title: 'Check the workload estimate',
+    body: 'Does 150 minutes still feel realistic after your latest exercise session?',
+    questionKey: 'effort',
+  }] : [])];
   return {
     currentWeekStart: range.from.slice(0, 10),
-    messages: [...(proactive ? [{
-      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
-      kind: 'weekly_question' as const,
-      title: 'Confirm this week’s pressure point',
-      body: 'Is the Algorithms deadline still the priority, or has something changed?',
+    messages: [...checkIns.map((item, index) => ({
+      ...item,
       requiresResponse: true,
-      status: answered ? 'responded' as const : 'unread' as const,
+      status: index < answeredCount ? 'responded' as const : 'unread' as const,
       weekStart: range.from.slice(0, 10),
-      questionKey: 'priority',
       createdAt: typeof now === 'string' ? now : now.toISOString(),
-      respondedAt: answered ? typeof now === 'string' ? now : now.toISOString() : null,
-    }] : []), {
+      respondedAt: index < answeredCount ? typeof now === 'string' ? now : now.toISOString() : null,
+    })), {
       id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
       kind: 'digest',
       title: 'Your weekly plan is ready to shape',

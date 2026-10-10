@@ -10,14 +10,14 @@ const features = [
 export default function Home() {
   return <main className="min-h-dvh bg-background text-foreground">
     <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8" aria-label="Primary navigation">
-      <Link href="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight"><span className="grid size-8 place-items-center rounded-lg bg-foreground text-xs font-bold text-background">P</span>PolyMate</Link>
+      <Link href="/" className="text-base font-semibold tracking-tight">PolyMate</Link>
       <div className="flex items-center gap-2"><Link href="/demo" className="rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">View demo</Link><Link href="/calendar" className="rounded-lg bg-foreground px-3.5 py-2 text-sm font-medium text-background transition-opacity hover:opacity-85">Open study space</Link></div>
     </nav>
 
     <section className="mx-auto grid max-w-6xl items-center gap-14 px-5 pb-20 pt-20 sm:px-8 sm:pt-28 lg:grid-cols-[1.1fr_.9fr] lg:pb-28">
       <div>
         <p className="text-sm font-medium text-muted-foreground">Your ETH study companion</p>
-        <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.04em] sm:text-6xl sm:leading-[1.04]">A clear plan for what to study—and when.</h1>
+        <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.04em] sm:text-6xl sm:leading-[1.04]">A clear plan for what to study, and when.</h1>
         <p className="mt-6 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">PolyMate brings your courses, deadlines, calendar, and weekly context into one conversation. It proposes the plan; you stay in control of every calendar change.</p>
         <div className="mt-8 flex flex-wrap gap-3"><Link href="/calendar" className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-3 text-sm font-medium text-background transition-opacity hover:opacity-85">Start planning <ArrowRight className="size-4" aria-hidden="true" /></Link><Link href="/demo" className="inline-flex items-center rounded-xl border px-5 py-3 text-sm font-medium transition-colors hover:bg-muted">Try the interactive demo</Link></div>
         <ul className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground"><li className="flex items-center gap-1.5"><Check className="size-3.5" />Built for ETH workflows</li><li className="flex items-center gap-1.5"><Check className="size-3.5" />Calendar changes require approval</li><li className="flex items-center gap-1.5"><Check className="size-3.5" />Works without Google Calendar</li></ul>
