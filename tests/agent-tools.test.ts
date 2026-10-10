@@ -90,6 +90,9 @@ describe('PolyMate agent tool routing', () => {
     expect(() => parseAgentToolArguments('moodle_get_calendar_events', { ownerId: owner.userId })).toThrow('unsupported fields');
     expect(() => parseAgentToolArguments('vvz_search_courses', {})).toThrow('at least one');
     expect(() => parseAgentToolArguments('vvz_search_courses', { semester: '2026W', title: 'vision' })).not.toThrow();
+    expect(() => parseAgentToolArguments('polymate_get_calendar', { from: '2026-10-10T00:00:00Z', to: '2027-10-10T00:00:00Z' })).toThrow('from now to 42 days ahead');
+    expect(() => parseAgentToolArguments('polymate_get_calendar', { from: '2026-10-10T00:00:00Z', to: '2026-11-21T00:00:00Z' })).not.toThrow();
+    expect(AGENT_SYSTEM_INSTRUCTIONS).toContain('read from now to 42 days ahead');
     expect(() => parseAgentToolArguments('vvz_get_course_details', { unitId: 204421 })).not.toThrow();
     expect(() => parseAgentToolArguments('vvz_get_course_details', { unitId: '204421' })).toThrow('positive VVZ unitId');
     expect(() => parseAgentToolArguments('msc_cs_check_graduation', { major: 'Machine Intelligence', minor: 'Computer Vision', courses: [{ unitId: 204421, status: 'in_progress' }] })).not.toThrow();

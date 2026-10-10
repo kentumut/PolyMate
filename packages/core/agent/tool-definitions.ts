@@ -57,7 +57,7 @@ export const AGENT_TOOL_DEFINITIONS = [
   },
   {
     name: 'polymate_get_calendar',
-    description: 'Retrieve this student’s PolyMate and optional Google calendar events for explicit dates (at most 42 days). Personal Google events are read-only. Read the current editable PolyMate event before editing it.',
+    description: 'Retrieve this student’s PolyMate and optional Google calendar events for explicit dates (at most 42 days per call; for open-ended requests use now through 42 days ahead, where PolyMate creates its blocks). Personal Google events are read-only. Read the current editable PolyMate event before editing it.',
     parameters: { type: 'object', properties: { from: OFFSET_INSTANT_SCHEMA, to: OFFSET_INSTANT_SCHEMA }, required: ['from', 'to'], additionalProperties: false },
   },
   {
