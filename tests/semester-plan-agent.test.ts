@@ -88,6 +88,18 @@ describe('semester planning agent', () => {
     expect(placements.map(item => item.sourceSemester)).toEqual(['2026W', '2026W', '2027S', '2026W']);
   });
 
+  it('allows the eight-credit Practical Work semester project in either season', () => {
+    const plan = semesterPlanRequestSchema.parse({
+      major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 10,
+      courses: [{ ...course, id: 250, credits: 10, status: 'planned' }],
+    });
+    const practicalWork = { course: { ...course, id: 251, title: 'Practical Work', credits: 8 }, category: 'practical_work' };
+    const winterLecture = { course: { ...course, id: 252, title: 'Winter Lecture', credits: 8 }, category: 'major_elective' };
+
+    expect(compactRoadmapPlacements(plan, [practicalWork] as never)[0].semester).toBe('2027S');
+    expect(compactRoadmapPlacements(plan, [winterLecture] as never)[0].semester).toBe('2027W');
+  });
+
   it('packs taught courses to reduce the number of semesters', () => {
     const plan = semesterPlanRequestSchema.parse({ major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 10, courses: [] });
     const credits = [4, 4, 4, 4, 6, 6];
