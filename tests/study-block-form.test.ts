@@ -82,6 +82,12 @@ describe('study-block form validation', () => {
     expect(result.errors?.endTime).toContain('occurs twice');
     expect(result.input).toBeUndefined();
   });
+
+  it('uses the server duration and title limits before submitting', () => {
+    expect(validateStudyBlock({ ...valid, endTime: '09:05' }).errors?.endTime).toContain('at least 10 minutes');
+    expect(validateStudyBlock({ ...valid, endTime: '18:00' }).errors?.endTime).toContain('at most 8 hours');
+    expect(validateStudyBlock({ ...valid, title: 'x'.repeat(201) }).errors?.title).toBeDefined();
+  });
 });
 
 describe('Mark done targets and permissions', () => {

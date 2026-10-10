@@ -2,7 +2,7 @@
 
 This document defines the first-release study-block dialog: its fields, inputs, actions, validation, and operation feedback. It follows the shared calendar contracts in [TEAM_SCHEDULE.md](TEAM_SCHEDULE.md#4-shared-interfaces-that-enable-parallel-work).
 
-**Implementation status:** `apps/web/components/study/study-block-dialog.tsx` implements creation, edit/move, Mark done, confirmed Delete, and read-only details. These modes can be exercised with labelled fixtures; live Google acceptance requires integration. See its [handoff README](../apps/web/components/study/README.md) for current props and adapter responsibilities. Sections below describe the full first-release target. Kent owns page composition, and study/connection UX lives under `apps/web/components/study/` per his handoff.
+**Implementation status:** `apps/web/components/study/study-block-dialog.tsx` implements creation, edit/move, Mark done, confirmed Delete, and read-only details. `CalendarStudyWorkflow` integrates these modes into `/calendar` with the real service and a development-only sample option. Live Google acceptance remains to be performed. See its [handoff README](../apps/web/components/study/README.md) for current props and adapter responsibilities.
 
 ## 1. Dialog modes
 
@@ -78,7 +78,7 @@ type StudyBlockDialogProps = {
 
 - Create and update callbacks receive the full editable form values, with whitespace-trimmed title and converted ISO timestamps.
 - Update, complete, and delete callbacks receive the selected event's `id` and `etag`. The expected ETag lets the service detect changes made since the event was loaded. If the service reports stale event data, refresh it and ask the student to review before submitting again.
-- The callback adapter manages the underlying calendar service's `operationId`: allocate one per intended mutation and reuse it when retrying or reconciling that same mutation. It must not create a new operation ID merely because a response was uncertain.
+- The callback adapter manages `operationId`: pending/unknown operations retain their original ID for read-back reconciliation. Definitively failed attempts are terminal in the service, so an explicit retry after a confirmed failure allocates a new attempt ID. It must not create a new operation ID merely because a response was uncertain.
 - Callbacks return the shared `OperationResult`, including `operationId`, `status` (`pending`, `synced`, `failed`, or `unknown`), and optional `event` or `error`. A resolved promise alone does not mean Google confirmed success.
 - The parent/adapter owns calendar refresh and operation reconciliation. Confirmed changes must be reflected in the week view, and uncertain changes must be reconciled before a repeat write.
 - No callback input includes a student/owner ID. Authenticated server-side context determines ownership.
@@ -118,7 +118,7 @@ Treat the callback's result status as authoritative. Resolving a promise, updati
 | Failed | The service's safe error message and a useful next step. | Keep the dialog and entered values. Allow correction or retry when the failure is known to be safe to retry. |
 | Unknown | We could not confirm whether Google saved this change. Refresh the calendar before trying again. | Keep the draft and operation identity; block repeat writes until the adapter reconciles the outstanding operation. Display the visible label Uncertain. |
 
-Enter Pending immediately when invoking a mutation. If the callback returns `pending`, remain pending until the parent/adapter obtains a terminal or uncertain result. Closing the dialog must not discard tracking of an outstanding operation or imply that the request was cancelled.
+Enter Pending immediately when invoking a mutation. If the callback returns `pending`, remain pending until the parent/adapter obtains a terminal or uncertain result. Once the local request returns, the dialog may close while the parent retains the operation and offers Check change. Closing must not discard tracking or imply that the request was cancelled.
 
 If a callback throws after submission and cannot establish that no write occurred, treat the outcome as Uncertain rather than offering a blind retry. The adapter retains the operation ID and reconciles it using the existing service before permitting another write. Fake callbacks must be clearly labelled as development fixtures; their results must not claim live Google synchronization.
 

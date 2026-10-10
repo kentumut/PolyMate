@@ -1,10 +1,10 @@
-import { ContractError, type OperationResult } from '@polymate/contracts/calendar';
+import { ContractError, parseOperationId, type OperationResult, type StudyBlockChanges, type StudyBlockInput } from '@polymate/contracts/calendar';
 import { CalendarService } from '@polymate/core/calendar';
 import { GoogleApiError, GoogleCalendarApi, GoogleNotConnectedError, GoogleTransportError } from '@polymate/core/calendar/google-api';
 import { constantTimeEqual } from '@polymate/core/google-auth/crypto';
 import { assertSameOrigin, IdentityError, resolveOwner, type OwnerContext } from '@polymate/core/identity';
 import { CalendarBusyError } from '@polymate/core/calendar/operations';
-import { calendarOperationStore } from '@polymate/db/calendar-operations';
+import { calendarOperationStore, findCalendarOperation } from '@polymate/db/calendar-operations';
 import { getValidAccessToken } from '@polymate/db/google-oauth';
 import type { NextRequest, NextResponse } from 'next/server';
 
@@ -79,6 +79,31 @@ export async function calendarMutation<T>(
     assertCalendarMutation(request);
     const input = parse(await readJson(request));
     return operationResponse(await run(calendarServiceFor(owner), input));
+  } catch (error) {
+    return calendarError(error);
+  }
+}
+
+/** Only replay an existing owner-scoped record; the service reconciles uncertain writes with reads. */
+export async function reconcileCalendarOperation(request: NextRequest, id: string): Promise<Response> {
+  try {
+    const owner = resolveOwner(request.headers);
+    assertCalendarMutation(request);
+    const operationId = parseOperationId(id);
+    const stored = await findCalendarOperation(owner.userId, operationId);
+    if (!stored) return Response.json({ error: { code: 'not_found', message: 'Calendar operation not found.' } }, { status: 404, headers: NO_STORE });
+    if (stored.result?.status === 'synced' || stored.result?.status === 'failed') return operationResponse(stored.result);
+    const service = calendarServiceFor(owner);
+    const { record } = stored;
+    let result: OperationResult;
+    if (record.kind === 'create') result = await service.createStudyBlock(record.intendedChange as StudyBlockInput, operationId);
+    else {
+      if (!record.targetEventId || !record.expectedEtag) throw new ContractError('The saved operation is missing its event version.');
+      if (record.kind === 'update') result = await service.updateStudyBlock(record.targetEventId, record.intendedChange as StudyBlockChanges, record.expectedEtag, operationId);
+      else if (record.kind === 'complete') result = await service.completeStudyBlock(record.targetEventId, record.expectedEtag, operationId);
+      else result = await service.deleteStudyBlock(record.targetEventId, record.expectedEtag, operationId);
+    }
+    return operationResponse(result);
   } catch (error) {
     return calendarError(error);
   }

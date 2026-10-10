@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { calendarOperationStore } from '../packages/db/src/calendar-operations';
+import { calendarOperationStore, findCalendarOperation, listUnresolvedCalendarOperations } from '../packages/db/src/calendar-operations';
 
 const mocks = vi.hoisted(() => ({ query: vi.fn(), connect: vi.fn(), poolQuery: vi.fn(), release: vi.fn() }));
 vi.mock('../packages/db/src/connection', () => ({ getPool: () => ({ connect: mocks.connect, query: mocks.poolQuery }) }));
@@ -51,5 +51,18 @@ describe('durable calendar operation store', () => {
     ]);
     expect(prior?.record.ownerId).toBe('');
     expect(prior?.result).toBeNull();
+  });
+
+  it('scopes recovery reads to the authenticated owner and only lists unresolved statuses', async () => {
+    mocks.poolQuery.mockResolvedValueOnce({ rows: [{ operation_id: 'op-a', status: 'pending', result: null }] });
+    expect(await listUnresolvedCalendarOperations('owner-a')).toEqual([{ operationId: 'op-a', status: 'pending' }]);
+    expect(mocks.poolQuery.mock.calls[0]).toEqual([
+      expect.stringContaining("WHERE owner_id = $1 AND status IN ('pending', 'unknown')"), ['owner-a'],
+    ]);
+    mocks.poolQuery.mockResolvedValueOnce({ rows: [] });
+    expect(await findCalendarOperation('owner-b', 'op-a')).toBeNull();
+    expect(mocks.poolQuery.mock.calls[1]).toEqual([
+      expect.stringContaining('WHERE operation_id = $1 AND owner_id = $2'), ['op-a', 'owner-b'],
+    ]);
   });
 });

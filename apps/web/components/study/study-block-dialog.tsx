@@ -15,6 +15,7 @@ export type StudyBlockDialogProps = {
   onUpdate?: (eventId: string, input: StudyBlockInput, expectedEtag: string) => Promise<StudyBlockOperationResult>;
   onComplete?: (eventId: string, expectedEtag: string) => Promise<StudyBlockOperationResult>;
   onDelete?: (eventId: string, expectedEtag: string) => Promise<StudyBlockOperationResult>;
+  onReconcile?: () => Promise<StudyBlockOperationResult>;
   /** Adapter supplies updates when a pending/uncertain operation is reconciled. */
   operationResult?: StudyBlockOperationResult;
   fixtureMode?: boolean;
@@ -25,7 +26,7 @@ export function StudyBlockDialog(props: StudyBlockDialogProps) {
   return props.open ? <StudyBlockDialogForm key={props.selectedEvent ? `event:${props.selectedEvent.id}` : 'create'} {...props} /> : null;
 }
 
-function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate, onUpdate, onComplete, onDelete, operationResult, fixtureMode = false }: StudyBlockDialogProps) {
+function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate, onUpdate, onComplete, onDelete, onReconcile, operationResult, fixtureMode = false }: StudyBlockDialogProps) {
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -40,6 +41,7 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
   const [endEdited, setEndEdited] = useState(false);
   const [result, setResult] = useState<StudyBlockOperationResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
   const [transportUncertain, setTransportUncertain] = useState(false);
   const [action, setAction] = useState<'create' | 'update' | 'complete' | 'delete'>(selectedEvent ? 'update' : 'create');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -113,10 +115,22 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
   }
 
   function cancelDelete() {
-    if (inFlight.current || status === 'pending') return;
-    if (status === 'unknown' || status === 'synced') { onClose(); return; }
+    if (inFlight.current || reconciling) return;
+    if (status === 'unknown' || status === 'synced' || status === 'pending') { onClose(); return; }
     setResult(null);
     setConfirmingDelete(false);
+  }
+
+  async function checkOutcome() {
+    if (inFlight.current || reconciling || !onReconcile) return;
+    setReconciling(true);
+    try {
+      const next = await onReconcile();
+      setResult(next);
+      setTransportUncertain(false);
+    } catch {
+      setTransportUncertain(true);
+    } finally { setReconciling(false); }
   }
 
   async function confirmDelete() {
@@ -165,15 +179,18 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
     {message && <p className={`rounded-lg border p-3 text-sm ${status === 'failed' ? 'border-[#d9aaa5] text-[#9b302b]' : 'border-[#c8d3c8]'}`}>
       {status === 'unknown' && <strong>Uncertain: </strong>}{message}
     </p>}
+    {status === 'failed' && currentResult?.error?.code === 'conflict' && <p className="mt-2 text-sm">Close this dialog, refresh the calendar, and reopen the block to review its latest saved values.</p>}
+    {(status === 'pending' || status === 'unknown') && !submitting && onReconcile && <button type="button" onClick={checkOutcome} disabled={reconciling} className="mt-2 text-sm underline disabled:opacity-50">{reconciling ? 'Checking…' : 'Check change'}</button>}
   </div>;
   const savedTimeFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', dateStyle: 'medium', timeStyle: 'short' });
 
   return <dialog ref={dialogRef} aria-labelledby={`${id}-heading`} aria-describedby={`${id}-description`}
-    onCancel={event => { event.preventDefault(); if (status !== 'pending') { if (confirmingDelete) cancelDelete(); else onClose(); } }}
+    onCancel={event => { event.preventDefault(); if (!submitting && !reconciling) { if (confirmingDelete) cancelDelete(); else onClose(); } }}
     className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-lg overflow-y-auto rounded-2xl border border-[#dce3db] bg-[#f6f7f3] p-6 text-[#173b32] shadow-xl backdrop:bg-black/35">
     <h2 id={`${id}-heading`} className="text-2xl font-semibold">{confirmingDelete ? 'Delete study block?' : readOnly ? 'Event details' : editing ? 'Edit study block' : 'Create a study block'}</h2>
     <p id={`${id}-description`} className="mt-2 text-sm leading-6 text-[#617269]">{confirmingDelete ? 'Review the saved block before deleting it.' : readOnly ? 'This event is read-only here.' : editing ? 'Change the title or move this study block.' : 'Choose your study time.'} All times are in Europe/Zurich.</p>
     {editing && <p className="mt-2 text-sm text-[#617269]">Completion: {completed ? 'Done' : 'Open'}</p>}
+    {loadedEvent?.allDay && <p className="mt-2 text-sm text-[#617269]">All-day commitment. The end date is exclusive.</p>}
     {fixtureMode && <p className="mt-3 rounded-lg bg-[#e8ede5] p-3 text-sm">Development fixture — no Google Calendar writes.</p>}
     {confirmingDelete && loadedEvent ? <section className="mt-6 space-y-5" aria-label="Deletion confirmation">
       <p className="font-medium">Delete “{loadedEvent.title}” from {fixtureMode ? 'the fixture calendar' : 'Google Calendar'}?</p>
@@ -181,8 +198,8 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
       {dirty && <p className="text-sm text-[#617269]">Unsaved edits will not be saved. Delete applies to the saved block shown above.</p>}
       {feedback}
       <div className="flex flex-wrap justify-end gap-3 border-t border-[#dce3db] pt-4">
-        <button ref={deleteCancelRef} type="button" onClick={cancelDelete} disabled={status === 'pending'} className="rounded-lg border border-[#c8d3c8] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
-          {status === 'synced' || status === 'unknown' ? 'Close' : 'Cancel'}
+        <button ref={deleteCancelRef} type="button" onClick={cancelDelete} disabled={submitting || reconciling} className="rounded-lg border border-[#c8d3c8] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
+          {status === 'synced' || status === 'unknown' || status === 'pending' ? 'Close' : 'Cancel'}
         </button>
         {status !== 'synced' && <button type="button" onClick={confirmDelete} disabled={locked} className="rounded-lg bg-[#9b302b] px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">
           {status === 'pending' ? 'Deleting…' : 'Delete'}
@@ -202,8 +219,8 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
       </p>}
       {feedback}
       <div className="flex flex-wrap justify-end gap-3 border-t border-[#dce3db] pt-4">
-        <button type="button" onClick={onClose} disabled={status === 'pending'} className="rounded-lg border border-[#c8d3c8] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
-          {readOnly || status === 'synced' || status === 'unknown' ? 'Close' : 'Cancel'}
+        <button type="button" onClick={onClose} disabled={submitting || reconciling} className="rounded-lg border border-[#c8d3c8] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
+          {readOnly || status === 'synced' || status === 'unknown' || status === 'pending' ? 'Close' : 'Cancel'}
         </button>
         {deleteTarget && onDelete && status !== 'synced' && <button ref={deleteTriggerRef} type="button" onClick={requestDelete} disabled={locked} className="rounded-lg border border-[#9b302b] px-4 py-2.5 text-sm font-medium text-[#9b302b] disabled:opacity-50">Delete</button>}
         {target && onComplete && !completed && status !== 'synced' && <button type="button" onClick={markDone} disabled={locked}
