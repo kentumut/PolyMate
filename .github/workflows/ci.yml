@@ -1,8 +1,11 @@
 name: CI
 on:
+  # Docs-only changes skip CI, and with it the Deploy VM workflow that follows a passing main run.
   pull_request:
+    paths-ignore: ['**.md']
   push:
     branches: [main]
+    paths-ignore: ['**.md']
   workflow_dispatch:
 permissions:
   contents: read
