@@ -7,6 +7,7 @@ export const MSC_CS_MINORS = ['Computer Graphics', 'Computer Vision', 'Data Mana
 export type MscCsMajor = typeof MSC_CS_MAJORS[number];
 export type MscCsMinor = typeof MSC_CS_MINORS[number];
 export type VvzCurriculumCategory = 'major_core' | 'major_elective' | 'minor' | 'inter_focus' | 'seminar' | 'practical_work' | 'science_in_perspective' | 'masters_thesis' | 'free_elective';
+export const VVZ_CURRICULUM_BROWSE_CATEGORIES = ['major_core', 'major_elective', 'minor', 'inter_focus', 'seminar', 'practical_work', 'science_in_perspective', 'masters_thesis', 'free_elective'] as const;
 
 export type VvzSearchRequest = Readonly<{
   semester?: string;
@@ -97,6 +98,22 @@ export function parseVvzCourseDetailsRequest(value: unknown): { unitId: number }
   return { unitId: Number(input.unitId) };
 }
 
+export function parseVvzCurriculumBrowseRequest(value: unknown): { semester: string; major: MscCsMajor; minor: MscCsMinor; categories: VvzCurriculumCategory[]; limitPerCategory: number } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new VvzError('invalid_request', 'Send an MSc Computer Science curriculum browse request.');
+  const input = value as Record<string, unknown>;
+  if (Object.keys(input).some(key => !['semester', 'major', 'minor', 'categories', 'limitPerCategory'].includes(key))) throw new VvzError('invalid_request', 'The curriculum browse request contains unsupported fields.');
+  if (typeof input.semester !== 'string' || !/^\d{4}[SW]$/.test(input.semester)) throw new VvzError('invalid_request', 'Use a semester such as 2026W or 2027S.');
+  if (typeof input.major !== 'string' || !(MSC_CS_MAJORS as readonly string[]).includes(input.major)) throw new VvzError('invalid_request', 'Choose a supported MSc Computer Science major.');
+  if (typeof input.minor !== 'string' || !(MSC_CS_MINORS as readonly string[]).includes(input.minor)) throw new VvzError('invalid_request', 'Choose a supported MSc Computer Science minor.');
+  if (!Array.isArray(input.categories) || input.categories.length < 1 || input.categories.length > VVZ_CURRICULUM_BROWSE_CATEGORIES.length
+    || input.categories.some(category => typeof category !== 'string' || !(VVZ_CURRICULUM_BROWSE_CATEGORIES as readonly string[]).includes(category))) {
+    throw new VvzError('invalid_request', 'Choose one or more supported curriculum categories.');
+  }
+  if (!Number.isSafeInteger(input.limitPerCategory) || Number(input.limitPerCategory) < 1 || Number(input.limitPerCategory) > 8) throw new VvzError('invalid_request', 'Request 1 to 8 courses per curriculum category.');
+  return { semester: input.semester, major: input.major as MscCsMajor, minor: input.minor as MscCsMinor,
+    categories: [...new Set(input.categories as VvzCurriculumCategory[])], limitPerCategory: Number(input.limitPerCategory) };
+}
+
 function publicUnitUrl(unit: { id: number; semester: string }) {
   return `https://www.vvz.ethz.ch/Vorlesungsverzeichnis/lerneinheit.view?lang=en&semkez=${encodeURIComponent(unit.semester)}&ansicht=ALLE&lerneinheitId=${unit.id}`;
 }
@@ -111,6 +128,13 @@ function unitSummary(value: unknown) {
     comment: text(raw.comment_english ?? raw.comment, 'comment', 1000), scrapedAt: new Date(integer(raw.scraped_at, 'scrape timestamp') * 1000).toISOString(),
   };
   return { ...unit, officialVvzUrl: publicUnitUrl(unit) };
+}
+
+export function hasScienceInPerspectiveEvidence(value: unknown) {
+  const raw = object(value, 'learning unit');
+  return [raw.abstract_english, raw.abstract, raw.objective_english, raw.objective, raw.content_english, raw.content,
+    raw.comment_english, raw.comment, raw.additional_english, raw.additional]
+    .filter(item => typeof item === 'string').join(' ').toLocaleLowerCase('en').includes('science in perspective');
 }
 
 function course(value: unknown) {
@@ -255,6 +279,36 @@ export class VvzClient {
     };
   }
 
+  async browseMscCsCurriculum(raw: unknown) {
+    const input = parseVvzCurriculumBrowseRequest(raw);
+    const curriculum = await this.mscCsSections(input.semester, input.major, input.minor);
+    const categoryIds: Record<VvzCurriculumCategory, Set<number>> = {
+      major_core: curriculum.majorCore,
+      major_elective: curriculum.majorElective,
+      minor: curriculum.minor,
+      inter_focus: curriculum.interFocus,
+      seminar: curriculum.seminar,
+      practical_work: curriculum.practical,
+      science_in_perspective: curriculum.scienceInPerspective,
+      masters_thesis: curriculum.thesis,
+      free_elective: curriculum.programmeElectives,
+    };
+    const selected = new Map(input.categories.map(category => [category, [...categoryIds[category]].slice(0, input.limitPerCategory)] as const));
+    const fallbackUnits = new Map<number, ReturnType<typeof unitSummary>>();
+    if (input.categories.includes('science_in_perspective') && selected.get('science_in_perspective')?.length === 0) {
+      const fallback = await this.searchCourses({ semester: input.semester, content: 'Science in Perspective', offset: 0, limit: input.limitPerCategory });
+      selected.set('science_in_perspective', fallback.courses.map(course => course.id));
+      for (const course of fallback.courses) fallbackUnits.set(course.id, course);
+    }
+    const unitIds = [...new Set([...selected.values()].flat())];
+    const units = new Map([...fallbackUnits, ...await Promise.all(unitIds.filter(id => !fallbackUnits.has(id)).map(async id => [id, unitSummary(await this.get(`/api/v1/unit/${id}/get`))] as const))]);
+    return {
+      semester: input.semester,
+      categories: Object.fromEntries(input.categories.map(category => [category, selected.get(category)!.map(id => units.get(id)!)])) as Partial<Record<VvzCurriculumCategory, ReturnType<typeof unitSummary>[]>>,
+      source: { name: 'VVZ API', url: 'https://vvzapi.ch/', official: false, warning: 'Community-maintained and not affiliated with ETH Zurich; verify consequential details in the official VVZ links.' },
+    };
+  }
+
   async getMscCsCurriculumCourses(unitIds: readonly number[], major: MscCsMajor, minor: MscCsMinor) {
     if (unitIds.length < 1 || unitIds.length > 50 || new Set(unitIds).size !== unitIds.length || unitIds.some(id => !Number.isSafeInteger(id) || id <= 0)) throw new VvzError('invalid_request', 'Provide 1 to 50 unique positive VVZ unit IDs.');
     if (!(MSC_CS_MAJORS as readonly string[]).includes(major)) throw new VvzError('invalid_request', 'Choose a supported MSc Computer Science major.');
@@ -272,7 +326,7 @@ export class VvzClient {
       if (curriculum.interFocus.has(summary.id)) eligibleCategories.push('inter_focus');
       if (curriculum.seminar.has(summary.id)) eligibleCategories.push('seminar');
       if (curriculum.practical.has(summary.id)) eligibleCategories.push('practical_work');
-      if (curriculum.scienceInPerspective.has(summary.id)) eligibleCategories.push('science_in_perspective');
+      if (curriculum.scienceInPerspective.has(summary.id) || hasScienceInPerspectiveEvidence(raw)) eligibleCategories.push('science_in_perspective');
       if (curriculum.thesis.has(summary.id)) eligibleCategories.push('masters_thesis');
       const levels = stringList(raw.levels ?? [], 'levels', 20);
       if (curriculum.programmeElectives.has(summary.id) || levels.includes('MSC')) eligibleCategories.push('free_elective');

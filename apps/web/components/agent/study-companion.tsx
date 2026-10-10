@@ -416,8 +416,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
 
   function openRecommendation(prompt: string) {
     setInput(prompt);
-    window.history.pushState(null, '', hrefFor('chat'));
-    window.scrollTo({ top: 0 });
+    showChatView();
     window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
   }
 
@@ -738,7 +737,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
         </section>
 
         <section aria-label="Semester planning" className={view === 'planner' ? '' : 'hidden'}>
-          <SemesterPlanner sample={sample} onRecommend={openRecommendation} />
+          <SemesterPlanner sample={sample} />
         </section>
 
         <div className={view === 'chat' ? 'flex h-full min-h-0 flex-col md:flex-row' : 'hidden'}>

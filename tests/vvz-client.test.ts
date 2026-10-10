@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { parseVvzCourseDetailsRequest, parseVvzSearchRequest, VvzClient, VvzError } from '../packages/core/integrations/vvz/client';
+import { hasScienceInPerspectiveEvidence, parseVvzCourseDetailsRequest, parseVvzCurriculumBrowseRequest, parseVvzSearchRequest, VvzClient, VvzError } from '../packages/core/integrations/vvz/client';
 
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 const unit = {
@@ -20,6 +20,18 @@ describe('VVZ API client', () => {
     expect(() => parseVvzSearchRequest({ semester: 'HS2026' })).toThrow('2026W');
     expect(() => parseVvzSearchRequest({ title: 'vision', minCredits: 8, maxCredits: 2 })).toThrow('cannot exceed');
     expect(() => parseVvzCourseDetailsRequest({ unitId: '204421' })).toThrow('positive VVZ unitId');
+  });
+
+  it('validates structured curriculum browsing', () => {
+    expect(parseVvzCurriculumBrowseRequest({ semester: '2026W', major: 'Data Management Systems', minor: 'Programming Languages and Software Engineering', categories: ['major_core', 'minor'], limitPerCategory: 4 }))
+      .toMatchObject({ semester: '2026W', categories: ['major_core', 'minor'], limitPerCategory: 4 });
+    expect(() => parseVvzCurriculumBrowseRequest({ semester: '2026W', major: 'Data Management Systems', minor: 'Programming Languages and Software Engineering', categories: [], limitPerCategory: 4 })).toThrow('categories');
+    expect(() => parseVvzCurriculumBrowseRequest({ semester: '2026W', major: 'Data Management Systems', minor: 'Programming Languages and Software Engineering', categories: ['major_core'], limitPerCategory: 20 })).toThrow('1 to 8');
+  });
+
+  it('recognizes explicit Science in Perspective catalogue evidence', () => {
+    expect(hasScienceInPerspectiveEvidence({ content_english: 'This course is offered in the Science in Perspective programme.' })).toBe(true);
+    expect(hasScienceInPerspectiveEvidence({ content_english: 'A general computer science elective.' })).toBe(false);
   });
 
   it('searches stable v1 endpoints and returns compact, attributed summaries', async () => {

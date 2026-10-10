@@ -48,6 +48,21 @@ describe('MSc CS graduation evaluator', () => {
     expect(result.thesisAdmission).toMatchObject({ ready: true, missingPreThesisCredits: 0 });
   });
 
+  it('counts semester-specific VVZ records for the same course number only once', async () => {
+    const duplicateThesis = { ...definitions[8], id: 11 };
+    const duplicateClient = { getMscCsCurriculumCourses: vi.fn(async () => [...definitions, duplicateThesis].map(course => ({
+      ...course, semester: course.id === 11 ? '2027S' : '2026W', title: `Course ${course.id}`, language: 'English', levels: ['MSC'], examType: null,
+      restricted: false, comment: null, scrapedAt: '2026-09-01T00:00:00.000Z', officialVvzUrl: `https://www.vvz.ethz.ch/${course.id}`,
+    }))) } as unknown as VvzClient;
+    const result = await checkMscCsGraduation(duplicateClient, {
+      ...request(), courses: [...request().courses, { unitId: 11, status: 'passed' }],
+    });
+
+    expect(result.completed.rawEligibleCredits).toBe(120);
+    expect(result.completed.assignments.some(course => course.unitId === 11)).toBe(false);
+    expect(result.warnings.join(' ')).toContain('counted only once');
+  });
+
   it('keeps current classes projected and does not count them as earned', async () => {
     const input = request('passed');
     input.courses.find(course => course.unitId === 10)!.status = 'in_progress';
