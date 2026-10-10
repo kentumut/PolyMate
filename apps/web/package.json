@@ -8,6 +8,7 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@openai/agents": "^0.20.0",
     "@polymate/contracts": "workspace:*",
     "@polymate/core": "workspace:*",
     "@polymate/db": "workspace:*",
@@ -23,7 +24,8 @@
     "react-dom": "19.3.0",
     "react-markdown": "10.1.0",
     "remark-gfm": "4.0.1",
-    "tailwind-merge": "^3.7.0"
+    "tailwind-merge": "^3.7.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",

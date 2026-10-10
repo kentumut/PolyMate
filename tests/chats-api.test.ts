@@ -22,7 +22,8 @@ vi.mock('../packages/db/src/courses', () => ({ listCourses: mocks.courses }));
 vi.mock('../packages/db/src/study-progress', () => ({ studyProgressStore: {}, syncStudyCalendarRead: vi.fn(), observeStudyCalendarChange: vi.fn() }));
 vi.mock('../packages/db/src/agent-automations', () => ({ findAutomationForGatewayJob: vi.fn() }));
 vi.mock('../apps/web/lib/moodle', () => ({ executeMoodleTool: vi.fn(), moodleConnectionAvailable: vi.fn(), calendarSnapshotForOwner: vi.fn(), moodleError: () => Response.json({ error: { message: 'Unavailable.' } }, { status: 500 }) }));
-vi.mock('../apps/web/lib/agent-runtime', async original => ({ ...await original<typeof import('../apps/web/lib/agent-runtime')>(), callOpenClawAgent: mocks.callAgent, agentAppContext: mocks.appContext }));
+vi.mock('../apps/web/lib/agent-runtime', async original => ({ ...await original<typeof import('../apps/web/lib/agent-runtime')>(), agentAppContext: mocks.appContext }));
+vi.mock('../apps/web/lib/direct-chat-runtime', () => ({ runDirectChatTurn: mocks.callAgent, streamDirectChatTurn: vi.fn() }));
 
 import { GET as listRoute, POST as mutateRoute } from '../apps/web/app/api/chats/route';
 import { GET as threadRoute } from '../apps/web/app/api/chats/[id]/route';
