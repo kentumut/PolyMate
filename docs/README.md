@@ -20,7 +20,31 @@ PolyMate is a proactive AI study companion for ETH CS bachelor's and master's st
 
 The five positions are Yildirim (calendar interface), Dogancem (scheduling/calendar service), Kent (integration/release), Bartek (data/connections), and Catalin (student workflow/quality).
 
-**Iteration 1 is complete.** The Google-connected calendar passed live acceptance at [the managed address](https://07.hackathon.ethz.ch) on 10 October 2026; the final checks used deployed commit `c39aae9`. Google OAuth and calendar actions are integrated, including ownership/conflict protection, reload persistence, revoked-access feedback, and restart/token-refresh recovery. See [the results](ITERATION_1_ACCEPTANCE.md). Iteration 2 adds deadlines, availability, plan generation, and approved Google blocks.
+**Iteration 1 is complete.** The Google-connected calendar passed live acceptance at [the managed address](https://07.hackathon.ethz.ch) on 10 October 2026; the final checks used deployed commit `c39aae9`. Google OAuth and calendar actions are integrated, including ownership/conflict protection, reload persistence, revoked-access feedback, and restart/token-refresh recovery. See [the results](ITERATION_1_ACCEPTANCE.md).
+
+## Progress
+
+Status on 10 October 2026, as of `main` at `70b6ae7`.
+
+| Area | Status | Merged in |
+|---|---|---|
+| Google-connected calendar (iteration 1) | Complete, live-accepted | #6, #12–#16 |
+| Manual assignment entry with deadlines and effort | Merged | #17 |
+| Moodle calendar subscriptions and OpenClaw study planning | Merged; not yet verified with a live ETH subscription | #18 |
+| Sidebar workspace (Calendar, Chat, Settings) | Merged | #19 |
+| Session progress reports and missed-session recovery | Merged | #21 |
+| Study agent assignment-progress tools | Merged | #22 |
+| Iteration 2 planner: saved availability, previews, approved Google writes, calendar overlay, planner CI gate | Merged; live acceptance pending | #25 |
+| Standalone calendar, agent calendar tools, and `/demo` walkthrough | Merged | #24 |
+
+**Iteration 2 is merged but not yet complete.** The planner, preview, apply flow, and calendar overlay are on `main`. CI gates them with the `planner` and `containers` jobs. Before tagging `v0.2-planner`, Catalin runs the live acceptance journey in the [iteration 2 handoff](ITERATION_2_HANDOFF.md#verification-and-release-gate) on the managed deployment.
+
+**Open work:**
+
+- Live iteration 2 acceptance on the managed deployment, then the `v0.2-planner` tag.
+- Expose the manual planning service as an OpenClaw tool, and agree how Moodle entries enter the assignment/progress model.
+- Live verification of a Moodle subscription and the chat agent against a connected Google account.
+- Iteration 3: imports and adaptive rescheduling. It adds the first durable background jobs, which need a `worker` Compose profile.
 
 ## Run locally
 
