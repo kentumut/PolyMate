@@ -76,7 +76,7 @@
 html { background: var(--background); }
 body { margin: 0; background: var(--background); color: var(--foreground); font-family: Arial, Helvetica, sans-serif; }
 button, a { -webkit-tap-highlight-color: transparent; }
-:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@layer base { :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; } }
 .week-grid { display: grid; grid-template-columns: 42px repeat(7, minmax(74px, 1fr)); }
 .calendar-hour { min-height: 58px; border-top: 1px solid #edf0eb; }
 
