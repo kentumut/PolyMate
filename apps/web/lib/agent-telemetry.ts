@@ -8,12 +8,15 @@ export type ToolSpan = { name: string; startMs: number; endMs: number; outcome: 
 export type GatewayMetrics = {
   status?: number;
   gatewayMs?: number;
+  /** Streaming only: gateway call start to the first reply text. */
+  firstDeltaMs?: number;
   requestBytes?: number;
   responseBytes?: number;
   systemChars?: number;
   historyMessages?: number;
   historyChars?: number;
   draftChars?: number;
+  appContextChars?: number;
   messageChars?: number;
   replyChars?: number;
   promptTokens?: number;
@@ -21,7 +24,7 @@ export type GatewayMetrics = {
   completionTokens?: number;
   reasoningTokens?: number;
 };
-export type TurnTelemetry = { turnId: string; startedAt: number; tools: ToolSpan[]; gateway: GatewayMetrics };
+export type TurnTelemetry = { turnId: string; startedAt: number; tools: ToolSpan[]; gateway: GatewayMetrics; /** Time to build app context before the model call. */ contextMs?: number };
 export type TurnOutcome = 'ok' | 'aborted' | 'timeout' | 'error';
 
 export function createTurnTelemetry(now = Date.now()): TurnTelemetry {
@@ -40,23 +43,32 @@ export function jsonBytes(value: unknown): number {
 }
 
 /**
- * Tools run one at a time, so the gaps around them are model steps: before the
- * first tool, between tools, and after the last tool until the reply arrives.
+ * The gaps around tools are model steps: before the first tool, between tool
+ * batches, and after the last tool until the reply arrives.
  */
 export function summarizeTurn(telemetry: TurnTelemetry, input: { endedAt: number; outcome: TurnOutcome; status?: number; cards?: number }) {
   const totalMs = Math.max(0, input.endedAt - telemetry.startedAt);
   const tools = [...telemetry.tools].sort((a, b) => a.startMs - b.startMs);
-  const toolMs = tools.reduce((sum, span) => sum + (span.endMs - span.startMs), 0);
+  // Parallel reads overlap: count wall-clock tool time, and treat overlapping tools as one batch between model steps.
+  let toolMs = 0;
   const modelStepMs: number[] = [];
   let cursor = 0;
-  for (const span of tools) { modelStepMs.push(Math.max(0, span.startMs - cursor)); cursor = Math.max(cursor, span.endMs); }
+  for (const span of tools) {
+    if (span.startMs >= cursor || !modelStepMs.length) modelStepMs.push(Math.max(0, span.startMs - cursor));
+    toolMs += Math.max(0, span.endMs - Math.max(span.startMs, cursor));
+    cursor = Math.max(cursor, span.endMs);
+  }
   modelStepMs.push(Math.max(0, totalMs - cursor));
+  // App context is built before the first model call, so it is part of the first gap, not model time.
+  const contextMs = Math.min(telemetry.contextMs ?? 0, modelStepMs[0]);
+  modelStepMs[0] -= contextMs;
   return {
     event: 'agent_turn' as const,
     turnId: telemetry.turnId,
     outcome: input.outcome,
     ...(input.status ? { status: input.status } : {}),
     totalMs,
+    contextMs,
     modelMs: modelStepMs.reduce((sum, ms) => sum + ms, 0),
     toolMs,
     toolCalls: tools.length,
@@ -72,13 +84,14 @@ export type TurnSummary = ReturnType<typeof summarizeTurn>;
 
 /** Server-Timing lets the latency benchmark (and browser devtools) read the breakdown per response. */
 export function serverTimingHeader(summary: TurnSummary): string {
-  const entries = [`total;dur=${summary.totalMs}`, `model;dur=${summary.modelMs};desc="${summary.modelSteps} steps"`,
+  const entries = [`total;dur=${summary.totalMs}`, `context;dur=${summary.contextMs}`, `model;dur=${summary.modelMs};desc="${summary.modelSteps} steps"`,
     `tools;dur=${summary.toolMs};desc="${summary.toolCalls} calls"`];
   summary.modelStepMs.forEach((ms, index) => entries.push(`step${index + 1};dur=${ms}`));
   summary.tools.forEach((tool, index) => entries.push(`tool${index + 1}_${tool.name};dur=${tool.ms};desc="${tool.outcome} ${tool.resultBytes}B"`));
   const { gateway } = summary;
+  if (gateway.firstDeltaMs !== undefined) entries.push(`first-text;dur=${summary.contextMs + gateway.firstDeltaMs}`);
   if (gateway.promptTokens !== undefined) entries.push(`tokens;desc="prompt=${gateway.promptTokens} cached=${gateway.cachedPromptTokens ?? 0} completion=${gateway.completionTokens ?? 0} reasoning=${gateway.reasoningTokens ?? 0}"`);
-  entries.push(`prompt;desc="system=${gateway.systemChars ?? 0} history=${gateway.historyMessages ?? 0}/${gateway.historyChars ?? 0} draft=${gateway.draftChars ?? 0} message=${gateway.messageChars ?? 0}"`);
+  entries.push(`prompt;desc="system=${gateway.systemChars ?? 0} history=${gateway.historyMessages ?? 0}/${gateway.historyChars ?? 0} draft=${gateway.draftChars ?? 0} app=${gateway.appContextChars ?? 0} message=${gateway.messageChars ?? 0}"`);
   entries.push(`turn;desc="${summary.turnId}"`);
   return entries.join(', ');
 }

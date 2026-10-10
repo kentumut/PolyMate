@@ -22,6 +22,51 @@ type PendingPlan = { timeline: AssignmentTimeline; expiresAt: string };
 type ChatMessage = { id: number; role: 'user' | 'assistant'; text: string; cards: AgentCard[] };
 type ChatResponse = { reply: string; cards?: AgentCard[]; pendingPlan?: PendingPlan | null; reloadCalendar?: boolean; reloadProgress?: boolean; error?: { message?: string } };
 
+type StreamEvent = { type: 'status'; tool: string } | { type: 'delta'; text: string } | ({ type: 'done' } & ChatResponse) | { type: 'error'; error?: { message?: string } };
+
+const WORKING = 'PolyMate is checking your study space…';
+const TOOL_STATUS: Record<string, string> = {
+  moodle_get_calendar_events: 'Reading your Moodle calendar…',
+  moodle_plan_assignment_timeline: 'Drafting your timeline…',
+  moodle_schedule_assignment_timeline: 'Adding blocks to your calendar…',
+  polymate_check_connections: 'Checking your connections…',
+  polymate_get_calendar: 'Looking at your calendar…',
+  polymate_create_study_block: 'Updating your calendar…',
+  polymate_edit_study_block: 'Updating your calendar…',
+  polymate_move_study_block: 'Updating your calendar…',
+  polymate_delete_study_blocks: 'Updating your calendar…',
+  polymate_get_study_progress: 'Reading your study progress…',
+  polymate_link_study_session: 'Preparing a confirmation card…',
+  polymate_report_study_progress: 'Preparing a confirmation card…',
+  vvz_search_courses: 'Searching the course catalogue…',
+  vvz_get_course_details: 'Reading course details…',
+  msc_cs_check_graduation: 'Checking graduation requirements…',
+};
+
+/** Reads the chat NDJSON stream until `done`; the done event carries the authoritative reply and cards. */
+async function readAgentStream(response: Response, onEvent: (event: StreamEvent) => void): Promise<ChatResponse> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('PolyMate could not answer. Try again.');
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline: number;
+    while ((newline = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (!line) continue;
+      const event = JSON.parse(line) as StreamEvent;
+      if (event.type === 'done') return event;
+      if (event.type === 'error') throw new Error(event.error?.message ?? 'PolyMate could not answer. Try again.');
+      onEvent(event);
+    }
+  }
+  throw new Error('PolyMate stopped before finishing. Try again.');
+}
+
 const dateTime = (value: string) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en-GB', {
@@ -136,6 +181,8 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [confirmedProgress, setConfirmedProgress] = useState<ReadonlySet<string>>(new Set());
+  const [status, setStatus] = useState(WORKING);
+  const [streamingId, setStreamingId] = useState<number | null>(null);
   const nextId = useRef(0);
   const inFlight = useRef<AbortController | null>(null);
 
@@ -177,9 +224,12 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     // Only free-form turns can be stopped; scheduling and confirmations change the calendar and must finish.
     const controller = action || scheduleAction ? null : new AbortController();
     inFlight.current = controller;
-    setBusy(true); setStoppable(Boolean(controller)); setError('');
+    setBusy(true); setStoppable(Boolean(controller)); setError(''); setStatus(WORKING);
+    // Free-form turns stream tool progress and reply text; actions keep the plain JSON response.
+    const streamId = controller ? ++nextId.current : null;
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (controller) headers.Accept = 'application/x-ndjson, application/json';
       if (action && 'draftToken' in action) {
         const csrf = await fetch('/api/agent/csrf', { credentials: 'same-origin', cache: 'no-store' });
         const csrfBody = await csrf.json().catch(() => ({})) as { csrfToken?: unknown };
@@ -191,9 +241,24 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
         body: JSON.stringify(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text }),
         signal: controller?.signal,
       });
-      const body = await response.json() as ChatResponse;
-      if (!response.ok) throw new Error(body.error?.message ?? 'PolyMate could not answer. Try again.');
-      setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: body.reply, cards: body.cards ?? [] }].slice(-40) as ChatMessage[]);
+      let body: ChatResponse;
+      if (response.ok && streamId !== null && response.headers.get('content-type')?.includes('application/x-ndjson')) {
+        let streamed = '';
+        body = await readAgentStream(response, event => {
+          if (event.type === 'status') setStatus(TOOL_STATUS[event.tool] ?? WORKING);
+          if (event.type !== 'delta') return;
+          streamed += event.text;
+          setStreamingId(streamId);
+          setMessages(previous => previous.some(message => message.id === streamId)
+            ? previous.map(message => message.id === streamId ? { ...message, text: streamed } : message)
+            : [...previous, { id: streamId, role: 'assistant' as const, text: streamed, cards: [] }].slice(-40));
+        });
+      } else {
+        body = await response.json() as ChatResponse;
+        if (!response.ok) throw new Error(body.error?.message ?? 'PolyMate could not answer. Try again.');
+      }
+      // The final reply is authoritative (redacted, and corrected for calendar outcomes); it replaces streamed text.
+      setMessages(previous => [...previous.filter(message => message.id !== streamId), { id: streamId ?? ++nextId.current, role: 'assistant', text: body.reply, cards: body.cards ?? [] }].slice(-40) as ChatMessage[]);
       setPendingPlan(body.pendingPlan ?? null);
       if (action && 'draftToken' in action) {
         const result = body.cards?.find(card => card.kind === 'progress')?.data as { receipt?: ProgressReceipt } | undefined;
@@ -204,6 +269,8 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       if (body.reloadCalendar) setReloadKey(value => value + 1);
       if (body.reloadProgress) await workspace?.refresh();
     } catch (reason) {
+      // Never leave an unconfirmed partial reply on screen.
+      if (streamId !== null) setMessages(previous => previous.filter(message => message.id !== streamId));
       if (controller?.signal.aborted) {
         setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: 'Stopped.', cards: [] }].slice(-40) as ChatMessage[]);
         return;
@@ -213,7 +280,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       if (action) setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: message, cards: [] }]);
     } finally {
       if (inFlight.current === controller) inFlight.current = null;
-      setBusy(false); setStoppable(false);
+      setBusy(false); setStoppable(false); setStreamingId(null);
     }
   }
 
@@ -265,11 +332,11 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
               {['Show my Moodle calendar dates', 'Help me plan my week', 'What connections do I need?'].map(prompt => <button key={prompt} type="button" disabled={busy} onClick={() => { setInput(prompt); document.getElementById('agent-message')?.focus(); }} className="rounded-full border border-[#cbd7ce] bg-white px-3 py-1.5 text-xs disabled:opacity-50">{prompt}</button>)}
             </div>
           </div>}
-          {messages.map(message => <article key={message.id} className={`max-w-[96%] rounded-2xl px-4 py-3 ${message.role === 'user' ? 'ml-auto bg-[#173b32] text-white' : 'bg-[#f1f4ee] text-[#21362d]'}`}>
+          {messages.map(message => <article key={message.id} aria-busy={message.id === streamingId} className={`max-w-[96%] rounded-2xl px-4 py-3 ${message.role === 'user' ? 'ml-auto bg-[#173b32] text-white' : 'bg-[#f1f4ee] text-[#21362d]'}`}>
             {message.role === 'assistant' ? <MessageContent text={message.text} /> : <p className="whitespace-pre-wrap text-sm leading-6">{message.text}</p>}
             {message.role === 'assistant' && <OtherCards cards={message.cards} busy={busy} confirmed={confirmedProgress} onConfirm={(draftToken, confirmAssignmentFinished) => void sendMessage(undefined, { draftToken, confirmAssignmentFinished })} />}
           </article>)}
-          {busy && <p className="text-sm text-[#617269]" role="status">PolyMate is checking your study space…</p>}
+          {busy && streamingId === null && <p className="text-sm text-[#617269]" role="status">{status}</p>}
           {pendingPlan && <TimelinePreview plan={pendingPlan} onSchedule={allowPartial => void sendMessage(undefined, { allowPartial })} busy={busy} />}
         </div>
         {error && <p className="mb-3 text-sm text-[#9e3e38]" role="alert">{error}</p>}

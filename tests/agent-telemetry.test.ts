@@ -17,6 +17,14 @@ describe('agent turn telemetry', () => {
     expect(summary.tools.map(tool => tool.ms)).toEqual([100, 1_500, 300]);
   });
 
+  it('separates app-context time from the first model step', () => {
+    const telemetry = turnWithTools([['moodle_plan_assignment_timeline', 3_000, 3_400]]);
+    telemetry.contextMs = 600;
+    const summary = summarizeTurn(telemetry, { endedAt: 10_000 + 5_000, outcome: 'ok' });
+    expect(summary).toMatchObject({ contextMs: 600, modelStepMs: [2_400, 1_600], modelMs: 4_000, toolMs: 400 });
+    expect(summary.totalMs).toBe(summary.contextMs + summary.modelMs + summary.toolMs);
+  });
+
   it('treats a turn without tools as a single model step', () => {
     const summary = summarizeTurn(createTurnTelemetry(0), { endedAt: 4_200, outcome: 'ok' });
     expect(summary).toMatchObject({ totalMs: 4_200, modelMs: 4_200, toolMs: 0, toolCalls: 0, modelSteps: 1, modelStepMs: [4_200] });
@@ -29,6 +37,13 @@ describe('agent turn telemetry', () => {
     expect(summary).toMatchObject({ outcome: 'timeout', status: 504, toolErrors: 1, modelStepMs: [1_000, 1_800, 2_500] });
   });
 
+  it('counts overlapping parallel reads once and as a single batch between model steps', () => {
+    const telemetry = turnWithTools([['moodle_get_calendar_events', 2_000, 2_300], ['polymate_get_calendar', 2_010, 2_500], ['moodle_plan_assignment_timeline', 5_000, 5_400]]);
+    const summary = summarizeTurn(telemetry, { endedAt: 10_000 + 7_000, outcome: 'ok' });
+    expect(summary).toMatchObject({ toolCalls: 3, toolMs: 900, modelSteps: 3, modelStepMs: [2_000, 2_500, 1_600], modelMs: 6_100 });
+    expect(summary.totalMs).toBe(summary.modelMs + summary.toolMs);
+  });
+
   it('formats a Server-Timing header that the latency benchmark can parse', () => {
     const telemetry = turnWithTools([['moodle_get_calendar_events', 1_000, 1_400]]);
     Object.assign(telemetry.gateway, { promptTokens: 5_000, cachedPromptTokens: 4_096, completionTokens: 90, reasoningTokens: 30, systemChars: 3_200, historyMessages: 4, historyChars: 900, draftChars: 0, messageChars: 20 });
@@ -39,7 +54,8 @@ describe('agent turn telemetry', () => {
     expect(header).toContain('step1;dur=1000, step2;dur=1600');
     expect(header).toContain('tool1_moodle_get_calendar_events;dur=400;desc="ok 100B"');
     expect(header).toContain('tokens;desc="prompt=5000 cached=4096 completion=90 reasoning=30"');
-    expect(header).toContain('prompt;desc="system=3200 history=4/900 draft=0 message=20"');
+    expect(header).toContain('prompt;desc="system=3200 history=4/900 draft=0 app=0 message=20"');
+    expect(header).toContain('context;dur=0');
     expect(header).toContain(`turn;desc="${telemetry.turnId}"`);
   });
 

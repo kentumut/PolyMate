@@ -23,6 +23,21 @@ describe('agent latency report', () => {
     });
   });
 
+  it('flags missing expected cards and any calendar write as quality failures', () => {
+    const ok = sampleFromResponse({ prompt: 'plan', run: 1, status: 200, clientMs: 1, serverTiming: header([], 1_000), cards: [{ kind: 'timeline' }], expectCards: ['timeline'] });
+    const skipped = sampleFromResponse({ prompt: 'plan', run: 2, status: 200, clientMs: 1, serverTiming: header([], 1_000), cards: [{ kind: 'schedule' }], expectCards: ['timeline'] });
+    expect(ok.checkFailures).toEqual([]);
+    expect(skipped.checkFailures).toEqual(['missing timeline card', 'calendar write']);
+    expect(summarize([ok, skipped]).checkFailures).toEqual(['plan run 2: missing timeline card', 'plan run 2: calendar write']);
+    expect(markdownReport({ label: 'x', startedAt: 'now', base: 'http://local', runs: 2, samples: [ok, skipped] })).toContain('- Quality checks: plan run 2: missing timeline card; plan run 2: calendar write');
+  });
+
+  it('reports what a student sees when the reply streams', () => {
+    const sample = sampleFromResponse({ prompt: 'plan', run: 1, status: 200, clientMs: 9_000, serverTiming: header([], 9_000), firstStatusMs: 2_000, firstTextMs: 6_500 });
+    expect(summarize([sample]).byPrompt[0]).toMatchObject({ p50FirstStatusMs: 2_000, p50FirstTextMs: 6_500 });
+    expect(markdownReport({ label: 's', startedAt: 'now', base: 'http://local', runs: 1, samples: [sample] })).toContain('| plan | 2.0 s | 6.5 s | 9.0 s |');
+  });
+
   it('keeps failed requests in the report without timing data', () => {
     const sample = sampleFromResponse({ prompt: 'plan', run: 2, status: 503, clientMs: 300, serverTiming: null, error: 'unavailable' });
     expect(sample).toMatchObject({ status: 503, totalMs: undefined, toolCalls: 0 });

@@ -1,11 +1,12 @@
 import type { NextRequest } from 'next/server';
 import { assertSameOrigin, resolveOwner } from '@polymate/core/identity';
-import { AgentRequestError, agentResponseBody, beginAgentTurn, callOpenClawAgent, endAgentTurn, scheduleCurrentPlan, publicPendingPlan, confirmCurrentProgress } from '@/lib/agent-runtime';
+import { AgentRequestError, agentAppContext, agentResponseBody, beginAgentTurn, callOpenClawAgent, endAgentTurn, scheduleCurrentPlan, publicPendingPlan, confirmCurrentProgress } from '@/lib/agent-runtime';
 import { readBoundedText } from '@polymate/core/agent/http';
 import { calendarError } from '@/lib/calendar-route';
 import { moodleError } from '@/lib/moodle';
 import { assertAgentCsrf } from '@/lib/agent-csrf';
 import { logTurn, serverTimingHeader, summarizeTurn, type TurnOutcome } from '@/lib/agent-telemetry';
+import { AGENT_STREAM_CONTENT_TYPE, StreamRedactor, encodeAgentEvent, wantsAgentStream, type AgentStreamEvent } from '@/lib/agent-stream';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -22,6 +23,66 @@ function agentError(error: unknown): Response {
   if (error instanceof AgentRequestError) return Response.json({ error: { message: error.message } }, { status: error.status, headers: { 'Cache-Control': 'no-store' } });
   if (error instanceof SyntaxError) return Response.json({ error: { message: 'Send valid JSON.' } }, { status: 422, headers: { 'Cache-Control': 'no-store' } });
   return calendarError(error);
+}
+
+type Turn = ReturnType<typeof beginAgentTurn>['turn'];
+type Owner = ReturnType<typeof resolveOwner>;
+
+/** Runs one model turn, logs its latency (no content), and always releases the turn. */
+async function runTurn(owner: Owner, turn: Turn, message: string, signal: AbortSignal, onDelta?: (text: string) => void) {
+  let outcome: TurnOutcome = 'error';
+  let status: number | undefined;
+  let logged = false;
+  try {
+    const appContext = await agentAppContext(owner.userId);
+    turn.telemetry.contextMs = Date.now() - turn.telemetry.startedAt;
+    const reply = await callOpenClawAgent({ sessionKey: turn.sessionKey, message, signal, history: turn.history, draftContext: turn.draftContext, appContext, metrics: turn.telemetry.gateway, onDelta });
+    const body = agentResponseBody(reply, turn, owner.userId);
+    outcome = 'ok';
+    const summary = summarizeTurn(turn.telemetry, { endedAt: Date.now(), outcome, cards: body.cards.length });
+    logTurn(summary);
+    logged = true;
+    return { body, timing: serverTimingHeader(summary) };
+  } catch (error) {
+    if (error instanceof AgentRequestError) status = error.status;
+    outcome = signal.aborted ? 'aborted' : status === 504 ? 'timeout' : 'error';
+    throw error;
+  } finally {
+    endAgentTurn(turn.sessionKey);
+    if (!logged) logTurn(summarizeTurn(turn.telemetry, { endedAt: Date.now(), outcome, status, cards: turn.cards.length }));
+  }
+}
+
+/**
+ * NDJSON stream: `status` per tool, redacted `delta` text, then `done` with the authoritative reply and
+ * cards (which replace the streamed text), or `error`. Errors before the turn starts stay plain JSON.
+ */
+function streamTurn(request: NextRequest, owner: Owner, turn: Turn, message: string): Response {
+  const cancelled = new AbortController();
+  const signal = AbortSignal.any([request.signal, cancelled.signal]);
+  const redactor = new StreamRedactor(turn.privateValues);
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (event: AgentStreamEvent) => { try { controller.enqueue(encodeAgentEvent(event)); } catch { /* client disconnected */ } };
+      turn.onEvent = send;
+      try {
+        const { body, timing } = await runTurn(owner, turn, message, signal, text => {
+          const safe = redactor.push(text);
+          if (safe) send({ type: 'delta', text: safe });
+        });
+        send({ type: 'done', ...body, timing });
+      } catch (error) {
+        if (!signal.aborted) {
+          const response = error instanceof AgentRequestError || error instanceof SyntaxError ? agentError(error) : moodleError(error);
+          const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+          send({ type: 'error', status: response.status, error: { message: payload?.error?.message ?? 'PolyMate could not answer. Try again.' } });
+        }
+      } finally { try { controller.close(); } catch { /* already closed */ } }
+    },
+    cancel() { cancelled.abort(); },
+  });
+  // no-transform and X-Accel-Buffering stop proxies from buffering the stream into one response.
+  return new Response(stream, { headers: { 'Content-Type': `${AGENT_STREAM_CONTENT_TYPE}; charset=utf-8`, 'Cache-Control': 'no-store, no-transform', 'X-Accel-Buffering': 'no' } });
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
@@ -46,27 +107,9 @@ export async function POST(request: NextRequest): Promise<Response> {
       return Response.json({ reply: scheduled.reply, cards: [scheduled.card], pendingPlan: publicPendingPlan(owner.userId), reloadCalendar: scheduled.reloadCalendar }, { headers: { 'Cache-Control': 'no-store' } });
     }
     const { turn, message } = beginAgentTurn(request, owner, body);
-    let outcome: TurnOutcome = 'error';
-    let status: number | undefined;
-    let cards = 0;
-    let timing = '';
-    try {
-      const reply = await callOpenClawAgent({ sessionKey: turn.sessionKey, message, signal: request.signal, history: turn.history, draftContext: turn.draftContext, metrics: turn.telemetry.gateway });
-      const responseBody = agentResponseBody(reply, turn, owner.userId);
-      outcome = 'ok';
-      cards = responseBody.cards.length;
-      const summary = summarizeTurn(turn.telemetry, { endedAt: Date.now(), outcome, cards });
-      timing = serverTimingHeader(summary);
-      logTurn(summary);
-      return Response.json(responseBody, { headers: { 'Cache-Control': 'no-store', 'Server-Timing': timing } });
-    } catch (error) {
-      if (error instanceof AgentRequestError) status = error.status;
-      outcome = request.signal.aborted ? 'aborted' : status === 504 ? 'timeout' : 'error';
-      throw error;
-    } finally {
-      endAgentTurn(turn.sessionKey);
-      if (!timing) logTurn(summarizeTurn(turn.telemetry, { endedAt: Date.now(), outcome, status, cards }));
-    }
+    if (wantsAgentStream(request.headers.get('accept'))) return streamTurn(request, owner, turn, message);
+    const { body: responseBody, timing } = await runTurn(owner, turn, message, request.signal);
+    return Response.json(responseBody, { headers: { 'Cache-Control': 'no-store', 'Server-Timing': timing } });
   } catch (error) {
     if (error instanceof AgentRequestError || error instanceof SyntaxError) return agentError(error);
     return moodleError(error);

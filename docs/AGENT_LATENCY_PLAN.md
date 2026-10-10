@@ -39,20 +39,24 @@ Every chat turn now produces structured JSON log lines on the web container (`do
 | `outcome` | `ok`, `error`, `timeout` (504), or `aborted` (student pressed stop or closed the tab) |
 | `status` | HTTP status of a failed turn |
 | `totalMs` | Time from receiving the message until the reply is ready |
-| `toolMs` / `toolCalls` / `toolErrors` | Total time in tools, and how many ran or failed |
-| `modelMs` | `totalMs − toolMs`: model time plus gateway and network overhead |
-| `modelSteps` / `modelStepMs` | The model time split into steps: before the first tool, between tools, and after the last tool. Each entry is roughly one LLM round trip. |
+| `toolMs` / `toolCalls` / `toolErrors` | Wall-clock time in tools (overlapping parallel reads count once), and how many ran or failed |
+| `contextMs` | Time to build the app context (upcoming Moodle entries) before the first model call; capped at 1.5 s |
+| `modelMs` | `totalMs − toolMs − contextMs`: model time plus gateway and network overhead |
+| `modelSteps` / `modelStepMs` | The model time split into steps: before the first tool, between tool batches (parallel reads count as one batch), and after the last tool. Each entry is roughly one LLM round trip. |
 | `tools` | Per-tool `name`, `ms`, `outcome`, `resultBytes` in call order |
 | `cards` | Number of cards shown to the student |
 | `gateway.gatewayMs` | Duration of the single HTTP call to OpenClaw |
 | `gateway.requestBytes` / `responseBytes` | Size of what we sent to and received from the gateway |
 | `gateway.systemChars` | Characters in our two system messages |
 | `gateway.historyMessages` / `historyChars` | History we sent (at most 12 messages) |
-| `gateway.draftChars` / `messageChars` | Pending draft context and the student's message size |
+| `gateway.draftChars` / `appContextChars` / `messageChars` | Pending draft context, app context (upcoming Moodle entries), and the student's message size |
+| `gateway.firstDeltaMs` | Streaming only: from the gateway call to the first reply text |
 | `gateway.replyChars` | Length of the model's reply |
 | `gateway.promptTokens` / `cachedPromptTokens` / `completionTokens` / `reasoningTokens` | OpenAI usage, **only if OpenClaw passes `usage` through** (missing otherwise). Totals for the whole turn, as reported by the gateway. |
 
 The same breakdown is returned on each chat response as a `Server-Timing` header, so it shows up in the browser devtools Network → Timing panel and is read by the benchmark below.
+
+**Streaming.** The chat UI asks for `Accept: application/x-ndjson` and receives one JSON event per line: `status` (a tool is starting, shown as "Reading your Moodle calendar…" and similar), `delta` (reply text, already redacted), then `done` (the authoritative reply, cards and the `Server-Timing` string) or `error`. The final reply replaces the streamed text, so calendar-outcome corrections and redaction still apply. Text that could be the start of a private value is held back until it can be redacted. Clients that do not ask for NDJSON (the smoke test, the benchmark without `--stream`) get the plain JSON response with the `Server-Timing` header. If the managed proxy buffers responses, the stream arrives in one piece at the end and the chat still works; it only loses the progress display.
 
 ## How to measure
 
@@ -62,8 +66,10 @@ With the app and gateway running (see [LOCAL_AI_TESTING.md](LOCAL_AI_TESTING.md)
 pnpm agent:latency --runs 3 --label baseline
 ```
 
-This sends six read-only prompts (small talk, connections, Moodle, calendar, progress, and a plan draft) `--runs` times, one turn at a time, and writes `.local/agent-latency/<time>-<label>.json` and `.md`. The Markdown report has a per-prompt table (p50/p90 total, model, tools, tool calls, tokens), a per-tool table, and every turn's step-by-step breakdown. Copy the summary rows into the [results log](#results-log).
+This sends seven read-only prompts (small talk, connections, Moodle, calendar, progress, a plan draft, and a hesitant follow-up that must not schedule it) `--runs` times, one turn at a time, and writes `.local/agent-latency/<time>-<label>.json` and `.md`. The Markdown report has a per-prompt table (p50/p90 total, model, tools, tool calls, tokens), a per-tool table, and every turn's step-by-step breakdown. Copy the summary rows into the [results log](#results-log).
 
+- **Quality checks:** each prompt lists the cards a correct answer shows (for example `moodle` needs the assignments card, `plan` the timeline card). A missing card means the model skipped the tool and answered from memory. The report lists failures and the script exits with code 3. Use this before adopting a faster model.
+- `--stream` uses the chat UI's stream and adds a "what the student sees" table: time to the first status line, to the first reply text, and to completion.
 - `--only moodle,plan` limits the prompts; `--prompts file.json` uses your own (`[{ "id": "...", "message": "..." }]`).
 - The default prompts are checked in CI against the runtime's consent detectors so they never authorize a calendar write. The script also stops if any response reports a write.
 - Prompts in one run share the local student's chat history (up to 12 messages, kept in memory for an hour). `historyMessages` in the report shows how much history each turn carried. Restart `pnpm dev` for a clean start.
@@ -95,18 +101,28 @@ Two benchmark runs on a local machine (6 prompts × 3 runs each, OpenClaw 2026.9
 - **Reasoning level does not help (H7, partly).** `minimal` vs. `low` changed neither the step time nor the reasoning tokens noticeably. A faster model is the remaining H7 experiment.
 - The usage reported for turns with no tool calls looks wrong (3 prompt tokens), so do not rely on token counts for those turns.
 
+## Findings: after the fixes (10 October)
+
+Same local setup, 7 prompts × 3 runs per configuration (see the [results log](#results-log)).
+
+- **Fixed date formats and the up-front Moodle list removed the extra round trips.** No more failed calendar calls. The plan prompt now calls one tool instead of two (it uses the listed IDs directly) and takes two model steps instead of three. Plan p50 went from 14.9 s to 13.1 s, and the slowest run from 17.9 s to 14.0 s. Building the Moodle list costs about 0–300 ms (it is cached).
+- **What is left is per-step model time.** Each of the plan prompt's two steps takes about 6 s: the first works out the availability windows, the second writes a long reply (around 900 output tokens). Shorter replies (*Dogancem*'s roadmap item) are the next lever for the second step.
+- **No faster model qualifies.** `gpt-5.6-luna` had a slightly faster plan prompt (12.0 s) but slower Moodle and calendar answers. `gpt-5.4-mini` was fastest (plan 10.3 s) but failed 5 quality checks: it answered connection, Moodle and progress questions without calling the tools. `gpt-5.6-sol` was slower everywhere. We stay on `gpt-5.6-terra` with thinking `low`.
+- **Streaming makes waiting visible rather than shorter.** Single-tool answers start appearing after about 4–5 s and finish shortly after. For the plan prompt, the "Drafting your timeline…" status appears at about 7 s and text at about 11 s, out of 12.7 s, because most of each step is spent before the first token.
+
 ## Plan
 
 Ordered by expected gain per hour against the 10:00 feature freeze on Sunday 11 October, updated after the [first findings](#findings-first-local-run-10-october). Measure each step with `pnpm agent:latency` before and after, using the same prompts and runs.
 
 1. **Measure (done).** Telemetry, `Server-Timing`, the benchmark, and this plan. *Kent:* repeat the baseline on the VM and add it to the results log.
-2. **Stop failed tool calls (small, saves one step of about 2–3 s whenever it happens).** State the expected format in the tool definitions, e.g. `from`/`to`: "ISO 8601 with offset, e.g. 2026-10-12T00:00:00+02:00", and the same for `startAt`/`endAt` in the other tools. Then regenerate the plugin's tool definitions (`pnpm agent:sync-openclaw-tools`).
-3. **Allow parallel read-only tools (medium, saves one step when the model fetches Moodle and the calendar together).** Let read-only tools (`polymate_check_connections`, `moodle_get_calendar_events`, `polymate_get_calendar`, `polymate_get_study_progress`) run concurrently. Keep writes one at a time and keep the per-turn tool limit.
-4. **Fewer round trips for planning (medium).** Put a compact per-student snapshot (connections, upcoming Moodle items) into the first message, cached for about 60 seconds, so the plan prompt can skip `moodle_get_calendar_events` and go straight to `moodle_plan_assignment_timeline`. Shorter instructions and no timeline times repeated as prose (*Dogancem*, already on the roadmap) also shorten the final step.
-5. **Faster model (configuration only).** A/B one faster OpenAI model against `gpt-5.6-terra` with `--label model-<id>`. Before adopting it, re-run the consent and planning journey in [LOCAL_AI_TESTING.md](LOCAL_AI_TESTING.md): a faster model must not skip consent rules or invent deadlines. Keep thinking at `low`; `minimal` did not help.
-6. **Streaming (stretch, likely after the freeze).** Stream the reply and a status line per tool ("Reading Moodle…") to the chat. It does not change total time but shows progress during the 12–18 s planning turns. Complements Yildirim's rotating status words.
+2. **Stop failed tool calls (done).** Every date argument in the tool definitions now states the format, with an example and a pattern (`OFFSET_INSTANT_SCHEMA`).
+3. **Allow parallel read-only tools (done).** `polymate_check_connections`, `moodle_get_calendar_events`, `polymate_get_calendar` and the VVZ tools may overlap. Writes, timeline drafts and progress reads (which issue confirmation tokens) still run alone, and the per-turn tool limit is unchanged.
+4. **Fewer round trips for planning (done).** Each turn sends up to 25 upcoming Moodle entries (ID, title, course, due date) as untrusted app data, so the model can draft a timeline without first calling `moodle_get_calendar_events`. Planning still re-reads Moodle and rejects unknown IDs. If Moodle is slow (over 1.5 s) or unavailable, the list is left out.
+5. **Faster model (tested, not adopted).** See the findings above. Re-test when new models become available: `--label model-<id>`, and no quality-check failures allowed.
+6. **Streaming (done).** Status per tool and streamed reply text in the chat; see [What is logged](#what-is-logged).
+7. **Next: shorter replies and a smaller draft context.** Ask for short replies that do not repeat timeline times (the card shows them) (*Dogancem*). A pending draft is resent on every turn (about 6 KB in our runs); sending only its ID and summary would shrink every step's prompt.
 
-Not planned: moving the timestamp out of the system message, and history deduplication. The first run showed caching works and history does not grow.
+Not planned: moving the timestamp out of the system message, and history deduplication. The first run showed that caching works and history does not grow.
 
 *Catalin:* use `pnpm agent:latency` for the before/after comparison in the 3a gate.
 
@@ -118,3 +134,8 @@ Fill in one row per run. "Plan p50" is the `plan` prompt; "Model step p50" is fr
 |---|---|---|---|---|---|---|---|---|
 | 2026-10-10 | Local (MacBook, `gpt-5.6-terra`) | baseline, thinking `low` | 3 | 14.9 s (12.3–17.9) | 2 (3 model steps) | 2.7 s | 2% | Small talk 1.4 s. Single-tool prompts 4.2–5.4 s. |
 | 2026-10-10 | Local (MacBook, `gpt-5.6-terra`) | thinking `minimal` | 3 | 13.0 s (10.7–16.8) | 2 (3–4 model steps) | 2.6 s | 2% | Within noise of `low`; reasoning tokens barely changed; more failed calendar calls. Not adopted. |
+| 2026-10-10 | Local (MacBook, `gpt-5.6-terra`) | items 2–4: date formats, parallel reads, Moodle list | 3 | 13.1 s (12.7–14.0) | 1 (2 model steps) | 2.3 s | 2% | Quality checks all passed. No failed calendar calls. |
+| 2026-10-10 | Local (MacBook) | model `gpt-5.6-luna` | 3 | 12.0 s (9.8–14.2) | 1 | 2.5 s | 2% | Moodle 7.4 s and calendar 7.4 s (slower than terra). Not adopted. |
+| 2026-10-10 | Local (MacBook) | model `gpt-5.4-mini` | 3 | 10.3 s (8.8–13.3) | 1 | 2.5 s | 2% | **5 quality-check failures**: answered without calling tools. Not adopted. |
+| 2026-10-10 | Local (MacBook) | model `gpt-5.6-sol` | 3 | 14.8 s (13.5–17.4) | 1 | 3.5 s | 2% | Slower everywhere. Not adopted. |
+| 2026-10-10 | Local (MacBook, `gpt-5.6-terra`) | streaming (`--stream`) | 3 | 12.7 s | 1 | 2.8 s | 2% | Plan: first status 7.0 s, first text 11.2 s. One-tool prompts: first text 3.8–5.1 s. |
