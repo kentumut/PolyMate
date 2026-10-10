@@ -1,0 +1,24 @@
+{
+  "id": "polymate-agent",
+  "name": "PolyMate Study Tools",
+  "description": "Owner-scoped Moodle study planning and connection status tools for PolyMate.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "moodle_get_calendar_events",
+      "moodle_plan_assignment_timeline",
+      "moodle_schedule_assignment_timeline",
+      "polymate_check_connections",
+      "polymate_get_calendar",
+      "polymate_move_study_block"
+    ]
+  }
+}

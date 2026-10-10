@@ -5,7 +5,8 @@
   "exports": {
     "./calendar": "./src/calendar.ts",
     "./time": "./src/time.ts",
-    "./http-client": "./src/http-client.ts"
+    "./http-client": "./src/http-client.ts",
+    "./moodle": "./src/moodle.ts"
   },
   "scripts": { "typecheck": "tsc --noEmit" }
 }

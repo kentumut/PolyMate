@@ -5,7 +5,9 @@
   "exports": {
     ".": "./src/connection.ts",
     "./google-oauth": "./src/google-oauth.ts",
-    "./calendar-operations": "./src/calendar-operations.ts"
+    "./calendar-operations": "./src/calendar-operations.ts",
+    "./agent-automations": "./src/agent-automations.ts",
+    "./moodle-calendar": "./src/moodle-calendar.ts"
   },
   "dependencies": { "@polymate/contracts": "workspace:*", "@polymate/core": "workspace:*", "pg": "8.23.1" },
   "scripts": { "typecheck": "tsc --noEmit" }
