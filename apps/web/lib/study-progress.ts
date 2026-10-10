@@ -15,10 +15,10 @@ const COOKIE = 'polymate_progress_csrf';
 export type ProgressSyncStatus = 'synced' | 'pending' | 'not_attempted';
 
 /** Google has already recorded its outcome. A secondary metadata failure cannot change it. */
-export async function observeStudyMoveFor(owner: OwnerContext, eventId: string, result: OperationResult): Promise<ProgressSyncStatus> {
+export async function observeStudyMoveFor(owner: OwnerContext, eventId: string, result: OperationResult, kind: 'update' | 'delete' = 'update'): Promise<ProgressSyncStatus> {
   if (result.status !== 'synced') return 'not_attempted';
   try {
-    await observeStudyCalendarChange(owner.userId, 'update', eventId, result);
+    await observeStudyCalendarChange(owner.userId, kind, eventId, result);
     return 'synced';
   } catch (error) {
     console.error('Study move metadata sync pending.', error instanceof Error ? error.name : 'unknown error');
