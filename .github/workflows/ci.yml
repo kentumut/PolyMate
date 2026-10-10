@@ -104,9 +104,69 @@ jobs:
           node-version: '24'
       - name: Exercise isolated production containers and backup restore
         run: bash scripts/container-check.sh
+  prepare:
+    # Builds the release images on the VM while the checks run, so deploy only finds cached
+    # images. It never switches the live checkout or restarts anything.
+    name: prepare
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: polymate-team07-prebuild
+      cancel-in-progress: false
+    steps:
+      - name: Check out the pushed commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Ignore a commit superseded by a newer main commit
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          if test "$current_sha" = "$DEPLOY_SHA"; then
+            echo 'proceed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "main is now $current_sha; the newer run will prebuild."
+            echo 'proceed=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install the CI-only VM key and pinned host key
+        if: steps.current.outputs.proceed == 'true'
+        env:
+          VM_DEPLOY_KEY: ${{ secrets.POLYMATE_VM_DEPLOY_KEY }}
+        run: |
+          test -n "$VM_DEPLOY_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_DEPLOY_KEY" > "$HOME/.ssh/id_polymate_ci"
+          chmod 600 "$HOME/.ssh/id_polymate_ci"
+          install -m 600 .github/viscon_known_hosts "$HOME/.ssh/known_hosts"
+
+      - name: Transfer the commit and prebuild its images on the VM
+        if: steps.current.outputs.proceed == 'true'
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/polymate-$DEPLOY_SHA.bundle"
+          git bundle create "$bundle" HEAD
+          git bundle verify "$bundle"
+          vm=viscon@07-direct.viscon-hackathon.ch
+          key="$HOME/.ssh/id_polymate_ci"
+          ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes "$vm" 'umask 077; mkdir -p /home/viscon/polymate-transfer'
+          scp -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes "$bundle" "$vm:/home/viscon/polymate-transfer/polymate-$DEPLOY_SHA.bundle"
+          # --no-write-fetch-head: the deploy job relies on FETCH_HEAD and may run concurrently.
+          # The prebuild script comes from the pushed commit, not the live checkout.
+          ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes "$vm" "set -e; umask 077; cd /home/viscon/polymate; git fetch --no-write-fetch-head /home/viscon/polymate-transfer/polymate-$DEPLOY_SHA.bundle HEAD; git cat-file -e '$DEPLOY_SHA^{commit}'; mkdir -p .release; script=.release/prebuild-$DEPLOY_SHA.sh; git show '$DEPLOY_SHA:scripts/prebuild.sh' > \"\$script\"; trap 'rm -f \"\$script\"' EXIT; bash \"\$script\" '$DEPLOY_SHA'"
+
   deploy:
     name: deploy
-    needs: [checks, planner, containers]
+    needs: [checks, planner, containers, prepare]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 25
