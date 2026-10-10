@@ -9,6 +9,7 @@ export const AGENT_TOOL_NAMES = [
   'polymate_create_study_block',
   'polymate_edit_study_block',
   'polymate_move_study_block',
+  'polymate_delete_study_blocks',
   'polymate_get_study_progress',
   'polymate_link_study_session',
   'polymate_report_study_progress',
@@ -60,6 +61,11 @@ export function isExplicitMoveConsent(message: string): boolean {
 export function isExplicitEditConsent(message: string): boolean {
   return isExplicitMoveConsent(message) || (!hasConsentQualifier(message) &&
     /\b(edit|rename|change|update)\b.{0,100}\b(title|name|time|date|block|session|event)\b/i.test(message));
+}
+
+export function isExplicitDeleteConsent(message: string): boolean {
+  return !hasConsentQualifier(message) &&
+    /\b(delete|remove|clear)\b.{0,100}\b(blocks?|sessions?|events?|items?|calendar|it|them|all)\b/i.test(message);
 }
 
 export function isAffirmative(message: string): boolean {

@@ -23,7 +23,8 @@
       "polymate_get_calendar",
       "polymate_create_study_block",
       "polymate_edit_study_block",
-      "polymate_move_study_block"
+      "polymate_move_study_block",
+      "polymate_delete_study_blocks"
     ]
   }
 }

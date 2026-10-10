@@ -51,4 +51,12 @@ export const AGENT_TOOL_DEFINITIONS = [
     description: 'Move an existing PolyMate study block only when the student explicitly requests it. First retrieve its eventId using polymate_get_calendar. The application supplies the owner, current etag, and stable retry operation ID. Never create a replacement event.',
     parameters: { type: 'object', properties: { eventId: { type: 'string' }, startAt: { type: 'string' }, endAt: { type: 'string' } }, required: ['eventId', 'startAt', 'endAt'], additionalProperties: false },
   },
+  {
+    name: 'polymate_delete_study_blocks',
+    description: 'Delete existing PolyMate study blocks only when the student explicitly asks to delete or remove them. First retrieve their eventIds using polymate_get_calendar, then pass every block to delete in a single call. Personal Google events are read-only and cannot be deleted. The application supplies the owner, current etags, and stable retry operation IDs.',
+    parameters: {
+      type: 'object', properties: { eventIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 50, uniqueItems: true } },
+      required: ['eventIds'], additionalProperties: false,
+    },
+  },
 ] as const;

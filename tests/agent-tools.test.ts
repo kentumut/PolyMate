@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   listWeek: vi.fn(),
   createStudyBlock: vi.fn(),
   updateStudyBlock: vi.fn(),
+  deleteStudyBlock: vi.fn(),
   progressState: vi.fn(),
   syncStudyCalendarRead: vi.fn(),
   observeStudyCalendarChange: vi.fn(),
@@ -24,7 +25,7 @@ vi.mock('../packages/db/src/study-progress', () => ({ studyProgressStore: { stat
 vi.mock('../apps/web/lib/calendar-route', () => ({ calendarServiceFor: () => mocks, calendarError: () => Response.json({ error: { message: 'Calendar unavailable.' } }, { status: 502 }) }));
 
 import { AGENT_SYSTEM_INSTRUCTIONS, agentResponseBody, beginAgentTurn, callOpenClawAgent, dispatchOpenClawTool, endAgentTurn, parseAgentToolArguments, publicPendingPlan, scheduleCurrentPlan } from '../apps/web/lib/agent-runtime';
-import { currentPlanApproval, isExplicitCalendarConsent, isExplicitPartialConsent } from '../packages/core/agent/contracts';
+import { currentPlanApproval, isExplicitCalendarConsent, isExplicitDeleteConsent, isExplicitPartialConsent } from '../packages/core/agent/contracts';
 
 const contextSecret = 'agent-context-test-secret-that-is-long-enough';
 const bridgeSecret = 'agent-bridge-test-secret-that-is-long-enough';
@@ -59,6 +60,7 @@ describe('PolyMate agent tool routing', () => {
     mocks.listWeek.mockReset();
     mocks.createStudyBlock.mockReset();
     mocks.updateStudyBlock.mockReset();
+    mocks.deleteStudyBlock.mockReset();
     mocks.progressState.mockReset().mockResolvedValue({ assignments: [], links: [], reports: [], pendingCompletions: [] });
     mocks.syncStudyCalendarRead.mockReset().mockResolvedValue(undefined);
     mocks.observeStudyCalendarChange.mockReset().mockResolvedValue(undefined);
@@ -77,6 +79,17 @@ describe('PolyMate agent tool routing', () => {
     })).toThrow('unsupported fields');
     expect(() => parseAgentToolArguments('polymate_edit_study_block', { eventId: 'event' })).toThrow('Nothing to change');
     expect(() => parseAgentToolArguments('polymate_edit_study_block', { eventId: 'event', startAt: '2026-10-11T08:00:00Z' })).toThrow('together');
+    expect(() => parseAgentToolArguments('polymate_delete_study_blocks', { eventIds: [] })).toThrow('between 1 and 50');
+    expect(() => parseAgentToolArguments('polymate_delete_study_blocks', { eventIds: ['a', 'a'] })).toThrow('only once');
+    expect(() => parseAgentToolArguments('polymate_delete_study_blocks', { eventIds: ['a'], ownerId: owner.userId })).toThrow('unsupported fields');
+  });
+
+  it('recognises only explicit delete requests', () => {
+    expect(isExplicitDeleteConsent('Delete all the items in my calendar, like all the study items that you created before.')).toBe(true);
+    expect(isExplicitDeleteConsent('Remove the study blocks on Sunday.')).toBe(true);
+    expect(isExplicitDeleteConsent("Don't delete my study blocks.")).toBe(false);
+    expect(isExplicitDeleteConsent('What would deleting a block do?')).toBe(false);
+    expect(isExplicitDeleteConsent('Show my calendar.')).toBe(false);
   });
 
   it('passes the original authenticated request to Moodle and hides the plan token from browser state', async () => {
@@ -301,6 +314,46 @@ describe('PolyMate agent tool routing', () => {
     await signedCall(edit.sessionKey, 'polymate_edit_study_block', { eventId: event.id, title: 'Focused analysis' });
     expect(mocks.updateStudyBlock).toHaveBeenLastCalledWith(event.id, { title: 'Focused analysis' }, event.etag, expect.any(String));
     endAgentTurn(edit.sessionKey);
+  });
+
+  it('deletes only read, editable PolyMate blocks after an explicit request and reuses operations on retry', async () => {
+    const base = { timezone: 'Europe/Zurich', allDay: false, completion: 'open' };
+    const first = { id: 'block_one', title: 'Review analysis', startAt: '2026-10-11T08:00:00.000Z', endAt: '2026-10-11T08:50:00.000Z', source: 'polymate', editable: true, etag: 'etag-one', ...base };
+    const second = { id: 'block_two', title: 'Review linear algebra', startAt: '2026-10-11T09:00:00.000Z', endAt: '2026-10-11T09:50:00.000Z', source: 'polymate', editable: true, etag: 'etag-two', ...base };
+    const personal = { id: 'google_dentist', title: 'Dentist', startAt: '2026-10-11T12:00:00.000Z', endAt: '2026-10-11T13:00:00.000Z', source: 'google-personal', editable: false, etag: 'etag-personal', ...base };
+    mocks.listWeek.mockResolvedValue([first, second, personal]);
+    const range = { from: '2026-10-11T00:00:00Z', to: '2026-10-12T00:00:00Z' };
+
+    const denied = beginAgentTurn(request(), owner, { message: 'Show my calendar for Sunday.' }).turn;
+    await signedCall(denied.sessionKey, 'polymate_get_calendar', range);
+    expect((await signedCall(denied.sessionKey, 'polymate_delete_study_blocks', { eventIds: [first.id] })).error?.message).toContain('explicitly request');
+    endAgentTurn(denied.sessionKey);
+
+    const unread = beginAgentTurn(request(), owner, { message: 'Delete my study blocks on Sunday.' }).turn;
+    expect((await signedCall(unread.sessionKey, 'polymate_delete_study_blocks', { eventIds: [first.id] })).error?.message).toContain('First retrieve');
+    await signedCall(unread.sessionKey, 'polymate_get_calendar', range);
+    expect((await signedCall(unread.sessionKey, 'polymate_delete_study_blocks', { eventIds: [first.id, personal.id] })).error?.message).toContain('Personal Google events');
+    expect(mocks.deleteStudyBlock).not.toHaveBeenCalled();
+    endAgentTurn(unread.sessionKey);
+
+    const remove = beginAgentTurn(request(), owner, { message: 'Delete all my study blocks.' }).turn;
+    await signedCall(remove.sessionKey, 'polymate_get_calendar', range);
+    mocks.deleteStudyBlock.mockResolvedValueOnce({ operationId: 'op-one', status: 'synced' }).mockResolvedValueOnce({ operationId: 'op-two', status: 'unknown' });
+    const deleted = await signedCall(remove.sessionKey, 'polymate_delete_study_blocks', { eventIds: [first.id, second.id] });
+    expect(deleted.result).toMatchObject({ complete: false, results: [{ status: 'synced' }, { status: 'unknown' }] });
+    expect(mocks.deleteStudyBlock).toHaveBeenNthCalledWith(1, first.id, first.etag, expect.any(String));
+    expect(mocks.deleteStudyBlock).toHaveBeenNthCalledWith(2, second.id, second.etag, expect.any(String));
+    expect(mocks.observeStudyCalendarChange).toHaveBeenCalledWith(owner.userId, 'delete', first.id, { operationId: 'op-one', status: 'synced' });
+    expect(agentResponseBody('Done!', remove, owner.userId).reply).toContain('deleted 1 block');
+    endAgentTurn(remove.sessionKey);
+
+    const retry = beginAgentTurn(request(), owner, { message: 'Retry.' }).turn;
+    mocks.listWeek.mockResolvedValue([second]);
+    await signedCall(retry.sessionKey, 'polymate_get_calendar', range);
+    mocks.deleteStudyBlock.mockResolvedValueOnce({ operationId: 'op-two', status: 'synced' });
+    await signedCall(retry.sessionKey, 'polymate_delete_study_blocks', { eventIds: [second.id] });
+    expect(mocks.deleteStudyBlock.mock.calls[2][2]).toBe(mocks.deleteStudyBlock.mock.calls[1][2]);
+    endAgentTurn(retry.sessionKey);
   });
 
   it('keeps prompt injection in retrieved Moodle text from granting calendar consent and overrides false model success claims', async () => {

@@ -35,6 +35,7 @@ Enable the OpenAI-compatible chat-completions endpoint on the Gateway and config
       "polymate_create_study_block",
       "polymate_edit_study_block",
       "polymate_move_study_block",
+      "polymate_delete_study_blocks",
       "polymate_get_study_progress",
       "polymate_link_study_session",
       "polymate_report_study_progress",
@@ -53,6 +54,7 @@ Enable the OpenAI-compatible chat-completions endpoint on the Gateway and config
           "polymate_create_study_block",
           "polymate_edit_study_block",
           "polymate_move_study_block",
+          "polymate_delete_study_blocks",
           "polymate_get_study_progress",
           "polymate_link_study_session",
           "polymate_report_study_progress",
@@ -72,7 +74,7 @@ The app calls `/v1/chat/completions` with a signed, owner-scoped session key. Th
 
 ## Supported behavior
 
-The chat lives on `/calendar` beside the weekly calendar and Google/Moodle connection cards. The subscription card previews Moodle events without AI or Google. Calendar event cards show source links, retrieval time and feed limitations; dates are planning targets, not independently verified deadlines. The agent asks for effort estimates and explicit availability, previews a sealed timeline, and only writes after explicit consent. Partial plans require their own choice. The agent can also create one explicitly requested study block or edit an existing block after reading its current owner-scoped event and etag. Confirmed, failed, and uncertain writes are shown per block; the calendar reloads after a write attempt. Retrieved Moodle text is always treated as untrusted source content. The calendar retains manual study-block creation, editing, completion and deletion, and the separate assignment-entry panel. Confirmed AI calendar writes refresh the same interactive calendar. Manually entered assignments are not yet an AI planning source.
+The chat lives on `/calendar` beside the weekly calendar and Google/Moodle connection cards. The subscription card previews Moodle events without AI or Google. Calendar event cards show source links, retrieval time and feed limitations; dates are planning targets, not independently verified deadlines. The agent asks for effort estimates and explicit availability, previews a sealed timeline, and only writes after explicit consent. Partial plans require their own choice. The agent can also create one explicitly requested study block or edit an existing block after reading its current owner-scoped event and etag, and delete explicitly requested PolyMate blocks after reading them (personal Google events stay read-only). Confirmed, failed, and uncertain writes are shown per block; the calendar reloads after a write attempt. Retrieved Moodle text is always treated as untrusted source content. The calendar retains manual study-block creation, editing, completion and deletion, and the separate assignment-entry panel. Confirmed AI calendar writes refresh the same interactive calendar. Manually entered assignments are not yet an AI planning source.
 
 ### Interactive local progress
 
@@ -92,7 +94,7 @@ Progress/link tools are not background automation tools. This increment does not
 
 The chat lives in the Chat view of `/calendar`, alongside separate Calendar and Settings views. The subscription card previews Moodle events without AI or Google. Calendar event cards show source links, retrieval time and feed limitations; dates are planning targets, not independently verified deadlines. The agent asks for effort estimates and explicit availability, previews a sealed timeline, and only writes after explicit consent. Partial plans require their own choice. Confirmed, failed, and uncertain writes are shown per block; the calendar reloads after a write attempt. Retrieved Moodle text is always treated as untrusted source content. The calendar retains manual study-block creation, editing, completion and deletion, and the separate assignment-entry panel. Confirmed AI calendar writes refresh the same interactive calendar. Manually entered assignments are not yet an AI planning source.
 
-The agent can also create one explicitly requested study block or edit an existing block after reading its current owner-scoped event and etag. The PolyMate calendar remains available without Google; when Google is connected, its events are shown as a read-only overlay.
+The agent can also create one explicitly requested study block or edit an existing block after reading its current owner-scoped event and etag, and delete explicitly requested PolyMate blocks after reading them (personal Google events stay read-only). The PolyMate calendar remains available without Google; when Google is connected, its events are shown as a read-only overlay.
 
 The shared `AutomationScheduler` interface is exported from `@polymate/core/agent/automations`; `agentAutomationScheduler` in `apps/web/lib/agent-automations.ts` implements registration and owner-scoped cancellation for Moodle monitoring and progress jobs. Background callbacks are bound to the persisted Gateway job ID and stored tool allowlist. Scheduled reads resolve the registered owner's encrypted calendar subscription on the server, without browser cookies. Only registered read tools are permitted. Disconnecting removes access for later runs. No background write tool is exposed.
 
