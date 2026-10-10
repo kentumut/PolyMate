@@ -8,6 +8,8 @@ Three feature branches implement the agreed loop: notice work → discuss and pl
 | `codex/ai-agent` | OpenClaw runtime integration, shared automation interface, web chat, student context and planning conversation | [Agent task](AI_AGENT_TASK.md) |
 | `codex/progress-checkins` | Daily digest, session follow-ups, progress responses and replanning | [Progress task](PROGRESS_CHECKINS_TASK.md) |
 
+Optional enhancement: [Mobile-compatible UI](MOBILE_UI_TASK.md), primarily on `codex/ai-agent` with coordination across calendar and progress UI work. Implement after the core journey works; it is not a release blocker and does not require another feature branch.
+
 ## Shared contracts and ownership
 
 - The PolyMate backend owns student identity, encrypted credentials, assignments, progress, preferences and permissions.
