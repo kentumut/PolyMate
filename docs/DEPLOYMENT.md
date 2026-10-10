@@ -53,7 +53,7 @@ Target: `https://07.hackathon.ethz.ch`; SSH: `viscon@07-direct.viscon-hackathon.
 
 ## Deploy a reviewed commit
 
-Every successful `CI` push run on the current `main` commit now triggers the `Deploy VM` workflow. It transfers a complete Git bundle over SSH, then runs `scripts/deploy.sh FETCH_HEAD` on the VM. The workflow skips an older success if a newer commit has reached `main`. It uses the repository's `POLYMATE_VM_DEPLOY_KEY` Actions secret and the pinned host key in `.github/viscon_known_hosts`. The VM's authorized key has forwarding and PTY restrictions. Review the separate deployment job result before treating a change as live.
+Every `CI` push run on `main` ends with a `deploy` job that runs once the other CI jobs pass. It transfers a complete Git bundle over SSH, then runs `scripts/deploy.sh FETCH_HEAD` on the VM. The job skips an older commit if a newer one has reached `main`, and deploy jobs never run concurrently. It uses the repository's `POLYMATE_VM_DEPLOY_KEY` Actions secret and the pinned host key in `.github/viscon_known_hosts`. The VM's authorized key has forwarding and PTY restrictions. Review the `deploy` job result before treating a change as live.
 
 The deploy job requires all four Google Actions secrets before it can release a Google-enabled commit. It passes them through SSH standard input, installs them atomically in the private `.env`, and then runs the usual configuration check and deployment. If any secret is missing or conflicts with an existing stable key, deployment fails before replacing the running web container. Add the secrets before merging this workflow change.
 
