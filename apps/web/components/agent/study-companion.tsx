@@ -57,6 +57,7 @@ const TOOL_STATUS: Record<string, string> = {
   moodle_plan_assignment_timeline: 'Drafting your timeline…',
   moodle_schedule_assignment_timeline: 'Adding blocks to your calendar…',
   polymate_check_connections: 'Checking your connections…',
+  polymate_create_assignment: 'Saving your assignment…',
   polymate_get_calendar: 'Looking at your calendar…',
   polymate_create_study_block: 'Updating your calendar…',
   polymate_edit_study_block: 'Updating your calendar…',
@@ -708,7 +709,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
         </section>
 
         <section aria-label="Courses" className={view === 'courses' ? 'space-y-6' : 'hidden'}>
-          <CoursesPanel sample={sample} onAddAssignment={() => document.getElementById('add-course-assignment')?.click()} />
+          <CoursesPanel sample={sample} onAddAssignment={() => openRecommendation('I want to add an assignment: ')} />
           <AssignmentsPanel sample={sample} onCalendarChange={() => setReloadKey(value => value + 1)} />
         </section>
 

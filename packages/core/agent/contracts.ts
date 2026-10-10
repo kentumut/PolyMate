@@ -13,6 +13,7 @@ export const AGENT_TOOL_NAMES = [
   'msc_cs_check_graduation',
   'polymate_check_connections',
   'polymate_remember_student_context',
+  'polymate_create_assignment',
   'polymate_get_calendar',
   'polymate_create_study_block',
   'polymate_edit_study_block',
@@ -80,6 +81,12 @@ export function isExplicitDeleteConsent(message: string): boolean {
 export function isCreateBlockRequest(message: string): boolean {
   return !isRefusal(message) && !/\b(explain|example|quote|said|says|describe)\b|["“”]/i.test(message) &&
     /\b(add|create|put|schedule|book|reserve|block (?:out|off))\b/i.test(message);
+}
+
+/** Natural assignment capture starts with an explicit request, then Chat may collect missing fields. */
+export function isCreateAssignmentRequest(message: string): boolean {
+  return !isRefusal(message) && !/\b(explain|example|quote|said|says|describe how)\b|["“”]/i.test(message) &&
+    /\b(add|create|save|track)\b.{0,80}\b(assignment|deadline|problem set|exercise sheet|sheet|project)\b|\b(?:have|got)\b.{0,80}\b(assignment|problem set|exercise sheet|sheet)\b/i.test(message);
 }
 
 export function isRefusal(message: string): boolean {

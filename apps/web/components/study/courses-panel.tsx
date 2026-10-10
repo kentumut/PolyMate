@@ -86,10 +86,10 @@ export function CoursesPanel({ sample, onAddAssignment }: { sample: boolean; onA
 
   return <div className="space-y-5">
     <section className="flex flex-col gap-5 rounded-xl border bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-      <div><h2 className="text-lg font-semibold">Courses and assignments</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Keep each course’s workload and exam priorities here, then add its concrete deadlines below. PolyMate uses both in Chat and planning.</p></div>
+      <div><h2 className="text-lg font-semibold">Courses and assignments</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Keep course workload and exam priorities here. For an assignment, tell PolyMate what you know in your own words—it will ask for anything missing and save it.</p></div>
       <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
         <Button type="button" variant="outline" onClick={startNew}><Plus aria-hidden="true" /> Add course</Button>
-        <Button type="button" onClick={onAddAssignment}><ClipboardPlus aria-hidden="true" /> Add assignment</Button>
+        <Button type="button" onClick={onAddAssignment}><ClipboardPlus aria-hidden="true" /> Describe assignment</Button>
       </div>
     </section>
 
