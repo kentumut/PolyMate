@@ -29,14 +29,29 @@ describe('Moodle assignment planning and calendar tools', () => {
     const big = { ...snapshot, assignments: [{ ...snapshot.assignments[0], dueAt: '2026-10-20T00:00:00Z' }] };
     const tools = new MoodleAgentTools('owner', { ...reader(), snapshot: vi.fn().mockResolvedValue(big) }, new FakeCalendarClient([]), now);
     const day = (d: number) => ({ startAt: `2026-10-1${d}T08:00:00Z`, endAt: `2026-10-1${d}T18:00:00Z` });
-    const request = (minutes: number) => ({ work: [{ assignmentId: 9, estimatedMinutes: minutes }], availability: [day(1), day(2), day(3)] });
-    expect((await tools.planAssignments(request(1000))).blocks).toHaveLength(20);
-    await expect(tools.planAssignments(request(1010))).rejects.toThrow('at most 20 study blocks');
-    const plan = await tools.planAssignments(request(1000));
+    const request = (minutes: number) => ({ work: [{ assignmentId: 9, estimatedMinutes: minutes }], availability: [1, 2, 3, 4, 5, 6].map(day) });
+    expect((await tools.planAssignments(request(1800))).blocks).toHaveLength(20);
+    await expect(tools.planAssignments(request(1810))).rejects.toThrow('at most 20 study blocks');
+    const plan = await tools.planAssignments(request(1800));
     const calendar = new FakeCalendarClient([]);
     const writer = new MoodleAgentTools('owner', { ...reader(), snapshot: vi.fn().mockResolvedValue(big) }, calendar, now);
     await expect(writer.scheduleTimeline({ ...plan, blocks: [...plan.blocks, { ...plan.blocks[0], operationId: 'extra' }] })).rejects.toThrow('at most 20 study blocks');
     expect(await calendar.listWeek({ from: '2026-10-11T00:00:00Z', to: '2026-10-14T00:00:00Z' })).toHaveLength(0);
+  });
+
+  it('keeps short work in one block, avoids tiny fragments and leaves a break between assignments', async () => {
+    const event = (id: string, startAt: string, endAt: string): CalendarEvent => ({ ...busy, id, startAt, endAt });
+    // Free: 09:00–09:10, 10:00–10:20, 11:00–14:00.
+    const calendar = new FakeCalendarClient([event('a', '2026-10-10T09:10:00Z', '2026-10-10T10:00:00Z'), event('b', '2026-10-10T10:20:00Z', '2026-10-10T11:00:00Z')]);
+    const quiz = { ...snapshot.assignments[0], id: 10, title: 'Quiz' };
+    const moodle = { ...reader(), snapshot: vi.fn().mockResolvedValue({ ...snapshot, assignments: [...snapshot.assignments, quiz] }) };
+    const tools = new MoodleAgentTools('owner', moodle, calendar, now);
+    const plan = await tools.planAssignments({ work: [{ assignmentId: 10, estimatedMinutes: 60 }, { assignmentId: 9, estimatedMinutes: 100 }],
+      availability: [{ startAt: '2026-10-10T09:00:00Z', endAt: '2026-10-10T14:00:00Z' }] });
+    expect(plan.blocks.map(b => [b.assignmentId, b.startAt.slice(11, 16), b.endAt.slice(11, 16)])).toEqual([
+      [9, '11:00', '11:50'], [9, '12:00', '12:50'], [10, '13:00', '14:00'],
+    ]);
+    expect(plan.unscheduled).toEqual([]);
   });
 
   it('reports insufficient capacity and requires explicit partial scheduling', async () => {
