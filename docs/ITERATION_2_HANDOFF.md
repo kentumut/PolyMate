@@ -1,6 +1,6 @@
 # Iteration 2: manual assignment planning
 
-The first implementation slice connects saved manual assignments to a deterministic seven-day planner, a reviewable preview, and explicitly approved Google study blocks. It is implemented on `codex/iteration-2-planner`; iteration 2 is not yet live-accepted.
+The first implementation slice connects saved manual assignments to a deterministic seven-day planner, a reviewable preview, and explicitly approved Google study blocks. It was merged to `main` in #25; iteration 2 is not yet live-accepted.
 
 ## Student journey
 
