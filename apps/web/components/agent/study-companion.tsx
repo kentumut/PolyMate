@@ -21,6 +21,8 @@ import type { ProgressReceipt } from '@polymate/contracts/study-progress';
 import { CoachInbox, type CoachReplyTarget } from './coach-inbox';
 import { CoursesPanel } from '@/components/study/courses-panel';
 import { Button } from '@/components/ui/button';
+import { ChatList, CheckInNotice, CheckInSettings, useChats } from './chat-list';
+import { fetchChat, unreadCheckIns } from './chat-client';
 
 type AgentCard = { kind: 'assignments' | 'timeline' | 'schedule' | 'connections' | 'progress'; data: unknown };
 type PendingPlan = { timeline: AssignmentTimeline; expiresAt: string };
@@ -192,6 +194,9 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   const [coachRefreshKey, setCoachRefreshKey] = useState(0);
   const [coachOutstanding, setCoachOutstanding] = useState(0);
   const [nextEvent, setNextEvent] = useState<CalendarEvent | null>(null);
+  // Each chat is stored under its own ID; a fresh ID is a new, still empty chat.
+  const [chatId, setChatId] = useState(() => crypto.randomUUID());
+  const chats = useChats(sample);
   const nextId = useRef(0);
   const inFlight = useRef<AbortController | null>(null);
   const messagesEnd = useRef<HTMLDivElement | null>(null);
@@ -233,6 +238,35 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
   }
 
+  function showChatView() {
+    window.history.pushState(null, '', hrefFor('chat'));
+    window.scrollTo({ top: 0 });
+  }
+
+  async function openChat(id: string) {
+    if (busy) return;
+    setError('');
+    try {
+      const thread = await fetchChat(id);
+      setChatId(id); setCoachReply(null); setInput('');
+      setMessages(thread.messages.map(item => ({ id: ++nextId.current, role: item.role, text: item.content, cards: [] })));
+      if (thread.chat.unread) void chats.markRead(id);
+      showChatView();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'This chat could not be opened.'); }
+  }
+
+  function newChat() {
+    if (busy) return;
+    setChatId(crypto.randomUUID()); setMessages([]); setCoachReply(null); setError('');
+    showChatView();
+    window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
+  }
+
+  async function checkInNow() {
+    const id = await chats.checkInNow();
+    if (id) await openChat(id);
+  }
+
   function openRecommendation(prompt: string) {
     setInput(prompt);
     window.history.pushState(null, '', hrefFor('chat'));
@@ -240,10 +274,10 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
   }
 
-  async function sendMessage(event?: FormEvent, action?: { allowPartial: boolean } | { draftToken: string; confirmAssignmentFinished: boolean }) {
+  async function sendMessage(event?: FormEvent, action?: { allowPartial: boolean } | { draftToken: string; confirmAssignmentFinished: boolean }, quickReply?: string) {
     event?.preventDefault();
-    if (busy || sample || (!action && !input.trim())) return;
-    const studentText = input.trim();
+    const studentText = (quickReply ?? input).trim();
+    if (busy || sample || (!action && !studentText)) return;
     const text = action ? ('draftToken' in action ? 'Confirm this progress change.' : action.allowPartial ? 'Add only the blocks that fit to my calendar.' : 'Add this timeline to my calendar.')
       : coachReply ? `Weekly planning question: ${coachReply.body}\n\nStudent response: ${studentText}` : studentText;
     // Bind explicit chat approval to the displayed draft, just like its button.
@@ -254,7 +288,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       : undefined;
     const id = ++nextId.current;
     setMessages(previous => [...previous, { id, role: 'user', text: coachReply && !action ? studentText : text, cards: [] }].slice(-40) as ChatMessage[]);
-    if (!action) setInput('');
+    if (!action && quickReply === undefined) setInput('');
     // Only free-form turns can be stopped; scheduling and confirmations change the calendar and must finish.
     const controller = action || scheduleAction ? null : new AbortController();
     inFlight.current = controller;
@@ -272,7 +306,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       }
       const response = await fetch('/api/agent/chat', {
         method: 'POST', headers, credentials: 'same-origin', cache: 'no-store',
-        body: JSON.stringify(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text }),
+        body: JSON.stringify({ ...(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text }), conversationId: chatId }),
         signal: controller?.signal,
       });
       let body: ChatResponse;
@@ -294,6 +328,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       // The final reply is authoritative (redacted, and corrected for calendar outcomes); it replaces streamed text.
       setMessages(previous => [...previous.filter(message => message.id !== streamId), { id: streamId ?? ++nextId.current, role: 'assistant', text: body.reply, cards: body.cards ?? [] }].slice(-40) as ChatMessage[]);
       setCoachRefreshKey(value => value + 1);
+      void chats.refresh();
       setPendingPlan(body.pendingPlan ?? null);
       if (action && 'draftToken' in action) {
         const result = body.cards?.find(card => card.kind === 'progress')?.data as { receipt?: ProgressReceipt } | undefined;
@@ -332,6 +367,9 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     inFlight.current?.abort();
   }
 
+  const activeChat = chats.chats.find(chat => chat.id === chatId);
+  const quickReplies = activeChat && !messages.some(message => message.role === 'user') ? activeChat.quickReplies : [];
+  const waitingCheckIns = unreadCheckIns(chats.chats, chatId);
   const firstName = ownerName.trim().split(/[\s@]/)[0] || 'there';
   const nextEventTime = nextEvent ? new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Zurich', weekday: 'long', hour: '2-digit', minute: '2-digit',
@@ -347,8 +385,12 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     <main className={view === 'chat' ? 'flex h-[calc(100dvh-57px)] min-w-0 flex-1 flex-col overflow-hidden md:h-dvh' : 'min-w-0 flex-1'}>
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4 sm:px-6">
         <p className="truncate text-sm font-medium">{view === 'chat' ? 'Chat' : <>PolyMate <span className="text-muted-foreground">/ {pageTitle}</span></>}</p>
-        <CoachInbox sample={sample} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
+        <div className="flex items-center gap-1">
+          <ChatList chats={chats.chats} activeChatId={chatId} disabled={busy} onOpen={chat => void openChat(chat.id)} onNew={newChat} />
+          <CoachInbox sample={sample} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
+        </div>
       </header>
+      {view !== 'chat' && <CheckInNotice chats={waitingCheckIns} floating disabled={busy} onOpen={chat => void openChat(chat.id)} />}
 
       <div className={view === 'chat' ? 'min-h-0 flex-1' : 'mx-auto w-full max-w-7xl px-4 py-8 sm:px-7 md:px-10 md:py-10 lg:px-12'}>
         {view !== 'chat' && <header className="mb-8">
@@ -393,6 +435,9 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
                   {message.role === 'assistant' ? <MessageContent text={message.text} /> : <p className="whitespace-pre-wrap text-sm leading-6">{message.text}</p>}
                   {message.role === 'assistant' && <OtherCards cards={message.cards} busy={busy} confirmed={confirmedProgress} onConfirm={(draftToken, confirmAssignmentFinished) => void sendMessage(undefined, { draftToken, confirmAssignmentFinished })} />}
                 </article>)}
+                {quickReplies.length > 0 && !busy && <div className="flex flex-wrap gap-2" aria-label="Suggested replies">
+                  {quickReplies.map(reply => <button key={reply} type="button" onClick={() => void sendMessage(undefined, undefined, reply)} className="rounded-full border bg-card px-3.5 py-1.5 text-sm shadow-sm transition-colors hover:bg-accent">{reply}</button>)}
+                </div>}
                 {busy && streamingId === null && <p className="text-sm text-muted-foreground" role="status">{status}</p>}
                 {pendingPlan && <TimelinePreview plan={pendingPlan} onSchedule={allowPartial => void sendMessage(undefined, { allowPartial })} busy={busy} />}
                 <div ref={messagesEnd} />
@@ -403,6 +448,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
           <div className="shrink-0 bg-gradient-to-t from-background via-background to-transparent px-4 pb-3 pt-3 sm:px-6 sm:pb-5">
             <div className="mx-auto max-w-3xl">
               {error && <p className="mb-2 text-sm text-destructive" role="alert">{error}</p>}
+              {view === 'chat' && waitingCheckIns.length > 0 && <div className="mb-2"><CheckInNotice chats={waitingCheckIns} floating={false} disabled={busy} onOpen={chat => void openChat(chat.id)} /></div>}
               {coachReply && <div className="mb-2 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40"><div><p className="text-xs font-medium text-amber-800 dark:text-amber-300">Answering your coach</p><p className="mt-1">{coachReply.body}</p></div><button type="button" onClick={() => setCoachReply(null)} className="shrink-0 text-xs underline">Cancel</button></div>}
               <form onSubmit={event => void sendMessage(event)} className="relative rounded-2xl border bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/30">
                 <label htmlFor="agent-message" className="sr-only">Message PolyMate</label>
@@ -423,6 +469,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
         <section aria-label="Settings" className={view === 'settings' ? 'grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]' : 'hidden'}>
           <MoodleConnection />
           <div className="space-y-5">
+            {!sample && <CheckInSettings paused={chats.checkInsPaused} error={chats.error} disabled={busy} onPause={paused => void chats.setPaused(paused)} onCheckInNow={() => void checkInNow()} />}
             <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-lg font-medium">Optional Google Calendar overlay</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Your PolyMate calendar works on its own. Connect Google only to show its events as read-only busy time.</p><GoogleConnection /></section>
             <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-sm font-medium">Your study space</h2><dl className="mt-4 space-y-4 text-sm"><div><dt className="text-xs text-muted-foreground">Signed in as</dt><dd className="mt-1 break-words">{ownerName}</dd></div><div><dt className="text-xs text-muted-foreground">Calendar timezone</dt><dd className="mt-1">Europe/Zurich</dd></div></dl></section>
           </div>
