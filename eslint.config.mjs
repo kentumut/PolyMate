@@ -5,6 +5,6 @@ const config = [
   ...nextVitals,
   ...nextTypescript,
   { settings: { next: { rootDir: 'apps/web/' } } },
-  { ignores: ['.local/**', '**/.next/**', '**/dist/**', '**/node_modules/**', '**/next-env.d.ts', 'coverage/**'] },
+  { ignores: ['.local/**', '.release/**', '**/.next/**', '**/dist/**', '**/node_modules/**', '**/next-env.d.ts', 'coverage/**'] },
 ];
 export default config;

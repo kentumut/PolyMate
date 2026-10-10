@@ -37,16 +37,24 @@ Apply all migrations with `pnpm db:migrate` before deploying this branch. Migrat
 
 Run `pnpm check`. Focused tests cover deterministic slots, deadline/capacity shortfalls, all-day/DST dates, cross-assignment breaks, preserving linked effort, authenticated approval, stale previews, and exact-operation retries.
 
-Local verification on 10 October 2026 passed typecheck, lint, 260 tests and the production build. The host used Node 22.17.0 and emitted the repository's Node 24 engine warning; rerun the normal Node 24 CI before merge. The optional SQL/restart check below also passed. Docker was unavailable locally, so production PostgreSQL/container verification remains a release check.
+Run `pnpm test:planner` for the planner gate. CI runs it as the separate `planner` job on every PR and main push. It runs the planner, planning-API and repository tests, then installs pinned PGlite into a temporary directory (it is not a root dependency) and runs the `study-planning` and `study-progress` SQL integration suites.
 
-Optional SQL/restart verification uses a separately installed PGlite, following the existing progress integration-test convention:
+`pnpm test:containers` (CI job `containers`) applies every migration to real PostgreSQL 17 twice and asserts that the 0004 planner tables exist. It also runs the identity/health smoke and backup restore.
 
-```sh
-PGLITE_MODULE=/absolute/path/to/pglite/dist/index.js \
-PGCRYPTO_MODULE=/absolute/path/to/pglite/dist/contrib/pgcrypto.js \
-pnpm exec tsx tests/integration/study-planning.db.mjs
-```
+Release verification on 10 October 2026, on branch `chore/kent-i2-release`, used Node 24.21.0:
+
+- `pnpm check` passed typecheck, lint, 298 tests and the production build.
+- `pnpm test:planner` passed.
+- `pnpm test:containers` passed against the locally built web/tooling images and PostgreSQL 17.
 
 That check applies every migration to an isolated database and verifies transactions, owner constraints, preview persistence across restart, repair after confirmed writes, and progress deductions. It does not verify Google connectivity or production PostgreSQL concurrency.
 
 Before calling iteration 2 complete, verify on the managed deployment: save a manual deadline → confirm availability → generate without calendar changes → inspect exact times → apply → verify the same blocks in Google → reload/restart → generate again without duplicating linked effort. Also exercise disconnected Google, a newly added conflict, changed remaining effort, insufficient capacity, and an uncertain write/retry. Manual calendar editing must still work throughout.
+
+## Release and worker profile (Kent)
+
+`v0.2-planner` deploys through the existing pipeline: once CI passes on main, `Deploy VM` runs `scripts/deploy.sh`. That script takes a backup, applies migration 0004 with the tooling image, and replaces the web container (restoring the previous image if health fails). No new secrets are required. The planner runs in the web process, and the OpenClaw gateway remains opt-in through `OPENCLAW_ENABLED=true` and `compose.openclaw.yaml`.
+
+No separate worker container ships in v0.2. The iteration 2 planner performs only foreground writes that the student explicitly approves. Generate/apply are serialized by a database advisory lock, and retries reuse persisted operation IDs. This leaves no background job for a worker to run. Add a `worker` Compose profile when iteration 3/4 introduces durable jobs (automatic rescheduling, reminders, retry/reconciliation sweeps); it should reuse the tooling image's dependencies and the same `DATABASE_URL`.
+
+Tag `v0.2-planner` on the deployed main SHA only after Catalin records the live acceptance journey above.

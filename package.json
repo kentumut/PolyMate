@@ -19,6 +19,7 @@
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "smoke": "node scripts/smoke.mjs",
     "test:containers": "bash scripts/container-check.sh",
+    "test:planner": "bash scripts/planner-check.sh",
     "config:check": "node scripts/config-check.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "db:check": "node scripts/db-check.mjs"
