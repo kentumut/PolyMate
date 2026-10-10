@@ -21,10 +21,11 @@ gateway_enabled="$(node --env-file=.env -e 'process.stdout.write(process.env.OPE
 if test "$gateway_enabled" = true; then
   compose+=(-f compose.yaml -f compose.openclaw.yaml)
 fi
-# Build before interrupting the existing release. Images are tagged by commit.
-"${compose[@]}" build web
-"${compose[@]}" --profile tools build tooling
-if test "$gateway_enabled" = true; then "${compose[@]}" build openclaw; fi
+# Build before interrupting the existing release. Images are tagged by commit;
+# one build call lets Compose build them in parallel.
+images=(web tooling)
+if test "$gateway_enabled" = true; then images+=(openclaw); fi
+"${compose[@]}" --profile tools build "${images[@]}"
 "${compose[@]}" up -d --wait db
 scripts/backup.sh
 "${compose[@]}" --profile tools run --rm tooling node scripts/migrate.mjs
