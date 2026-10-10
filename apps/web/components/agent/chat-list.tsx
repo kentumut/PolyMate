@@ -1,7 +1,7 @@
 'use client';
 
 import type { ChatList as ChatListState, ChatSummary } from '@polymate/contracts/chats';
-import { MessagesSquare, Plus, Sparkles, X } from 'lucide-react';
+import { MessagesSquare, PanelLeftClose, PanelLeftOpen, Plus, Sparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { fetchChats, mutateChats } from './chat-client';
+import { useCollapsedPanel } from './collapsible-panel';
 
 const CHAT_POLL_MS = 60_000;
 const chatTime = (value: string) => new Intl.DateTimeFormat('en-GB', {
@@ -60,13 +61,14 @@ export function useChats(sample: boolean) {
   return { ...state, error, refresh, markRead, setPaused, checkInNow };
 }
 
-function ChatHistoryContent({ chats, activeChatId, demo, disabled, onOpenChat, onNewChat }: {
+function ChatHistoryContent({ chats, activeChatId, demo, disabled, onOpenChat, onNewChat, onCollapse }: {
   chats: readonly ChatSummary[];
   activeChatId: string;
   demo: boolean;
   disabled: boolean;
   onOpenChat: (chat: ChatSummary) => void;
   onNewChat: () => void;
+  onCollapse?: () => void;
 }) {
   const activeChatIsSaved = chats.some(chat => chat.id === activeChatId);
   return <div className="flex min-h-0 flex-1 flex-col">
@@ -75,7 +77,10 @@ function ChatHistoryContent({ chats, activeChatId, demo, disabled, onOpenChat, o
         <p className="text-sm font-semibold">Chats</p>
         <p className="mt-0.5 text-xs text-muted-foreground">Your conversations with PolyMate</p>
       </div>
-      <Button type="button" size="icon" variant="outline" className="size-8 shrink-0" disabled={disabled} onClick={onNewChat} aria-label="Start a new chat"><Plus aria-hidden="true" /></Button>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button type="button" size="icon" variant="outline" className="size-8" disabled={disabled} onClick={onNewChat} aria-label="Start a new chat"><Plus aria-hidden="true" /></Button>
+        {onCollapse && <Button type="button" size="icon" variant="ghost" className="size-8 text-muted-foreground" onClick={onCollapse} aria-label="Collapse chat history" title="Collapse chat history"><PanelLeftClose aria-hidden="true" /></Button>}
+      </div>
     </div>
     <Separator />
     <div className="min-h-0 flex-1 overflow-y-auto p-2">
@@ -112,6 +117,8 @@ export function ChatHistoryRail({ chats, activeChatId, demo = false, disabled, o
   onNewChat: () => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, toggleCollapsed] = useCollapsedPanel('chats');
+  const unread = chats.some(chat => chat.unread);
   const openChat = (chat: ChatSummary) => { setMobileOpen(false); onOpenChat(chat); };
   const startChat = () => { setMobileOpen(false); onNewChat(); };
 
@@ -127,9 +134,17 @@ export function ChatHistoryRail({ chats, activeChatId, demo = false, disabled, o
       </Popover>
       <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={startChat}><Plus aria-hidden="true" /> New chat</Button>
     </div>
-    <aside className="hidden w-64 shrink-0 border-r bg-muted/20 md:flex md:min-h-0 md:flex-col xl:w-72" aria-label="Chat history">
-      <ChatHistoryContent chats={chats} activeChatId={activeChatId} demo={demo} disabled={disabled} onOpenChat={onOpenChat} onNewChat={onNewChat} />
-    </aside>
+    {collapsed
+      ? <aside className="hidden w-12 shrink-0 flex-col items-center gap-1 border-r bg-muted/20 py-3 md:flex" aria-label="Chat history">
+        <Button type="button" size="icon" variant="ghost" className="relative size-8 text-muted-foreground" onClick={toggleCollapsed} aria-label={unread ? 'Expand chat history, new messages' : 'Expand chat history'} aria-expanded={false} title="Expand chat history">
+          <PanelLeftOpen aria-hidden="true" />
+          {unread && <span className="absolute top-1 right-1 size-2 rounded-full bg-primary" aria-hidden="true" />}
+        </Button>
+        <Button type="button" size="icon" variant="outline" className="size-8" disabled={disabled} onClick={onNewChat} aria-label="Start a new chat" title="New chat"><Plus aria-hidden="true" /></Button>
+      </aside>
+      : <aside className="hidden w-64 shrink-0 border-r bg-muted/20 md:flex md:min-h-0 md:flex-col xl:w-72" aria-label="Chat history">
+        <ChatHistoryContent chats={chats} activeChatId={activeChatId} demo={demo} disabled={disabled} onOpenChat={onOpenChat} onNewChat={onNewChat} onCollapse={toggleCollapsed} />
+      </aside>}
   </>;
 }
 

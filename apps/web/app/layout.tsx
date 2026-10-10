@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="en" suppressHydrationWarning>
     <head>
-      <script dangerouslySetInnerHTML={{ __html: `try { if (localStorage.getItem('polymate-theme') === 'dark') document.documentElement.classList.add('dark'); } catch {}` }} />
+      <script dangerouslySetInnerHTML={{ __html: `try { if (localStorage.getItem('polymate-theme') === 'dark') document.documentElement.classList.add('dark'); for (const panel of ['sidebar', 'chats']) if (localStorage.getItem('polymate-' + panel) === 'collapsed') document.documentElement.dataset[panel] = 'collapsed'; } catch {}` }} />
     </head>
     <body>{children}</body>
   </html>;
