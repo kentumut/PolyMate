@@ -2,14 +2,15 @@
 
 **Issue:** [#11: study-block flow and live acceptance](https://github.com/kentumut/viscon-26/issues/11)
 
-**Branch:** `feat/catalin-i1-study-workflow`, based on merged `main` at `ff428c4`.
+**Integration branch:** `feat/catalin-i1-calendar-integration`, based on merged `main` at `276fbd9`. The original workflow was merged in PR #12.
 
-**Status:** dialog and browser mutation adapter implemented locally. The API contract is decided by Catalin. Backend implementation, integration, and live Google acceptance are pending; issue #11 is not ready to close. This document records a handoff, not a deployed release or a passing live demo.
+**Status:** dialog, browser mutation adapter, and `CalendarStudyWorkflow` are implemented and wired into `/calendar` on this branch. The decided flat mutation API delegates to the existing protected Google service; operation recovery and reconciliation are implemented. Deployment and live Google acceptance are still pending; issue #11 is not ready to close.
 
 ## Components available to Kent
 
 | File | Purpose |
 |---|---|
+| `apps/web/components/study/calendar-study-workflow.tsx` | Integrated Add/select/dialog/mutation/refresh flow, with shared sample state and durable operation recovery. |
 | `apps/web/components/study/study-block-dialog.tsx` | Create, edit/move, Mark done, confirmed Delete, and read-only personal-event details. |
 | `apps/web/components/study/study-block-form.ts` | Component-local types, Zurich validation/conversion, duration-preserving moves, and completion/deletion targets. |
 | `apps/web/components/study/study-calendar-client.ts` | Browser callback adapter for the documented mutation routes, with operation IDs, CSRF injection, and uncertain-operation tracking. |
@@ -17,9 +18,10 @@
 | `apps/web/app/dev/study-block/page.tsx` | Development-only preview at `/dev/study-block`. |
 | `tests/study-block-form.test.ts` | Form/time/permission tests. |
 | `tests/study-calendar-client.test.ts` | Mocked HTTP adapter tests. |
+| `tests/study-calendar-integration.test.ts` | Callback → real route → calendar service tests with stubbed Google transport, including reload/reconciliation. |
 | `tests/e2e/study-dialog.browser.mjs` | Separate browser acceptance runner; Playwright adoption into workspace/CI requires Kent's dependency coordination. |
 
-Use Bartek's merged `GoogleConnection` at `apps/web/components/connections/google-connection.tsx`. Its current location and wiring are part of merged main; there is no need to duplicate it. Kent owns production calendar-page composition.
+The calendar page reuses Bartek's merged `GoogleConnection` at `apps/web/components/connections/google-connection.tsx`. Page composition now renders `CalendarStudyWorkflow` in place of the standalone panel; the workflow shares its read client with `CalendarPanel` and refreshes it after confirmed mutations.
 
 ## Decided mutation wire contract
 
@@ -36,29 +38,27 @@ All writes use same-origin credentials, `Content-Type: application/json`, and `x
 
 Expected result: `{ operationId, status: 'pending' | 'synced' | 'failed' | 'unknown', event?, error? }`. Error responses may use the documented `{ error: { code?, message, recoverable? }, requestId? }` envelope. Explicit input/auth/conflict rejections can be reported as failed; ambiguous transport errors, malformed confirmations, mismatched operation IDs, and unconfirmed server errors remain unknown.
 
-### Required server handoffs
+### Server interfaces now implemented
 
-- Calendar mutation routes and shared event/operation types implementing the decided contract. Replace the local structural types with matching shared imports when available.
-- Calendar-specific CSRF provider/endpoint. The adapter accepts `getCsrfToken`; it does not invent a token route or assume Bartek's OAuth CSRF cookie covers calendar writes (that cookie is scoped to `/api/integrations/google`).
-- Server-side read/reconciliation for an operation ID. Inject it as `reconcileOperation`. No undocumented operation-status endpoint or automatic repeated write is assumed.
-- Durable operation recovery/ownership/conflict checks in the service. The browser's map is in-memory; after a page reload, unresolved operation records must be recovered from the server before allowing new writes.
+- `/api/calendar/study-blocks` routes translate the flat request into the shared service input and retain identity, same-origin/CSRF, ownership, interval, overlap, and ETag checks. The existing `/api/calendar/events` contract remains available for the shared read/client interfaces.
+- `GET /api/calendar/csrf` supplies the calendar-scoped token. The default adapter uses it; the OAuth cookie is not reused for calendar writes.
+- `GET /api/calendar/operations` returns only the authenticated student's pending/unknown statuses. The workflow checks this before enabling mutation controls after reload.
+- `POST /api/calendar/operations/:id/reconcile` requires identity, same-origin/CSRF, and an existing owner-scoped record. It replays that stored request through the service's read-back path; it does not issue another Google write for pending/unknown operations.
+- Definitively failed attempts are terminal in the service. Retry uses a new attempt ID. Pending/unknown attempts retain the original ID and must be reconciled before any new write. This corrects the earlier client-only retry assumption without weakening uncertain-write protections.
 
 ## Parent integration responsibilities
 
-Create one client per student calendar session and keep it above the dialog, so closing/reopening does not discard unresolved operations:
+The page mounts one workflow per authenticated student/sample mode, keeping the client above the dialog:
 
 ```ts
-const client = createStudyCalendarClient({
-  getCsrfToken: getCalendarCsrfToken,
-  reconcileOperation: reconcileCalendarOperation,
-});
+const client = createStudyCalendarClient(); // Uses the implemented HTTP/CSRF/recovery providers.
 ```
 
-The two provider functions above are required integration interfaces whose implementations are still pending, not existing exports or decisions awaiting approval. Pass `client.onCreate`, `client.onUpdate`, `client.onComplete`, and `client.onDelete` to the dialog, wrapping confirmed results to refresh the week view.
+The workflow supplies all four mutation callbacks and `onReconcile` to the dialog, refreshes the visible week after confirmation, and exposes Check change in the dialog and parent banner. In development sample mode, a single `FakeCalendarClient` supplies both list and mutation operations; no Google or database calls are made by the workflow.
 
 - Do not recreate the client on each React render. Use a stable parent instance and discard it when the authenticated student changes.
 - Before opening a new mutation flow, inspect `client.getBlockingOperation()`. Show/reconcile any pending or unknown operation first. The client blocks a second write while that operation is unresolved.
-- Feed the result of `client.reconcile(id)` into the dialog's `operationResult` prop for the same ID. Known failed requests may be explicitly retried; unchanged failed callback submissions reuse their operation ID, while corrected form values allocate a new one.
+- Feed the result of `client.reconcile(id)` into the dialog's `operationResult` prop for the same ID. New attempts after a confirmed failure allocate a fresh operation ID; reconciliation of pending/unknown work retains the original ID.
 - Refresh events only after confirmed success. Keep the selected event snapshot while displaying deletion success, or close after confirmed deletion; avoid switching the open dialog into create mode when the deleted event disappears from the list.
 - Student-reported session completion stays separate from assignment completion. Mark done/Delete refer to saved values, not unsaved form edits.
 
@@ -69,6 +69,22 @@ The two provider functions above are required integration interfaces whose imple
 - A Chromium fixture run in an America/New_York browser timezone passed **12 of 14 scenarios**: create/validation/duplicate-click protection, edit/move and ETag forwarding, custom-end/range/DST validation, completion despite unsaved edits, deletion cancellation/focus/draft preservation, confirmed deletion, failed update/complete/delete, uncertain/thrown deletion, and pending completion reconciliation.
 - The remaining personal-event and mobile/keyboard scenarios could not run because the preview server stopped (`ERR_CONNECTION_REFUSED`). Browser verification was then paused at the user's request. The complete browser suite has not passed; no screenshot or live Google evidence is claimed.
 - The separate test server on port 3001 was stopped after verification was paused. Playwright was installed only in temporary test tooling; root dependency/lockfile changes are not required by this handoff.
+
+## Integration verification on 10 October 2026
+
+- `pnpm check`: passed typecheck, lint, **108 tests**, and production build.
+- Integration tests exercise create → move → complete → list/reload → delete through the actual route handlers and calendar service with Google transport stubbed.
+- Tests cover default CSRF acquisition/expiry, flat-body ownership protection, stale ETags, personal-event protection, retry after a definite conflict, recovered uncertain inserts without duplicate writes, and cross-owner operation isolation.
+- Shared sample-client tests prove view reads and dialog writes use the same state without HTTP. Database recovery tests verify owner predicates and unresolved-status filtering.
+- Browser verification remains paused, and no live Google acceptance is claimed for this integration.
+
+## Manual checks
+
+1. Run `pnpm dev` and open `http://127.0.0.1:3000/calendar?calendar=sample`.
+2. Add a named 50-minute block in a free slot of the displayed week; close the success dialog and verify it appears.
+3. Select it, move it, mark it done, and confirm deletion. Verify each change appears in the same view. Personal events open read-only; conflicts are rejected. Sample state resets on reload and is disabled in production.
+4. Use `/calendar` without the sample parameter for real Google actions. Database/migrations and OAuth credentials/test account must be configured. Failed operation-recovery reads disable writes until Retry check succeeds; pending/unknown changes expose Check change.
+5. Run the managed-site live acceptance table below and record actual results before closing issue #11.
 
 ## Live acceptance still required
 

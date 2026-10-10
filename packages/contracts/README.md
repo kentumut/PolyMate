@@ -33,3 +33,16 @@ See [issue #8 handoff](../../docs/CALENDAR_SERVICE_HANDOFF.md) for validation an
 | `PATCH /api/calendar/events/:id` | `{ operationId, expectedEtag, changes }` | `OperationResult` |
 | `POST /api/calendar/events/:id/complete` | `{ operationId, expectedEtag }` | `OperationResult` |
 | `DELETE /api/calendar/events/:id` | `{ operationId, expectedEtag }` | `OperationResult` |
+
+The integrated study dialog uses Catalin's flat wire contract, backed by the same service and permission checks:
+
+| Route | Body | Result |
+|---|---|---|
+| `POST /api/calendar/study-blocks` | `{ operationId, title, startAt, endAt, timezone: 'Europe/Zurich' }` | `OperationResult` |
+| `PATCH /api/calendar/study-blocks/:id` | Editable values plus `operationId`, `expectedEtag` | `OperationResult` |
+| `POST /api/calendar/study-blocks/:id/complete` | `{ operationId, expectedEtag }` | `OperationResult` |
+| `DELETE /api/calendar/study-blocks/:id` | `{ operationId, expectedEtag }` | `OperationResult` |
+| `GET /api/calendar/operations` | — | `{ operations }` containing the authenticated student's pending/unknown results |
+| `POST /api/calendar/operations/:id/reconcile` | —; requires same-origin and CSRF | Result from the stored request; no new Google write for pending/unknown records |
+
+Confirmed failed attempts remain terminal in the service. A student retry after a definite failure uses a new operation ID. Pending/unknown attempts keep their original ID and are reconciled before another mutation is allowed.
