@@ -2,16 +2,17 @@
 
 import type { MouseEvent } from 'react';
 import { useSyncExternalStore } from 'react';
-import { BookOpen, CalendarDays, MessageSquare, Moon, Settings, Sun } from 'lucide-react';
+import { BookOpen, CalendarDays, GraduationCap, MessageSquare, Moon, Settings, Sun } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export type WorkspaceView = 'calendar' | 'courses' | 'chat' | 'settings';
+export type WorkspaceView = 'calendar' | 'planner' | 'courses' | 'chat' | 'settings';
 
 const destinations = [
   { view: 'chat', label: 'Chat', icon: MessageSquare },
   { view: 'calendar', label: 'Calendar', icon: CalendarDays },
+  { view: 'planner', label: 'Semester plan', icon: GraduationCap },
   { view: 'courses', label: 'Courses', icon: BookOpen },
   { view: 'settings', label: 'Settings', icon: Settings },
 ] satisfies { view: WorkspaceView; label: string; icon: typeof MessageSquare }[];

@@ -14,6 +14,7 @@ import { GoogleConnection } from '@/components/connections/google-connection';
 import { MoodleConnection } from '@/components/connections/moodle-connection';
 import { MoodleCalendarPreview } from '@/components/connections/moodle-calendar-preview';
 import { WorkspaceSidebar, type WorkspaceView } from './workspace-sidebar';
+import { SemesterPlanner } from '@/components/study/semester-planner';
 import { ProgressCardView } from './progress-cards';
 import { useStudyWorkspace } from '@/components/study/study-workspace-context';
 import type { ProgressReceipt } from '@polymate/contracts/study-progress';
@@ -130,7 +131,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   const workspace = useStudyWorkspace();
   const searchParams = useSearchParams();
   const requestedView = searchParams.get('view');
-  const view: WorkspaceView = requestedView === 'calendar' || requestedView === 'courses' || requestedView === 'settings' ? requestedView
+  const view: WorkspaceView = requestedView === 'calendar' || requestedView === 'courses' || requestedView === 'planner' || requestedView === 'settings' ? requestedView
     : searchParams.has('google') ? 'settings' : 'chat';
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
@@ -180,6 +181,13 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
 
   function respondToCoach(message: CoachReplyTarget) {
     setCoachReply(message); setInput('');
+    window.history.pushState(null, '', hrefFor('chat'));
+    window.scrollTo({ top: 0 });
+    window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
+  }
+
+  function openRecommendation(prompt: string) {
+    setInput(prompt);
     window.history.pushState(null, '', hrefFor('chat'));
     window.scrollTo({ top: 0 });
     window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
@@ -261,9 +269,10 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   const nextEventTime = nextEvent ? new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Zurich', weekday: 'long', hour: '2-digit', minute: '2-digit',
   }).format(new Date(nextEvent.startAt)) : null;
-  const pageTitle = view === 'calendar' ? 'Calendar' : view === 'courses' ? 'Courses' : 'Settings';
+  const pageTitle = view === 'calendar' ? 'Calendar' : view === 'courses' ? 'Courses' : view === 'planner' ? 'Semester plan' : 'Settings';
   const pageDescription = view === 'calendar' ? 'Your week, deadlines, and study blocks in one place.'
     : view === 'courses' ? 'Workload, exam scope, and preparation priorities for each course.'
+      : view === 'planner' ? 'Choose courses that fit your major, minor, and graduation path.'
       : 'Connections and preferences for your study space.';
 
   return <div className="min-h-dvh bg-background md:flex md:items-start">
@@ -294,6 +303,10 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
         </section>
 
         <section aria-label="Courses" className={view === 'courses' ? 'block' : 'hidden'}><CoursesPanel sample={sample} /></section>
+
+        <section aria-label="Semester planning" className={view === 'planner' ? '' : 'hidden'}>
+          <SemesterPlanner sample={sample} onRecommend={openRecommendation} />
+        </section>
 
         <section aria-labelledby="study-chat-title" className={view === 'chat' ? 'flex h-full min-h-0 flex-col' : 'hidden'}>
           <h2 id="study-chat-title" className="sr-only">Plan with PolyMate</h2>

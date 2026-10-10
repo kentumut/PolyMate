@@ -1,4 +1,7 @@
+import { AGENT_DELETE_LIMIT_PER_TURN } from './contracts';
 import { MOODLE_AGENT_TOOL_DEFINITIONS } from '../integrations/moodle/tools';
+import { VVZ_AGENT_TOOL_DEFINITIONS } from '../integrations/vvz/client';
+import { MSC_CS_GRADUATION_TOOL_DEFINITION } from '../integrations/vvz/graduation';
 
 export const POLYMATE_CONNECTIONS_TOOL_DEFINITION = {
   name: 'polymate_check_connections',
@@ -9,6 +12,8 @@ export const POLYMATE_CONNECTIONS_TOOL_DEFINITION = {
 /** Canonical allowlisted tool contracts shared with the OpenClaw tool plugin. */
 export const AGENT_TOOL_DEFINITIONS = [
   ...MOODLE_AGENT_TOOL_DEFINITIONS,
+  ...VVZ_AGENT_TOOL_DEFINITIONS,
+  MSC_CS_GRADUATION_TOOL_DEFINITION,
   POLYMATE_CONNECTIONS_TOOL_DEFINITION,
   {
     name: 'polymate_remember_student_context',
@@ -65,9 +70,9 @@ export const AGENT_TOOL_DEFINITIONS = [
   },
   {
     name: 'polymate_delete_study_blocks',
-    description: 'Delete existing PolyMate study blocks only when the student explicitly asks to delete or remove them. First retrieve their eventIds using polymate_get_calendar, then pass every block to delete in a single call. Personal Google events are read-only and cannot be deleted. The application supplies the owner, current etags, and stable retry operation IDs.',
+    description: `Delete existing PolyMate study blocks only when the student explicitly asks to delete or remove them. First retrieve their eventIds using polymate_get_calendar, then pass at most ${AGENT_DELETE_LIMIT_PER_TURN} blocks in a single call; each student message allows at most ${AGENT_DELETE_LIMIT_PER_TURN} deletions. Personal Google events are read-only and cannot be deleted. The application supplies the owner, current etags, and stable retry operation IDs.`,
     parameters: {
-      type: 'object', properties: { eventIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 50, uniqueItems: true } },
+      type: 'object', properties: { eventIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: AGENT_DELETE_LIMIT_PER_TURN, uniqueItems: true } },
       required: ['eventIds'], additionalProperties: false,
     },
   },

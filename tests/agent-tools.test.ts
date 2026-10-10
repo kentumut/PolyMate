@@ -73,6 +73,12 @@ describe('PolyMate agent tool routing', () => {
   it('rejects unknown tools, extra properties, and invalid timeline arguments before dispatch', () => {
     expect(() => parseAgentToolArguments('exec', {})).toThrow('not available');
     expect(() => parseAgentToolArguments('moodle_get_calendar_events', { ownerId: owner.userId })).toThrow('unsupported fields');
+    expect(() => parseAgentToolArguments('vvz_search_courses', {})).toThrow('at least one');
+    expect(() => parseAgentToolArguments('vvz_search_courses', { semester: '2026W', title: 'vision' })).not.toThrow();
+    expect(() => parseAgentToolArguments('vvz_get_course_details', { unitId: 204421 })).not.toThrow();
+    expect(() => parseAgentToolArguments('vvz_get_course_details', { unitId: '204421' })).toThrow('positive VVZ unitId');
+    expect(() => parseAgentToolArguments('msc_cs_check_graduation', { major: 'Machine Intelligence', minor: 'Computer Vision', courses: [{ unitId: 204421, status: 'in_progress' }] })).not.toThrow();
+    expect(() => parseAgentToolArguments('msc_cs_check_graduation', { major: 'Machine Intelligence', minor: 'Machine Learning', courses: [] })).toThrow('1 to 50');
     expect(() => parseAgentToolArguments('moodle_plan_assignment_timeline', {
       work: [{ assignmentId: 8, estimatedMinutes: 25 }], availability: [{ startAt: '2026-10-13T08:00:00Z', endAt: '2026-10-13T09:00:00Z', timezone: 'UTC' }],
     })).toThrow('only a start and end');
@@ -82,7 +88,8 @@ describe('PolyMate agent tool routing', () => {
     })).toThrow('unsupported fields');
     expect(() => parseAgentToolArguments('polymate_edit_study_block', { eventId: 'event' })).toThrow('Nothing to change');
     expect(() => parseAgentToolArguments('polymate_edit_study_block', { eventId: 'event', startAt: '2026-10-11T08:00:00Z' })).toThrow('together');
-    expect(() => parseAgentToolArguments('polymate_delete_study_blocks', { eventIds: [] })).toThrow('between 1 and 50');
+    expect(() => parseAgentToolArguments('polymate_delete_study_blocks', { eventIds: [] })).toThrow('between 1 and 3');
+    expect(() => parseAgentToolArguments('polymate_delete_study_blocks', { eventIds: ['a', 'b', 'c', 'd'] })).toThrow('between 1 and 3');
     expect(() => parseAgentToolArguments('polymate_delete_study_blocks', { eventIds: ['a', 'a'] })).toThrow('only once');
     expect(() => parseAgentToolArguments('polymate_delete_study_blocks', { eventIds: ['a'], ownerId: owner.userId })).toThrow('unsupported fields');
   });
@@ -372,6 +379,75 @@ describe('PolyMate agent tool routing', () => {
     await signedCall(retry.sessionKey, 'polymate_delete_study_blocks', { eventIds: [second.id] });
     expect(mocks.deleteStudyBlock.mock.calls[2][2]).toBe(mocks.deleteStudyBlock.mock.calls[1][2]);
     endAgentTurn(retry.sessionKey);
+  });
+
+  it('caps deletions per message and per day so one request cannot wipe the calendar', async () => {
+    const blocks = Array.from({ length: 12 }, (_, i) => ({ id: `block_${i}`, title: `Block ${i}`, startAt: `2026-10-11T${String(8 + i).padStart(2, '0')}:00:00.000Z`,
+      endAt: `2026-10-11T${String(8 + i).padStart(2, '0')}:50:00.000Z`, timezone: 'Europe/Zurich', allDay: false, completion: 'open', source: 'polymate', editable: true, etag: `etag-${i}` }));
+    mocks.listWeek.mockResolvedValue(blocks);
+    mocks.deleteStudyBlock.mockResolvedValue({ status: 'synced' });
+    const range = { from: '2026-10-11T00:00:00Z', to: '2026-10-12T00:00:00Z' };
+    const deleteTurn = async (ids: string[]) => {
+      const turn = beginAgentTurn(request(), owner, { message: 'Delete all my study blocks.' }).turn;
+      await signedCall(turn.sessionKey, 'polymate_get_calendar', range);
+      const result = await signedCall(turn.sessionKey, 'polymate_delete_study_blocks', { eventIds: ids });
+      return { turn, result };
+    };
+
+    const wipe = await deleteTurn(blocks.slice(0, 4).map(block => block.id));
+    expect(wipe.result.error?.message).toContain('between 1 and 3');
+    const first = await signedCall(wipe.turn.sessionKey, 'polymate_delete_study_blocks', { eventIds: blocks.slice(0, 2).map(block => block.id) });
+    expect(first.result).toMatchObject({ complete: true });
+    const second = await signedCall(wipe.turn.sessionKey, 'polymate_delete_study_blocks', { eventIds: blocks.slice(2, 4).map(block => block.id) });
+    expect(second.error).toMatchObject({ status: 429, message: expect.stringContaining('at most 3 study blocks per message') });
+    expect(mocks.deleteStudyBlock).toHaveBeenCalledTimes(2);
+    endAgentTurn(wipe.turn.sessionKey);
+
+    for (const start of [2, 5]) {
+      const { turn, result } = await deleteTurn(blocks.slice(start, start + 3).map(block => block.id));
+      expect(result.result).toMatchObject({ complete: true });
+      endAgentTurn(turn.sessionKey);
+    }
+    const nearLimit = await deleteTurn(blocks.slice(8, 11).map(block => block.id));
+    expect(nearLimit.result.error).toMatchObject({ status: 429, message: expect.stringContaining('2 are left') });
+    endAgentTurn(nearLimit.turn.sessionKey);
+    const last = await deleteTurn([blocks[8].id, blocks[9].id]);
+    expect(last.result.result).toMatchObject({ complete: true });
+    endAgentTurn(last.turn.sessionKey);
+    expect(mocks.deleteStudyBlock).toHaveBeenCalledTimes(10);
+
+    vi.setSystemTime(new Date('2026-10-11T06:00:01Z'));
+    const nextDay = await deleteTurn([blocks[10].id]);
+    expect(nextDay.result.result).toMatchObject({ complete: true });
+    endAgentTurn(nextDay.turn.sessionKey);
+  });
+
+  it('caps agent-created blocks per day without charging retries of uncertain writes twice', async () => {
+    const blockAt = (i: number) => ({ title: `Block ${i}`, startAt: new Date(Date.parse('2026-10-11T00:00:00Z') + i * 3600_000).toISOString(), endAt: new Date(Date.parse('2026-10-11T00:50:00Z') + i * 3600_000).toISOString() });
+    const create = async (message: string, i: number) => {
+      const turn = beginAgentTurn(request(), owner, { message }).turn;
+      const result = await signedCall(turn.sessionKey, 'polymate_create_study_block', blockAt(i));
+      endAgentTurn(turn.sessionKey);
+      return result;
+    };
+    mocks.createStudyBlock.mockResolvedValueOnce({ status: 'unknown' });
+    await create('Create a study block.', 0);
+    mocks.createStudyBlock.mockResolvedValue({ status: 'synced' });
+    expect((await create('Retry.', 0)).result).toMatchObject({ status: 'synced' });
+    mocks.createStudyBlock.mockResolvedValueOnce({ status: 'failed' });
+    await create('Create a study block.', 1);
+    for (let i = 1; i < 30; i++) expect((await create('Create a study block.', i)).result).toMatchObject({ status: 'synced' });
+    expect(mocks.createStudyBlock).toHaveBeenCalledTimes(32);
+
+    expect((await create('Create a study block.', 30)).error).toMatchObject({ status: 429, message: expect.stringContaining('0 are left') });
+    // A timeline write draws from the same budget, through both the model and the confirm button.
+    const turn = beginAgentTurn(request(), owner, { message: 'Plan my week.' }).turn;
+    mocks.executeMoodleTool.mockResolvedValueOnce(planResult());
+    await signedCall(turn.sessionKey, 'moodle_plan_assignment_timeline', planArgs);
+    endAgentTurn(turn.sessionKey);
+    await expect(scheduleCurrentPlan(request(), owner, false, timeline.id)).rejects.toThrow('per day');
+    expect(mocks.executeMoodleTool).toHaveBeenCalledTimes(1);
+    expect(mocks.createStudyBlock).toHaveBeenCalledTimes(32);
   });
 
   it('keeps prompt injection in retrieved Moodle text from granting calendar consent and overrides false model success claims', async () => {

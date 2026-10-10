@@ -1,9 +1,16 @@
 export const AGENT_MESSAGE_MAX_LENGTH = 4000;
 export const AGENT_TOOL_CALL_LIMIT = 8;
+/** Hard caps on agent calendar writes, so a misread request cannot flood or wipe a calendar. */
+export const AGENT_DELETE_LIMIT_PER_TURN = 3;
+export const AGENT_DAILY_CREATE_LIMIT = 30;
+export const AGENT_DAILY_DELETE_LIMIT = 10;
 export const AGENT_TOOL_NAMES = [
   'moodle_get_calendar_events',
   'moodle_plan_assignment_timeline',
   'moodle_schedule_assignment_timeline',
+  'vvz_search_courses',
+  'vvz_get_course_details',
+  'msc_cs_check_graduation',
   'polymate_check_connections',
   'polymate_remember_student_context',
   'polymate_get_calendar',

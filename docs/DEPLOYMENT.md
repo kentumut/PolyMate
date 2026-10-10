@@ -89,7 +89,7 @@ Keep each transferred bundle private. The deployment script resolves `FETCH_HEAD
 
 The script resolves an exact SHA, locks deployments with `flock`, checks production configuration, builds SHA-tagged images, starts/checks the database, takes a private backup, applies ordered migrations, starts web detached, and checks readiness, release SHA, and rejection of requests missing proxy identity. It records the healthy SHA in `.release/current` and retains `.release/previous`. Build/migration failure leaves the existing web process running. A readiness/smoke failure attempts to restore the recorded previous web image. A first deployment has no previous PolyMate image to restore; inspect and retry or restore the organizer template manually.
 
-Migrations must be additive and compatible with the previous release. The deployment script does not make a destructive migration safe. Keep `.env` and encryption keys stable; code rollback does not undo configuration changes. Do not prune current/previous images, or use volume deletion for recovery. `restart: unless-stopped` and detached Compose keep services running after SSH disconnects.
+Migrations must be additive and compatible with the previous release. The deployment script does not make a destructive migration safe. Keep `.env` and encryption keys stable; code rollback does not undo configuration changes. Do not prune current/previous images, or use volume deletion for recovery. `restart: unless-stopped` and detached Compose keep services running after SSH disconnects; see [automatic recovery](#automatic-recovery) for crashes, hangs, and reboots.
 
 Browser checks at the managed HTTPS address are separate gates: organizer login, correct displayed identity, a second student's isolation, and actual Google round trips once those features are merged. Inspect `docker compose ps`, `docker compose logs --tail=100 web`, and the liveness/ready routes privately. Readiness currently checks PostgreSQL; it does not claim Google is connected.
 
@@ -122,6 +122,28 @@ systemctl list-timers polymate-backup.timer
 ```
 
 The `viscon` user must already be able to use Docker and Node. Test `sudo systemctl start polymate-backup.service` and inspect its status. The first snapshot is also taken before every migration. This foundation has no file uploads; add their archive/checksums and isolated file-restore verification when that feature ships.
+
+## Automatic recovery
+
+Three layers bring the app back without anyone logging in:
+
+- **Crash:** every service uses `restart: unless-stopped`, so Docker restarts a container whose process exits. A container stopped on purpose with `docker compose stop` stays stopped.
+- **VM reboot:** the same policy restarts the containers when Docker starts. Confirm Docker itself starts on boot: `systemctl is-enabled docker` must print `enabled`; if not, run `sudo systemctl enable docker`.
+- **Hang:** Compose does not restart a container only because its healthcheck fails. `scripts/watchdog.sh` restarts any `polymate` container Docker reports as `unhealthy` (web after about 75 seconds of failed readiness checks, the gateway after about 150 seconds). It skips runs while a deployment holds `.release/deploy.lock`.
+
+Install the watchdog with the systemd timer, which runs every minute and two minutes after boot. Adjust the unit paths if the clone directory differs:
+
+```bash
+sudo install -m 644 ops/polymate-watchdog.service ops/polymate-watchdog.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now polymate-watchdog.timer
+systemctl list-timers polymate-watchdog.timer
+journalctl -u polymate-watchdog.service --since today
+```
+
+Without sudo, use the `viscon` crontab instead (not both): `* * * * * /home/viscon/polymate/scripts/watchdog.sh >> /home/viscon/polymate/backups/watchdog.log 2>&1`. Cron's minimal `PATH` must include `docker` and `flock`.
+
+Recovery checks before the demo: `docker kill polymate-web-1` (crash; back within seconds), `sudo kill -STOP "$(docker inspect -f '{{.State.Pid}}' polymate-web-1)"` (hang: the process freezes but keeps running; the watchdog restarts it within about two to three minutes), and `sudo reboot` (back after boot). Then load the managed address and run `SMOKE_MANAGED_IDENTITY=true node scripts/smoke.mjs`.
 
 ## CI and local container verification
 

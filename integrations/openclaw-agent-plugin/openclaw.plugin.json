@@ -1,7 +1,7 @@
 {
   "id": "polymate-agent",
   "name": "PolyMate Study Tools",
-  "description": "Owner-scoped Moodle study planning and connection status tools for PolyMate.",
+  "description": "Owner-scoped study planning, calendar, progress, ETH VVZ course discovery, and graduation-planning tools for PolyMate.",
   "version": "0.1.0",
   "configSchema": {
     "type": "object",
@@ -16,6 +16,9 @@
       "moodle_get_calendar_events",
       "moodle_plan_assignment_timeline",
       "moodle_schedule_assignment_timeline",
+      "vvz_search_courses",
+      "vvz_get_course_details",
+      "msc_cs_check_graduation",
       "polymate_check_connections",
       "polymate_remember_student_context",
       "polymate_get_study_progress",

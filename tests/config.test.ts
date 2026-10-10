@@ -30,5 +30,8 @@ describe('release configuration', () => {
       OPENCLAW_GATEWAY_TOKEN: 'b'.repeat(40), AGENT_CONTEXT_SECRET: 'c'.repeat(40), OPENCLAW_AGENT_BRIDGE_SECRET: 'd'.repeat(40) };
     expect(validateConfiguration(configured)).toEqual([]);
     expect(validateConfiguration({ ...configured, POLYMATE_LLM_MODEL: 'invalid' })).toContain('POLYMATE_LLM_MODEL must be openai/<model-id>.');
+    expect(validateConfiguration({ ...configured, POLYMATE_LLM_THINKING: 'minimal', POLYMATE_LLM_FAST: 'true' })).toEqual([]);
+    expect(validateConfiguration({ ...configured, POLYMATE_LLM_THINKING: 'ultra' })).toContain('POLYMATE_LLM_THINKING must be off, minimal, low, medium, or high.');
+    expect(validateConfiguration({ ...configured, POLYMATE_LLM_FAST: 'yes' })).toContain('POLYMATE_LLM_FAST must be true or false.');
   });
 });

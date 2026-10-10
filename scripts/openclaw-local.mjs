@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { spawnSync } from 'node:child_process';
-import { gatewayConfiguration, OPENCLAW_VERSION, DEFAULT_MODEL } from './openclaw-config.mjs';
+import { gatewayConfiguration, OPENCLAW_VERSION, DEFAULT_MODEL, DEFAULT_THINKING } from './openclaw-config.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const local = resolve(root, '.local/openclaw');
@@ -34,7 +34,9 @@ if (command === 'setup') {
   const installed = resolve(runtime, 'node_modules/openclaw/package.json');
   if (!existsSync(installed) || JSON.parse(readFileSync(installed)).version !== OPENCLAW_VERSION) {
     mkdirSync(runtime, { recursive: true });
-    const npm = spawnSync('npm', ['install', '--prefix', runtime, '--no-audit', '--no-fund', `openclaw@${OPENCLAW_VERSION}`], { stdio: 'inherit' });
+    const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const npm = spawnSync(npmCommand, ['install', '--prefix', runtime, '--no-audit', '--no-fund', `openclaw@${OPENCLAW_VERSION}`], { stdio: 'inherit', shell: process.platform === 'win32' });
+    if (npm.error) throw npm.error;
     if (npm.status !== 0) process.exit(npm.status ?? 1);
   }
   cpSync(resolve(root, 'integrations/openclaw-agent-plugin'), pluginPath, { recursive: true });
@@ -52,6 +54,7 @@ if (command === 'setup') {
   chmodSync(webPath, 0o600);
   mkdirSync(state, { recursive: true, mode: 0o700 });
   writeFileSync(env.OPENCLAW_CONFIG_PATH, JSON.stringify(gatewayConfiguration({ model: provider.POLYMATE_LLM_MODEL || DEFAULT_MODEL,
+    thinking: provider.POLYMATE_LLM_THINKING || DEFAULT_THINKING, fastMode: provider.POLYMATE_LLM_FAST === 'true',
     pluginPath, workspace: resolve(state, 'workspace') }), null, 2) + '\n', { mode: 0o600 });
   console.log('Local gateway configured. Add your key in .local/openclaw/provider.env, run pnpm agent:start, and restart pnpm dev.');
 } else if (command === 'start' || command === 'validate') {

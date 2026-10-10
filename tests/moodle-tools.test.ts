@@ -25,13 +25,28 @@ describe('Moodle assignment planning and calendar tools', () => {
     expect(plan.blocks[0].sourceUrl).toContain('moodle.test');
   });
 
+  it('refuses to draft or write a timeline with more than 20 study blocks', async () => {
+    const big = { ...snapshot, assignments: [{ ...snapshot.assignments[0], dueAt: '2026-10-20T00:00:00Z' }] };
+    const tools = new MoodleAgentTools('owner', { ...reader(), snapshot: vi.fn().mockResolvedValue(big) }, new FakeCalendarClient([]), now);
+    const day = (d: number) => ({ startAt: `2026-10-1${d}T08:00:00Z`, endAt: `2026-10-1${d}T18:00:00Z` });
+    const request = (minutes: number) => ({ work: [{ assignmentId: 9, estimatedMinutes: minutes }], availability: [day(1), day(2), day(3)] });
+    expect((await tools.planAssignments(request(1000))).blocks).toHaveLength(20);
+    await expect(tools.planAssignments(request(1010))).rejects.toThrow('at most 20 study blocks');
+    const plan = await tools.planAssignments(request(1000));
+    const calendar = new FakeCalendarClient([]);
+    const writer = new MoodleAgentTools('owner', { ...reader(), snapshot: vi.fn().mockResolvedValue(big) }, calendar, now);
+    await expect(writer.scheduleTimeline({ ...plan, blocks: [...plan.blocks, { ...plan.blocks[0], operationId: 'extra' }] })).rejects.toThrow('at most 20 study blocks');
+    expect(await calendar.listWeek({ from: '2026-10-11T00:00:00Z', to: '2026-10-14T00:00:00Z' })).toHaveLength(0);
+  });
+
   it('reports insufficient capacity and requires explicit partial scheduling', async () => {
     const tools = new MoodleAgentTools('owner', reader(), new FakeCalendarClient([]), now);
     const plan = await tools.planAssignments({ ...input, availability: [{ startAt: '2026-10-10T13:30:00Z', endAt: '2026-10-10T15:00:00Z' }] });
     expect(plan.blocks[0].endAt).toBe('2026-10-10T14:00:00.000Z');
     expect(plan.unscheduled[0].remainingMinutes).toBe(70);
     await expect(tools.scheduleTimeline(plan)).rejects.toThrow('cannot fit');
-    expect((await tools.scheduleTimeline(plan, true)).complete).toBe(false);
+    // The approved partial request is fully done once every fitting block is written.
+    expect((await tools.scheduleTimeline(plan, true)).complete).toBe(true);
   });
 
   it('uses student extensions, excludes submitted work, and refuses changed deadlines', async () => {
