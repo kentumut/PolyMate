@@ -5,6 +5,7 @@ import type { Assignment, AssignmentInput, AssignmentStatus } from '@polymate/co
 import { AssignmentDialog } from './assignment-dialog';
 import { AssignmentSaveError, createAssignmentClient, createSampleAssignmentClient, type AssignmentFixtureOutcome } from './assignment-client';
 import { useStudyWorkspace } from './study-workspace-context';
+import { PlanningPanel } from './planning-panel';
 
 const deadlineFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', dateStyle: 'medium', timeStyle: 'short' });
 const statusLabels: Record<AssignmentStatus, string> = { open: 'Open', in_progress: 'In progress', completed: 'Completed', cancelled: 'Cancelled' };
@@ -15,7 +16,7 @@ function mergeAssignments(fetched: Assignment[], confirmed: Iterable<Assignment>
   return [...byId.values()].sort((a, b) => a.dueAt.localeCompare(b.dueAt) || a.id.localeCompare(b.id));
 }
 
-export function AssignmentsPanel({ sample = false }: { sample?: boolean }) {
+export function AssignmentsPanel({ sample = false, onCalendarChange = () => {} }: { sample?: boolean; onCalendarChange?: () => void }) {
   const workspace = useStudyWorkspace();
   const [source] = useState(() => {
     if (workspace) return workspace.assignmentSource;
@@ -110,6 +111,7 @@ export function AssignmentsPanel({ sample = false }: { sample?: boolean }) {
       </li>;
       })}
     </ul>
+    {!sample && <PlanningPanel onCalendarChange={onCalendarChange} />}
     <AssignmentDialog open={open} onClose={() => setOpen(false)} onCreateAssignment={create} fixtureMode={sample} />
   </section>;
 }

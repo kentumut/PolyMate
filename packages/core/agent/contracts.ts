@@ -28,7 +28,17 @@ export function parseAgentChatRequest(value: unknown): AgentChatRequest {
 
 export function isExplicitCalendarConsent(message: string): boolean {
   if (hasConsentQualifier(message)) return false;
+  if (currentPlanApproval(message)?.allowPartial === false) return true;
   return /\b(add|put|schedule)\b.{0,80}\b(calendar|blocks?|timeline|study sessions?)\b|\b(add it|add them|schedule it|schedule them)\b.{0,40}\b(calendar|now|please)\b/i.test(message);
+}
+
+/** Only complete approval commands may bypass the model; revisions must not apply an old draft. */
+export function currentPlanApproval(message: string): { allowPartial: boolean } | null {
+  if (hasConsentQualifier(message)) return null;
+  const text = message.trim();
+  if (/^(?:please\s+)?(?:schedule|add)\s+(?:it|them|(?:this|the)\s+(?:plan|timeline|blocks))(?:\s+to\s+(?:my\s+|the\s+)?calendar)?(?:\s+(?:now|please))?[.!\s]*$/i.test(text)) return { allowPartial: false };
+  if (/^(?:please\s+)?(?:schedule|add)\s+only the blocks? that fit(?:\s+to\s+(?:my\s+|the\s+)?calendar)?(?:\s+(?:now|please))?[.!\s]*$/i.test(text)) return { allowPartial: true };
+  return null;
 }
 
 export function isExplicitPartialConsent(message: string): boolean {

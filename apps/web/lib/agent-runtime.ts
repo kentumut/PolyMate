@@ -163,7 +163,8 @@ export async function callOpenClawAgent(input: {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
-        'x-openclaw-session-key': input.sessionKey,
+        'x-openclaw-agent-id': openClawModelId().slice('openclaw/'.length),
+        'x-openclaw-session-key': `agent:${openClawModelId().slice('openclaw/'.length)}:${input.sessionKey}`,
       },
       body: JSON.stringify({
         model: openClawModelId(),
@@ -222,7 +223,7 @@ export function beginAgentTurn(request: NextRequest, owner: OwnerContext, raw: u
     owner, request, message: parsed.message, sessionKey, toolCalls: 0, consecutiveFailures: 0,
     explicitConsent, partialConsent, cards: [], toolInFlight: false, calendarEvents: new Map(), progressAssignmentIds: new Set(),
     history: runtime.histories.get(owner.userId)?.messages ?? [],
-    draftContext: pending ? JSON.stringify({ timeline: pending.timeline, planToken: pending.token, expiresAt: new Date(pending.expiresAt).toISOString() }) : undefined,
+    draftContext: pending ? JSON.stringify({ timeline: pending.timeline, planToken: pending.timeline.id, expiresAt: new Date(pending.expiresAt).toISOString() }) : undefined,
     privateValues: new Set([sessionKey, ...(pending ? [pending.token] : [])]), expiresAt: Date.now() + CHAT_TIMEOUT_MS,
   };
   runtime.activeTurns.set(sessionKey, turn);
@@ -355,11 +356,12 @@ async function foregroundTool(turn: ActiveTurn, name: AgentToolName, args: Recor
       const cardData = { timeline: result.timeline, expiresAt: result.expiresAt };
       turn.cards.push({ kind: 'timeline', data: cardData });
       turn.consecutiveFailures = 0;
-      // The sealed token goes only to the OpenClaw tool loop, never to the browser response.
-      return result;
+      // Keep the sealed payload server-side; the tool loop echoes only a short,
+      // owner-scoped reference, even for timelines containing many blocks.
+      return { ...cardData, planToken: pending.timeline.id };
     }
     const pending = runtime.pendingPlans.get(turn.owner.userId);
-    if (!pending || pending.expiresAt <= Date.now() || args.planToken !== pending.token) {
+    if (!pending || pending.expiresAt <= Date.now() || (args.planToken !== pending.timeline.id && args.planToken !== pending.token)) {
       throw new AgentRequestError('That draft is no longer available. Generate a fresh timeline before scheduling.');
     }
     const partialAllowed = args.allowPartial === true && (turn.partialConsent || pending.partialConsentGranted);

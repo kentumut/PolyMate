@@ -41,6 +41,10 @@ try {
   const count = await client.query("select count(*)::int as count from polymate_migration_probe");
   const failed = await client.query("select to_regclass($1) as name", ["polymate_failed_migration_probe"]);
   if (count.rows[0].count !== 1 || failed.rows[0].name !== null) throw new Error("Migration repeatability or rollback failed.");
+  for (const table of ["study_preferences", "study_plans", "study_plan_blocks"]) {
+    const found = await client.query("select to_regclass($1) as name", [table]);
+    if (found.rows[0].name === null) throw new Error(`Planner migration did not create ${table}.`);
+  }
 } finally { await client.end(); }
 '
 EXPECTED_RELEASE_SHA="$RELEASE_SHA" SMOKE_MANAGED_IDENTITY=true node scripts/smoke.mjs

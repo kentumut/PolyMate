@@ -52,6 +52,18 @@ export class CalendarService implements CalendarClient {
     return this.map(await this.ownedEvent(parseEventId(id)));
   }
 
+  /** Planning reads current linked blocks, including completed work outside the visible week. */
+  async getStudyBlock(id: string): Promise<CalendarEvent | null> {
+    const event = await this.api.get(parseEventId(id));
+    return event && isOwnedStudyBlock(event, this.ownerId) ? this.map(event) : null;
+  }
+
+  async listBusy(range: DateRange): Promise<CalendarEvent[]> {
+    range = parseDateRange(range);
+    const events = await this.api.list(range.from, range.to);
+    return events.filter(blocksTime).flatMap(event => toCalendarEvent(event, this.ownerId) ?? []);
+  }
+
   createStudyBlock(input: StudyBlockInput, operationId: string): Promise<OperationResult> {
     input = parseStudyBlockInput(input);
     operationId = parseOperationId(operationId);

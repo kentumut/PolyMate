@@ -1,5 +1,7 @@
 # PolyMate
 
+For real local OpenAI/OpenClaw testing and production configuration, see [LOCAL_AI_TESTING.md](docs/LOCAL_AI_TESTING.md).
+
 An AI study companion for ETH students with a weekly calendar, Moodle calendar subscriptions, and an OpenClaw-backed study chat.
 
 **Current status:** Iteration 1 is complete: the Google-connected calendar passed live acceptance on 10 October 2026. See the [acceptance results](docs/ITERATION_1_ACCEPTANCE.md). Iteration 2 is the next roadmap milestone: deadlines, availability, plan preview, and approved Google study blocks. Moodle and AI integrations are implemented separately; their live acceptance is not covered by the calendar checks.
@@ -10,6 +12,7 @@ An AI study companion for ETH students with a weekly calendar, Moodle calendar s
 - [VM deployment and recovery](docs/DEPLOYMENT.md)
 - [Product specification](docs/POLYMATE_SPEC.md) and [implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [AI agent and OpenClaw setup](docs/AI_AGENT_HANDOFF.md)
+- [Iteration 2 planner implementation](docs/ITERATION_2_HANDOFF.md)
 - [Full project overview](docs/README.md)
 - [Moodle calendar subscriptions and study planning](docs/MOODLE_AI_INTEGRATION.md)
 
