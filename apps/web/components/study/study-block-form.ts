@@ -5,6 +5,8 @@ export const STUDY_TIMEZONE = 'Europe/Zurich' as const;
 
 export type StudyBlockInput = CalendarStudyBlockInput & {
   timezone: typeof STUDY_TIMEZONE;
+  assignmentId?: string;
+  expectedAssignmentVersion?: number;
 };
 
 // Allow older dialog fixtures to omit allDay while sharing the canonical event fields.

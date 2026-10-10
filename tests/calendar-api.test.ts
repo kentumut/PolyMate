@@ -9,6 +9,7 @@ import { CalendarBusyError } from '../packages/core/calendar/operations';
 
 const mocks = vi.hoisted(() => ({ token: vi.fn(), begin: vi.fn(), finish: vi.fn(), lock: vi.fn() }));
 vi.mock('../packages/db/src/google-oauth', () => ({ getValidAccessToken: mocks.token }));
+vi.mock('../packages/db/src/study-progress', () => ({ observeStudyCalendarChange: vi.fn(), syncStudyCalendarRead: vi.fn(), reserveBlockAssignment: vi.fn() }));
 vi.mock('../packages/db/src/calendar-operations', () => ({ calendarOperationStore: {
   withOwnerLock: (owner: string, run: () => Promise<unknown>) => mocks.lock(owner, run),
   begin: mocks.begin, finish: mocks.finish,
