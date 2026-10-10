@@ -27,7 +27,7 @@ vi.mock('../packages/db/src/coaching', () => ({ rememberStudentContext: mocks.re
 vi.mock('../apps/web/lib/calendar-route', () => ({ calendarServiceFor: () => mocks, calendarError: () => Response.json({ error: { message: 'Calendar unavailable.' } }, { status: 502 }) }));
 
 import { AGENT_SYSTEM_INSTRUCTIONS, VVZ_ROUTING_INSTRUCTIONS, agentAppContext, agentResponseBody, beginAgentTurn, callOpenClawAgent, dispatchOpenClawTool, endAgentTurn, parseAgentToolArguments, publicPendingPlan, scheduleCurrentPlan } from '../apps/web/lib/agent-runtime';
-import { currentPlanApproval, isExplicitCalendarConsent, isExplicitDeleteConsent, isExplicitPartialConsent } from '../packages/core/agent/contracts';
+import { currentPlanApproval, followsUpOnRequest, isCreateBlockRequest, isExplicitCalendarConsent, isExplicitDeleteConsent, isExplicitPartialConsent } from '../packages/core/agent/contracts';
 
 const contextSecret = 'agent-context-test-secret-that-is-long-enough';
 const bridgeSecret = 'agent-bridge-test-secret-that-is-long-enough';
@@ -106,6 +106,20 @@ describe('PolyMate agent tool routing', () => {
     expect(isExplicitDeleteConsent("Don't delete my study blocks.")).toBe(false);
     expect(isExplicitDeleteConsent('What would deleting a block do?')).toBe(false);
     expect(isExplicitDeleteConsent('Show my calendar.')).toBe(false);
+  });
+
+  it('lets a follow-up complete a single-block request without restating it', () => {
+    expect(isCreateBlockRequest('add an hour for my exam on next thursday')).toBe(true);
+    expect(isCreateBlockRequest('Could you add a study block when I am free on Friday?')).toBe(true);
+    expect(isCreateBlockRequest("Don't add anything yet.")).toBe(false);
+    const history = ['add an hour for my exam on next thursday'];
+    expect(followsUpOnRequest('16;17', history, isCreateBlockRequest)).toBe(true);
+    expect(followsUpOnRequest('yes', ['add an hour for my exam on next thursday', '16;17'], isCreateBlockRequest)).toBe(true);
+    expect(followsUpOnRequest('no, not that day', history, isCreateBlockRequest)).toBe(false);
+    expect(followsUpOnRequest('16;17', ['Show my calendar.'], isCreateBlockRequest)).toBe(false);
+    expect(followsUpOnRequest('16;17', [...history, 'Show my calendar.', 'What is due?'], isCreateBlockRequest)).toBe(false);
+    expect(followsUpOnRequest('yes', ['Remove the study blocks on Sunday.'], isExplicitDeleteConsent, true)).toBe(true);
+    expect(followsUpOnRequest('the morning ones', ['Remove the study blocks on Sunday.'], isExplicitDeleteConsent, true)).toBe(false);
   });
 
   it('persists only memory supported by an exact quote from the current student message', async () => {
@@ -323,7 +337,7 @@ describe('PolyMate agent tool routing', () => {
   it('creates and edits owner-scoped blocks with explicit consent and stable retry metadata', async () => {
     const block = { title: 'Review analysis', startAt: '2026-10-11T08:00:00.000Z', endAt: '2026-10-11T08:50:00.000Z' };
     const denied = beginAgentTurn(request(), owner, { message: 'What would creating a block do?' }).turn;
-    expect((await signedCall(denied.sessionKey, 'polymate_create_study_block', block)).error?.message).toContain('explicitly request');
+    expect((await signedCall(denied.sessionKey, 'polymate_create_study_block', block)).error?.message).toContain('has not asked to add');
     endAgentTurn(denied.sessionKey);
 
     const first = beginAgentTurn(request(), owner, { message: 'Create a study block tomorrow from 10:00 to 10:50.' }).turn;

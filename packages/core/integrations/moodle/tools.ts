@@ -5,6 +5,20 @@ import { freeStudyGaps } from '../../scheduling/allocator';
 
 const MINUTE = 60000;
 const MAX_DAYS = 42;
+/** Shorter sessions aren't worth the context switch; longer ones lose focus. Blocks are separated by a break. */
+const MIN_BLOCK = 30, MAX_BLOCK = 90, BREAK = 10;
+
+/** Even session length for the whole effort, e.g. 100 min → 50 + 50 rather than 90 + 10. */
+function sessionMinutes(effort: number): number {
+  return Math.min(effort, Math.ceil(effort / Math.ceil(effort / MAX_BLOCK) / 10) * 10);
+}
+
+/** Longest block up to `target` that fits `available` without leaving a stub under MIN_BLOCK; 0 when none fits. */
+function fitBlock(remaining: number, available: number, target: number): number {
+  let minutes = Math.min(target, remaining, Math.floor(available / 10) * 10);
+  if (remaining - minutes > 0 && remaining - minutes < MIN_BLOCK) minutes = remaining - MIN_BLOCK;
+  return minutes >= Math.min(MIN_BLOCK, remaining) ? minutes : 0;
+}
 /** One approval must never flood the calendar; larger plans are split across shorter periods. */
 export const MAX_TIMELINE_BLOCKS = 20;
 const TOO_MANY_BLOCKS = `A timeline can add at most ${MAX_TIMELINE_BLOCKS} study blocks. Plan a shorter period or fewer assignments at a time.`;
@@ -73,23 +87,32 @@ export class MoodleAgentTools {
           ? dueAt ? 'Calendar date has passed.' : 'No exact planning target time.'
           : dueAt ? 'Deadline has passed.' : 'No verified deadline.' }); continue;
       }
-      for (const window of input.availability) {
-        const cursor = Math.max(Date.parse(window.startAt), Date.parse(assignment.opensAt ?? window.startAt));
-        const limit = Math.min(Date.parse(window.endAt), Date.parse(dueAt));
-        // Subtract all known calendar intervals, including all-day events and previously allocated blocks.
-        const occupied = [...busy, ...timeline.blocks].sort((a, b) => a.startAt.localeCompare(b.startAt));
-        const gaps = freeStudyGaps({ startAt: new Date(cursor).toISOString(), endAt: new Date(limit).toISOString() }, occupied);
-        for (const [start, end] of gaps) {
-          let position = start;
-          while (remaining >= 10 && position + 10 * MINUTE <= end) {
-            const minutes = Math.min(50, remaining, Math.floor((end - position) / (10 * MINUTE)) * 10);
-            const block = { assignmentId: assignment.id, sourceUrl: assignment.sourceUrl,
-              title: `${assignment.courseName}: ${assignment.title}`.slice(0, 200),
-              startAt: new Date(position).toISOString(), endAt: new Date(position + minutes * MINUTE).toISOString(), operationId: '' };
-            block.operationId = operationId(JSON.stringify([this.ownerId, assignment.id, block.startAt, block.endAt, block.title]));
-            timeline.blocks.push(block); remaining -= minutes; position += (minutes + 10) * MINUTE;
-            if (timeline.blocks.length > MAX_TIMELINE_BLOCKS) throw new ContractError(TOO_MANY_BLOCKS);
+      // First look for gaps that hold a whole session; only then split work into the leftover gaps.
+      const target = sessionMinutes(remaining);
+      for (const wholeSessionsOnly of [true, false]) {
+        for (const window of input.availability) {
+          const cursor = Math.max(Date.parse(window.startAt), Date.parse(assignment.opensAt ?? window.startAt));
+          const limit = Math.min(Date.parse(window.endAt), Date.parse(dueAt));
+          // Subtract all known calendar intervals, including all-day events and previously allocated blocks plus their breaks.
+          const occupied = [...busy, ...timeline.blocks.map(block => ({
+            startAt: new Date(Date.parse(block.startAt) - BREAK * MINUTE).toISOString(),
+            endAt: new Date(Date.parse(block.endAt) + BREAK * MINUTE).toISOString(),
+          }))].sort((a, b) => a.startAt.localeCompare(b.startAt));
+          const gaps = freeStudyGaps({ startAt: new Date(cursor).toISOString(), endAt: new Date(limit).toISOString() }, occupied);
+          for (const [start, end] of gaps) {
+            let position = start;
+            while (remaining > 0) {
+              const minutes = fitBlock(remaining, (end - position) / MINUTE, target);
+              if (!minutes || (wholeSessionsOnly && minutes < Math.min(target, remaining))) break;
+              const block = { assignmentId: assignment.id, sourceUrl: assignment.sourceUrl,
+                title: `${assignment.courseName}: ${assignment.title}`.slice(0, 200),
+                startAt: new Date(position).toISOString(), endAt: new Date(position + minutes * MINUTE).toISOString(), operationId: '' };
+              block.operationId = operationId(JSON.stringify([this.ownerId, assignment.id, block.startAt, block.endAt, block.title]));
+              timeline.blocks.push(block); remaining -= minutes; position += (minutes + BREAK) * MINUTE;
+              if (timeline.blocks.length > MAX_TIMELINE_BLOCKS) throw new ContractError(TOO_MANY_BLOCKS);
+            }
           }
+          if (!remaining) break;
         }
         if (!remaining) break;
       }
