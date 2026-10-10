@@ -10,6 +10,7 @@ An AI study companion for ETH students with a weekly calendar, Moodle calendar s
 - [VM deployment and recovery](docs/DEPLOYMENT.md)
 - [Product specification](docs/POLYMATE_SPEC.md) and [implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [AI agent and OpenClaw setup](docs/AI_AGENT_HANDOFF.md)
+- [Iteration 2 planner implementation](docs/ITERATION_2_HANDOFF.md)
 - [Full project overview](docs/README.md)
 - [Moodle calendar subscriptions and study planning](docs/MOODLE_AI_INTEGRATION.md)
 

@@ -8,7 +8,8 @@
     "./calendar": "./src/calendar.ts",
     "./time": "./src/time.ts",
     "./http-client": "./src/http-client.ts",
-    "./moodle": "./src/moodle.ts"
+    "./moodle": "./src/moodle.ts",
+    "./planning": "./src/planning.ts"
   },
   "scripts": { "typecheck": "tsc --noEmit" }
 }

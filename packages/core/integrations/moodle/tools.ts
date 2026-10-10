@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ContractError, parseInstant, type CalendarClient, type CalendarEvent } from '@polymate/contracts/calendar';
 import type { AssignmentTimeline, MoodleReader, ScheduledTimeline, TimelineRequest } from '@polymate/contracts/moodle';
+import { freeStudyGaps } from '../../scheduling/allocator';
 
 const MINUTE = 60000;
 const MAX_DAYS = 42;
@@ -70,18 +71,11 @@ export class MoodleAgentTools {
           : dueAt ? 'Deadline has passed.' : 'No verified deadline.' }); continue;
       }
       for (const window of input.availability) {
-        let cursor = Math.max(Date.parse(window.startAt), Date.parse(assignment.opensAt ?? window.startAt));
+        const cursor = Math.max(Date.parse(window.startAt), Date.parse(assignment.opensAt ?? window.startAt));
         const limit = Math.min(Date.parse(window.endAt), Date.parse(dueAt));
         // Subtract all known calendar intervals, including all-day events and previously allocated blocks.
         const occupied = [...busy, ...timeline.blocks].sort((a, b) => a.startAt.localeCompare(b.startAt));
-        const gaps: [number, number][] = [];
-        for (const event of occupied) {
-          const start = Date.parse(event.startAt); const end = Date.parse(event.endAt);
-          if (end <= cursor || start >= limit) continue;
-          if (start > cursor) gaps.push([cursor, Math.min(start, limit)]);
-          cursor = Math.max(cursor, end);
-        }
-        if (cursor < limit) gaps.push([cursor, limit]);
+        const gaps = freeStudyGaps({ startAt: new Date(cursor).toISOString(), endAt: new Date(limit).toISOString() }, occupied);
         for (const [start, end] of gaps) {
           let position = start;
           while (remaining >= 10 && position + 10 * MINUTE <= end) {

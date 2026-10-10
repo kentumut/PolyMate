@@ -185,7 +185,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
               <span>Assignments <span className="ml-2 hidden font-normal text-[#748278] sm:inline">Deadlines and effort estimates</span></span>
               <span className="text-xl leading-none text-[#748278] transition-transform group-open:rotate-45" aria-hidden="true">+</span>
             </summary>
-            <div className="border-t border-[#e5eae4] [&>section]:border-0 [&>section]:bg-transparent"><AssignmentsPanel sample={sample} /></div>
+            <div className="border-t border-[#e5eae4] [&>section]:border-0 [&>section]:bg-transparent"><AssignmentsPanel sample={sample} onCalendarChange={() => setReloadKey(value => value + 1)} /></div>
           </details>
           {sample && <p className="text-xs text-[#8a5a26]">Development sample calendar. Changes stay in memory.</p>}
         </section>

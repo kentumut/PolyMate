@@ -9,6 +9,7 @@ PolyMate is a proactive AI study companion for ETH CS bachelor's and master's st
 - [Parallel development and merging](../CONTRIBUTING.md): each person's branch, file boundaries, commands, review pairs, and merge order.
 - [Kent's implementation handoff](KENT_HANDOFF.md): implemented infrastructure and remaining teammate dependencies.
 - [Manual assignment entry](ASSIGNMENT_ENTRY_HANDOFF.md): assignment form/list, persistence API, migration, and testing instructions for iteration 2.
+- [Iteration 2 planning](ITERATION_2_HANDOFF.md): manual assignments, saved availability, durable previews, approved Google writes, and remaining acceptance work.
 - [Session progress and recovery](STUDY_PROGRESS_HANDOFF.md): assignment-linked reports, missed-session moves, remaining effort, and agent activity interfaces.
 - [Deployment and recovery](DEPLOYMENT.md): VM setup, SHA releases, backup/restore, and rollback.
 - [Product specification](POLYMATE_SPEC.md): agreed student experience, hackathon scope, and success criteria.
