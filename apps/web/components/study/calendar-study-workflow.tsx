@@ -4,14 +4,17 @@ import type { CalendarEvent } from '@polymate/contracts/calendar';
 import { HttpCalendarClient } from '@polymate/contracts/http-client';
 import { weekRange, zonedParts, zonedTimeToInstant } from '@polymate/contracts/time';
 import { FakeCalendarClient } from '@polymate/core/calendar/fake';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CalendarPanel } from '@/components/calendar/calendar-panel';
 import { StudyBlockDialog } from './study-block-dialog';
 import type { StudyBlockOperationResult } from './study-block-form';
 import { createStudyCalendarClient } from './study-calendar-client';
+import { useStudyWorkspace } from './study-workspace-context';
+import { StudyProgressPanel } from './study-progress-panel';
 
 export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }: { sample?: boolean; externalReloadKey?: number }) {
-  const [readClient] = useState(() => sample ? new FakeCalendarClient(undefined, 250) : new HttpCalendarClient());
+  const workspace = useStudyWorkspace();
+  const [readClient] = useState(() => workspace?.calendarClient ?? (sample ? new FakeCalendarClient(undefined, 250) : new HttpCalendarClient()));
   const [client] = useState(() => createStudyCalendarClient(sample ? { calendarClient: readClient } : {}));
   const [range, setRange] = useState(() => weekRange());
   const [reloadKey, setReloadKey] = useState(0);
@@ -23,9 +26,15 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
   const [recoveryError, setRecoveryError] = useState('');
   const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [progressBusy, setProgressBusy] = useState(false);
+  const [progressNotice, setProgressNotice] = useState('');
+  const [assignmentSelection, setAssignmentSelection] = useState<{ id: string; version: number } | null>(null);
+  const focusStart = useRef<(() => void) | null>(null);
+  const receiveFocusStart = useCallback((focus: () => void) => { focusStart.current = focus; }, []);
   const running = useRef(false);
   const blocking = client.getBlockingOperation();
-  const disabled = !ready || busy || checking || Boolean(blocking);
+  const pendingReport = workspace?.progressClient.getPendingReport();
+  const disabled = !ready || busy || progressBusy || checking || Boolean(blocking) || Boolean(pendingReport);
 
   useEffect(() => {
     let current = true;
@@ -39,6 +48,11 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
     window.addEventListener('focus', refresh);
     return () => window.removeEventListener('focus', refresh);
   }, []);
+
+  const refreshProgress = workspace?.refresh;
+  useEffect(() => {
+    if (externalReloadKey) void Promise.resolve().then(() => refreshProgress?.());
+  }, [externalReloadKey, refreshProgress]);
 
   async function retryRecovery() {
     if (checking) return;
@@ -57,6 +71,7 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
     setSelectedEvent(event);
     setResult(undefined);
     if (!event) {
+      setAssignmentSelection(null);
       const now = Date.now();
       const start = now >= Date.parse(range.from) && now < Date.parse(range.to)
         ? new Date(Math.ceil(now / 900000) * 900000).toISOString()
@@ -66,7 +81,8 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
     setOpen(true);
   }
 
-  async function perform(execute: () => Promise<StudyBlockOperationResult>) {
+  async function perform(execute: () => Promise<StudyBlockOperationResult>, kind: 'create' | 'update' | 'complete' | 'delete', targetId: string | null = null) {
+    if (workspace?.progressClient.getPendingReport()) return { operationId: crypto.randomUUID(), status: 'failed' as const, error: { message: 'Confirm the outstanding progress report before changing the calendar.' } };
     const outstanding = client.getBlockingOperation();
     if (outstanding) return outstanding;
     if (running.current) throw new Error('A calendar change is already running.');
@@ -74,8 +90,9 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
     setBusy(true);
     try {
       const next = await execute();
+      workspace?.observe(kind, targetId, next as import('@polymate/contracts/calendar').OperationResult);
       setResult(next);
-      if (next.status === 'synced') setReloadKey(key => key + 1);
+      if (next.status === 'synced') { setReloadKey(key => key + 1); void workspace?.refresh(); }
       return next;
     } finally { running.current = false; setBusy(false); }
   }
@@ -88,8 +105,20 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
       const next = await client.reconcile(outstanding.operationId);
       setResult(next);
       if (next.status === 'synced') setReloadKey(key => key + 1);
+      void workspace?.refresh();
       return next;
     } finally { setChecking(false); }
+  }
+
+  async function retryReport() {
+    if (!workspace || progressBusy) return;
+    setProgressBusy(true);
+    try {
+      const receipt = await workspace.progressClient.retry();
+      if (receipt.calendarOperation) client.trackOperation(receipt.calendarOperation);
+      setProgressNotice('Progress report confirmed.'); setReloadKey(key => key + 1); await workspace.refresh();
+    } catch (error) { setProgressNotice(error instanceof Error ? error.message : 'Report could not be confirmed.'); }
+    finally { setProgressBusy(false); }
   }
 
   return <div className="min-w-0 space-y-3">
@@ -108,13 +137,39 @@ export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }:
       {blocking.status === 'unknown' ? 'A calendar change is uncertain.' : 'A calendar change is pending.'} Check its outcome before making another change.
       <button type="button" onClick={reconcile} disabled={busy || checking} className="ml-2 underline disabled:opacity-50">{checking ? 'Checking…' : 'Check change'}</button>
     </div>}
+    {pendingReport && !open && <p role="status" className="rounded-lg border border-[#c8d3c8] bg-white p-3 text-sm">A progress report is unconfirmed. <button type="button" disabled={progressBusy} onClick={retryReport} className="underline">Retry the original report</button></p>}
+    {progressNotice && !open && <p role="status" className="text-sm">{progressNotice}</p>}
     {!open && result && !blocking && <p role="status" className="text-sm text-[#617269]">{result.status === 'synced' ? sample ? 'Sample calendar change confirmed.' : 'Google Calendar change confirmed.' : result.error?.message}</p>}
     <CalendarPanel client={readClient} sample={sample} onSelect={event => show(event)} onRangeChange={setRange} reloadKey={reloadKey + externalReloadKey} />
     <StudyBlockDialog open={open} selectedEvent={selectedEvent} initialStartAt={initialStartAt}
-      onClose={() => setOpen(false)} onCreate={input => perform(() => client.onCreate(input))}
-      onUpdate={(id, input, etag) => perform(() => client.onUpdate(id, input, etag))}
-      onComplete={(id, etag) => perform(() => client.onComplete(id, etag))}
-      onDelete={(id, etag) => perform(() => client.onDelete(id, etag))}
-      onReconcile={reconcile} operationResult={result} fixtureMode={sample} />
+      onClose={() => setOpen(false)} onCreate={input => perform(async () => {
+        if (assignmentSelection && workspace) {
+          const assignment = workspace.data?.assignments.find(item => item.id === assignmentSelection.id);
+          if (!assignment || assignment.version !== assignmentSelection.version) return { operationId: crypto.randomUUID(), status: 'failed' as const, error: { message: 'Assignment changed. Review it again.' } };
+        }
+        const next = await client.onCreate({ ...input, ...(assignmentSelection ? { assignmentId: assignmentSelection.id, expectedAssignmentVersion: assignmentSelection.version } : {}) });
+        if (sample && next.status === 'synced' && next.event && assignmentSelection && workspace) {
+          await workspace.progressClient.link({ eventId: next.event.id, assignmentId: assignmentSelection.id,
+            expectedAssignmentVersion: assignmentSelection.version, expectedEtag: next.event.etag });
+        }
+        return next;
+      }, 'create')}
+      onUpdate={(id, input, etag) => perform(() => client.onUpdate(id, input, etag), 'update', id)}
+      onComplete={(id, etag) => perform(() => client.onComplete(id, etag), 'complete', id)}
+      onDelete={(id, etag) => perform(() => client.onDelete(id, etag), 'delete', id)}
+      onReconcile={reconcile} operationResult={result} fixtureMode={sample} writeBlocked={Boolean(blocking) || progressBusy || Boolean(pendingReport)} externalSubmitting={progressBusy}
+      onRequestReschedule={receiveFocusStart}
+      reportedCompletion={workspace?.data?.links.find(link => link.eventId === selectedEvent?.id)?.completion === 'done'}
+      creationFields={workspace && <label className="block text-sm">Link to assignment (optional)
+        <select value={assignmentSelection?.id ?? ''} disabled={busy || Boolean(blocking)}
+          onChange={event => { const assignment = workspace.data?.assignments.find(item => item.id === event.target.value); setAssignmentSelection(assignment ? { id: assignment.id, version: assignment.version } : null); }}
+          className="mt-2 w-full rounded-lg border border-[#c8d3c8] bg-white p-2">
+          <option value="">No assignment</option>{workspace.data?.assignments.filter(item => !['completed','cancelled'].includes(item.status)).map(item => <option key={item.id} value={item.id}>{item.title} · {item.remainingMinutes} min remaining</option>)}
+        </select>
+        {workspace.error && <span className="mt-2 block text-xs text-[#9b302b]">{workspace.error}</span>}
+      </label>}
+      extraContent={selectedEvent && workspace && <StudyProgressPanel key={selectedEvent.id} event={selectedEvent}
+        disabled={busy || Boolean(blocking) || result?.status === 'synced'} onBusy={setProgressBusy} onMoveSession={() => focusStart.current?.()}
+        onCalendarResult={next => { client.trackOperation(next); setReloadKey(key => key + 1); }} onCheckCalendar={reconcile as () => Promise<import('@polymate/contracts/calendar').OperationResult>} />} />
   </div>;
 }

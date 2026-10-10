@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   completionTarget, deletionTarget, existingStudyBlockFields, initialStudyBlockFields, movedEnd, suggestedEnd, validateStudyBlock,
   type StudyBlockDialogEvent, type StudyBlockErrors, type StudyBlockFields, type StudyBlockInput, type StudyBlockOperationResult,
@@ -19,6 +19,12 @@ export type StudyBlockDialogProps = {
   /** Adapter supplies updates when a pending/uncertain operation is reconciled. */
   operationResult?: StudyBlockOperationResult;
   fixtureMode?: boolean;
+  creationFields?: ReactNode;
+  extraContent?: ReactNode;
+  writeBlocked?: boolean;
+  externalSubmitting?: boolean;
+  reportedCompletion?: boolean;
+  onRequestReschedule?: (focusStart: () => void) => void;
 };
 
 export function StudyBlockDialog(props: StudyBlockDialogProps) {
@@ -26,7 +32,8 @@ export function StudyBlockDialog(props: StudyBlockDialogProps) {
   return props.open ? <StudyBlockDialogForm key={props.selectedEvent ? `event:${props.selectedEvent.id}` : 'create'} {...props} /> : null;
 }
 
-function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate, onUpdate, onComplete, onDelete, onReconcile, operationResult, fixtureMode = false }: StudyBlockDialogProps) {
+function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate, onUpdate, onComplete, onDelete, onReconcile, operationResult, fixtureMode = false,
+  creationFields, extraContent, writeBlocked = false, externalSubmitting = false, reportedCompletion = false, onRequestReschedule }: StudyBlockDialogProps) {
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -51,10 +58,10 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
 
   const currentResult = result && operationResult?.operationId === result.operationId ? operationResult : result;
   const status = transportUncertain ? 'unknown' : submitting ? 'pending' : currentResult?.status;
-  const locked = readOnly || status === 'pending' || status === 'unknown' || status === 'synced';
+  const locked = readOnly || writeBlocked || status === 'pending' || status === 'unknown' || status === 'synced';
   const target = completionTarget(loadedEvent, selectedEvent);
   const deleteTarget = deletionTarget(loadedEvent, selectedEvent);
-  const completed = loadedEvent?.completion === 'done' || selectedEvent?.completion === 'done' || (action === 'complete' && status === 'synced');
+  const completed = reportedCompletion || loadedEvent?.completion === 'done' || selectedEvent?.completion === 'done' || (action === 'complete' && status === 'synced');
   const savedFields = loadedEvent ? existingStudyBlockFields(loadedEvent) : null;
   const dirty = savedFields && (Object.keys(fields) as (keyof StudyBlockFields)[]).some(field => fields[field] !== savedFields[field]);
 
@@ -73,6 +80,13 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
     else if (wasConfirmingDelete.current) deleteTriggerRef.current?.focus();
     wasConfirmingDelete.current = confirmingDelete;
   }, [confirmingDelete]);
+
+  useEffect(() => {
+    onRequestReschedule?.(() => {
+      const input = formRef.current?.elements.namedItem('date');
+      if (input instanceof HTMLElement) input.focus();
+    });
+  }, [onRequestReschedule]);
 
   function change(field: keyof StudyBlockFields, value: string) {
     const next = { ...fields, [field]: value };
@@ -185,7 +199,7 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
   const savedTimeFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', dateStyle: 'medium', timeStyle: 'short' });
 
   return <dialog ref={dialogRef} aria-labelledby={`${id}-heading`} aria-describedby={`${id}-description`}
-    onCancel={event => { event.preventDefault(); if (!submitting && !reconciling) { if (confirmingDelete) cancelDelete(); else onClose(); } }}
+    onCancel={event => { event.preventDefault(); if (!submitting && !reconciling && !externalSubmitting) { if (confirmingDelete) cancelDelete(); else onClose(); } }}
     className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-lg overflow-y-auto rounded-2xl border border-[#dce3db] bg-[#f6f7f3] p-6 text-[#173b32] shadow-xl backdrop:bg-black/35">
     <h2 id={`${id}-heading`} className="text-2xl font-semibold">{confirmingDelete ? 'Delete study block?' : readOnly ? 'Event details' : editing ? 'Edit study block' : 'Create a study block'}</h2>
     <p id={`${id}-description`} className="mt-2 text-sm leading-6 text-[#617269]">{confirmingDelete ? 'Review the saved block before deleting it.' : readOnly ? 'This event is read-only here.' : editing ? 'Change the title or move this study block.' : 'Choose your study time.'} All times are in Europe/Zurich.</p>
@@ -198,7 +212,7 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
       {dirty && <p className="text-sm text-[#617269]">Unsaved edits will not be saved. Delete applies to the saved block shown above.</p>}
       {feedback}
       <div className="flex flex-wrap justify-end gap-3 border-t border-[#dce3db] pt-4">
-        <button ref={deleteCancelRef} type="button" onClick={cancelDelete} disabled={submitting || reconciling} className="rounded-lg border border-[#c8d3c8] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
+        <button ref={deleteCancelRef} type="button" onClick={cancelDelete} disabled={submitting || reconciling || externalSubmitting} className="rounded-lg border border-[#c8d3c8] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
           {status === 'synced' || status === 'unknown' || status === 'pending' ? 'Close' : 'Cancel'}
         </button>
         {status !== 'synced' && <button type="button" onClick={confirmDelete} disabled={locked} className="rounded-lg bg-[#9b302b] px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">
@@ -206,6 +220,7 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
         </button>}
       </div>
     </section> : <form ref={formRef} onSubmit={submit} noValidate className="mt-6 space-y-5">
+      {!editing && creationFields}
       {input('title', 'Title', 'text')}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {input('date', 'Start date', 'date')}
@@ -219,7 +234,7 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
       </p>}
       {feedback}
       <div className="flex flex-wrap justify-end gap-3 border-t border-[#dce3db] pt-4">
-        <button type="button" onClick={onClose} disabled={submitting || reconciling} className="rounded-lg border border-[#c8d3c8] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
+        <button type="button" onClick={onClose} disabled={submitting || reconciling || externalSubmitting} className="rounded-lg border border-[#c8d3c8] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
           {readOnly || status === 'synced' || status === 'unknown' || status === 'pending' ? 'Close' : 'Cancel'}
         </button>
         {deleteTarget && onDelete && status !== 'synced' && <button ref={deleteTriggerRef} type="button" onClick={requestDelete} disabled={locked} className="rounded-lg border border-[#9b302b] px-4 py-2.5 text-sm font-medium text-[#9b302b] disabled:opacity-50">Delete</button>}
@@ -232,5 +247,6 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, onClose, onCreate
         </button>}
       </div>
     </form>}
+    {!confirmingDelete && extraContent && <div className="mt-6 border-t border-[#dce3db] pt-5">{extraContent}</div>}
   </dialog>;
 }
