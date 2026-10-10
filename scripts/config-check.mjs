@@ -27,6 +27,12 @@ export function validateConfiguration(env) {
       errors.push('OAUTH_STATE_SECRET must contain at least 32 bytes.');
     }
   }
+  if (env.OPENCLAW_ENABLED === 'true') {
+    for (const key of ['OPENAI_API_KEY', 'OPENCLAW_GATEWAY_TOKEN', 'AGENT_CONTEXT_SECRET', 'OPENCLAW_AGENT_BRIDGE_SECRET']) {
+      if (Buffer.byteLength(env[key] ?? '') < 32) errors.push(`${key} must contain at least 32 bytes when OPENCLAW_ENABLED=true.`);
+    }
+    if (env.POLYMATE_LLM_MODEL && !/^openai\/[a-zA-Z0-9._-]+$/.test(env.POLYMATE_LLM_MODEL)) errors.push('POLYMATE_LLM_MODEL must be openai/<model-id>.');
+  }
   return errors;
 }
 

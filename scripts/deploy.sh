@@ -16,12 +16,18 @@ fi
 git switch --detach "$requested_sha"
 export RELEASE_SHA="$requested_sha"
 node --env-file=.env scripts/config-check.mjs
+compose=(docker compose)
+gateway_enabled="$(node --env-file=.env -e 'process.stdout.write(process.env.OPENCLAW_ENABLED || "false")')"
+if test "$gateway_enabled" = true; then
+  compose+=(-f compose.yaml -f compose.openclaw.yaml)
+fi
 # Build before interrupting the existing release. Images are tagged by commit.
-docker compose build web
-docker compose --profile tools build tooling
-docker compose up -d --wait db
+"${compose[@]}" build web
+"${compose[@]}" --profile tools build tooling
+if test "$gateway_enabled" = true; then "${compose[@]}" build openclaw; fi
+"${compose[@]}" up -d --wait db
 scripts/backup.sh
-docker compose --profile tools run --rm tooling node scripts/migrate.mjs
+"${compose[@]}" --profile tools run --rm tooling node scripts/migrate.mjs
 recover() {
   if test -z "$previous_sha"; then
     echo 'First deployment failed; no previous PolyMate image is recorded. Inspect privately before retrying.' >&2
@@ -30,13 +36,21 @@ recover() {
   echo 'Restoring the previously healthy application image; keeping the database.' >&2
   git switch --detach "$previous_sha"
   export RELEASE_SHA="$previous_sha"
-  docker compose up -d --no-build --wait --wait-timeout 120 web
+  if test "$gateway_enabled" = true && docker image inspect "polymate-openclaw:$previous_sha" >/dev/null 2>&1; then
+    "${compose[@]}" up -d --no-build --wait --wait-timeout 180 web openclaw
+  else
+    # The first gateway-enabled release has no previous gateway image. Restore
+    # the previous web image independently; leave gateway state intact.
+    docker compose up -d --no-build --wait --wait-timeout 120 web
+  fi
   EXPECTED_RELEASE_SHA="$previous_sha" SMOKE_MANAGED_IDENTITY=true node scripts/smoke.mjs
 }
 if test -n "$previous_sha" && test "$previous_sha" != "$requested_sha"; then
   printf '%s\n' "$previous_sha" > .release/previous
 fi
-if ! docker compose up -d --wait --wait-timeout 120 web; then
+services=(web)
+if test "$gateway_enabled" = true; then services+=(openclaw); fi
+if ! "${compose[@]}" up -d --wait --wait-timeout 180 "${services[@]}"; then
   recover
   exit 1
 fi

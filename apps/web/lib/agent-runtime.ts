@@ -163,7 +163,8 @@ export async function callOpenClawAgent(input: {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
-        'x-openclaw-session-key': input.sessionKey,
+        'x-openclaw-agent-id': openClawModelId().slice('openclaw/'.length),
+        'x-openclaw-session-key': `agent:${openClawModelId().slice('openclaw/'.length)}:${input.sessionKey}`,
       },
       body: JSON.stringify({
         model: openClawModelId(),
