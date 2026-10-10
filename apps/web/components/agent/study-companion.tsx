@@ -39,7 +39,7 @@ import {
   type DemoProfile,
   type DemoStage,
 } from '@/lib/demo-fixtures';
-import { ChatList, CheckInNotice, CheckInSettings, useChats } from './chat-list';
+import { CheckInNotice, CheckInSettings, useChats } from './chat-list';
 import { fetchChat, unreadCheckIns } from './chat-client';
 
 type AgentCard = { kind: 'assignments' | 'timeline' | 'schedule' | 'connections' | 'progress'; data: unknown };
@@ -635,8 +635,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
           {view === 'calendar' && <Button type="button" size="sm" aria-label="Add assignment" onClick={() => { setAssignmentsOpen(true); window.dispatchEvent(new Event('polymate-add-assignment')); }}><ClipboardPlus aria-hidden="true" /><span className="hidden sm:inline">Add assignment</span></Button>}
           {view === 'courses' && <Button asChild size="sm" variant="outline"><a href={hrefFor('planner')} aria-label="Open semester plan" onClick={event => navigate(event, 'planner')}><GraduationCap aria-hidden="true" /><span className="hidden sm:inline">Semester plan</span></a></Button>}
           {view === 'planner' && <Button asChild size="sm" variant="ghost"><a href={hrefFor('courses')} aria-label="Back to courses" onClick={event => navigate(event, 'courses')}><ArrowLeft aria-hidden="true" /><span className="hidden sm:inline">Courses</span></a></Button>}
-          {!demo && <ChatList chats={chats.chats} activeChatId={chatId} disabled={busy} onOpen={chat => void openChat(chat.id)} onNew={newChat} />}
-          <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswered}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
+          <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswered}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} chats={demo ? [] : chats.chats} activeChatId={chatId} disabled={busy} onOpenChat={demo ? undefined : chat => void openChat(chat.id)} onNewChat={demo ? undefined : newChat} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
         </div>
       </header>
       {!demo && view !== 'chat' && <CheckInNotice chats={waitingCheckIns} floating disabled={busy} onOpen={chat => void openChat(chat.id)} />}
