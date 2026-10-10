@@ -1,17 +1,13 @@
 'use client';
 
 import type { ChatList as ChatListState, ChatSummary } from '@polymate/contracts/chats';
-import { MessagesSquare, Plus, Sparkles, X } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { fetchChats, mutateChats, unreadCheckIns } from './chat-client';
+import { fetchChats, mutateChats } from './chat-client';
 
 const CHAT_POLL_MS = 60_000;
-const when = (value: string) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', weekday: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 
 /**
  * Loads the student's chats and keeps them fresh. Loading the list is also what lets the server
@@ -56,47 +52,6 @@ export function useChats(sample: boolean) {
   }, []);
 
   return { ...state, error, refresh, markRead, setPaused, checkInNow };
-}
-
-export function ChatList({ chats, activeChatId, disabled, onOpen, onNew }: {
-  chats: readonly ChatSummary[];
-  activeChatId: string;
-  disabled: boolean;
-  onOpen: (chat: ChatSummary) => void;
-  onNew: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const unread = unreadCheckIns(chats, activeChatId).length;
-  return <Popover open={open} onOpenChange={setOpen}>
-    <PopoverTrigger asChild>
-      <Button type="button" variant="ghost" className="relative text-muted-foreground" aria-label={unread ? `Chats, ${unread} new from PolyMate` : 'Open chats'}>
-        <MessagesSquare aria-hidden="true" />
-        <span>Chats</span>
-        {unread > 0 && <><Badge className="ml-0.5 px-1.5">{unread}</Badge><span className="absolute -right-1 -top-1 size-2.5 animate-pulse rounded-full bg-primary ring-2 ring-background" /></>}
-      </Button>
-    </PopoverTrigger>
-    <PopoverContent align="end" className="max-h-[min(36rem,calc(100dvh-5rem))] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto p-0">
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-popover px-4 py-3">
-        <p className="text-sm font-semibold">Chats</p>
-        <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => { setOpen(false); onNew(); }}><Plus aria-hidden="true" /> New chat</Button>
-      </div>
-      <Separator />
-      {!chats.length ? <p className="p-4 text-sm text-muted-foreground">No chats yet. PolyMate will also start one when it has a question for you.</p>
-        : <ul className="p-2">{chats.map(chat => <li key={chat.id}>
-          <button type="button" disabled={disabled} onClick={() => { setOpen(false); onOpen(chat); }} aria-current={chat.id === activeChatId ? 'true' : undefined}
-            className={cn('w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent disabled:opacity-50', chat.id === activeChatId && 'bg-accent')}>
-            <span className="flex items-center justify-between gap-2">
-              <span className={cn('flex min-w-0 items-center gap-1.5 text-sm', chat.unread ? 'font-semibold' : 'font-medium')}>
-                {chat.origin === 'check_in' && <Sparkles className="size-3.5 shrink-0 text-muted-foreground" aria-label="Started by PolyMate" />}
-                <span className="truncate">{chat.title}</span>
-              </span>
-              {chat.unread ? <Badge className="shrink-0 px-1.5">New</Badge> : <span className="shrink-0 text-[11px] text-muted-foreground">{when(chat.updatedAt)}</span>}
-            </span>
-            <span className="mt-1 line-clamp-2 block text-xs leading-5 text-muted-foreground">{chat.preview}</span>
-          </button>
-        </li>)}</ul>}
-    </PopoverContent>
-  </Popover>;
 }
 
 /** Announces chats PolyMate started. Inline inside the chat view, a floating notice elsewhere. */
