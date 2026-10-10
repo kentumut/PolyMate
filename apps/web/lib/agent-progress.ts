@@ -3,8 +3,11 @@ import { ContractError, parseEventId, parseOperationId } from '@polymate/contrac
 import { parseLinkRequest, parseProgressRequest, type LinkRequest, type ProgressRequest } from '@polymate/contracts/study-progress';
 import { encryptSecret, decryptSecret } from '@polymate/core/google-auth/crypto';
 import type { OwnerContext } from '@polymate/core/identity';
-import { studyProgressStore } from '@polymate/db/study-progress';
+import { studyProgressStore, syncStudyCalendarRead } from '@polymate/db/study-progress';
+import { CalendarServiceError } from '@polymate/core/calendar';
+import { GoogleNotConnectedError } from '@polymate/core/calendar/google-api';
 import { studyProgressServiceFor } from './study-progress';
+import { calendarServiceFor } from './calendar-route';
 
 const TTL = 30 * 60_000;
 type Context = { purpose: 'progress-context'; ownerId: string; expiresAt: number; request: LinkRequest & { expectedSessionRevision?: number } };
@@ -48,7 +51,27 @@ function draftCard(owner: OwnerContext, draft: Draft, assignmentTitle: string, s
 export async function readAgentProgress(owner: OwnerContext, args: Record<string, unknown>) {
   const assignmentId = args.assignmentId === undefined ? undefined : parseOperationId(args.assignmentId);
   const eventId = args.eventId === undefined ? undefined : parseEventId(args.eventId);
-  const state = await studyProgressStore.state(owner.userId);
+  let state = await studyProgressStore.state(owner.userId);
+  let refresh: { status: 'cached' | 'fresh' | 'unavailable'; message?: string } = { status: 'cached' };
+  const selected = state.links.find(link => link.eventId === eventId && !link.deleted && (!assignmentId || link.assignmentId === assignmentId));
+  // General history stays local. Only an owner-linked, explicitly selected event is fetched from Google.
+  if (selected) {
+    try {
+      const observedAt = new Date();
+      const event = await calendarServiceFor(owner).readStudyBlock(selected.eventId);
+      await syncStudyCalendarRead(owner.userId, [event], observedAt);
+      state = await studyProgressStore.state(owner.userId);
+      const current = state.links.find(link => link.eventId === event.id && !link.deleted);
+      refresh = current?.etag === event.etag && current.startAt === event.startAt && current.endAt === event.endAt
+        ? { status: 'fresh' } : { status: 'unavailable', message: 'The session changed during refresh. Read this session again before reporting.' };
+    } catch (error) {
+      refresh = { status: 'unavailable', message: error instanceof GoogleNotConnectedError
+        ? 'Connect Google Calendar to refresh this session before reporting.'
+        : error instanceof CalendarServiceError && ['not_found', 'forbidden'].includes(error.code)
+          ? 'This session is no longer available as an editable PolyMate block in Google. No new report can be prepared.'
+          : 'Session details could not be refreshed. Retry this session-specific progress read before reporting.' };
+    }
+  }
   const assignments = state.assignments.filter(a => !assignmentId || a.id === assignmentId);
   const links = state.links.filter(l => (!assignmentId || l.assignmentId === assignmentId) && (!eventId || l.eventId === eventId));
   const selectedIds = new Set(eventId ? links.map(l => l.assignmentId) : assignments.map(a => a.id));
@@ -57,7 +80,7 @@ export async function readAgentProgress(owner: OwnerContext, args: Record<string
   const sessions = links.filter(l => visibleIds.has(l.assignmentId)).slice(0, 100).map(link => {
     const assignment = state.assignments.find(a => a.id === link.assignmentId)!;
     return { ...link, assignmentTitle: assignment.title,
-      contextToken: link.deleted ? undefined : contextToken(owner, { eventId: link.eventId, assignmentId: assignment.id,
+      contextToken: link.deleted || refresh.status !== 'fresh' ? undefined : contextToken(owner, { eventId: link.eventId, assignmentId: assignment.id,
         expectedAssignmentVersion: assignment.version, expectedSessionRevision: link.sessionRevision, expectedEtag: link.etag }) };
   });
   const sessionIds = new Set(sessions.map(l => l.eventId));
@@ -66,9 +89,9 @@ export async function readAgentProgress(owner: OwnerContext, args: Record<string
     const assignment = state.assignments.find(a => a.id === request.assignmentId)!;
     return { ...draftCard(owner, { purpose: 'progress-draft', ownerId: owner.userId, expiresAt: Date.now() + TTL, kind: 'report', request }, assignment.title, state.links.find(l => l.eventId === request.eventId)!), recovery: true };
   });
-  return { source: 'local-study-progress', assignments: visibleAssignments, sessions, reports, pending,
+  return { source: 'local-study-progress', assignments: visibleAssignments, sessions, reports, pending, refresh,
     truncated: assignments.length > 50 || links.length > 100,
-    guidance: 'Session completion is not assignment completion or Moodle submission. Reports for old session revisions are history, not progress for a moved session. Filter by local assignmentId or eventId for more detail.' };
+    guidance: 'General reads are cached history. To prepare a new report, select a linked session and read again with its eventId; a contextToken is issued only after Google and local metadata refresh successfully. Session completion is not assignment completion or Moodle submission. Reports for old revisions are history. Retry saved pending completions using their original recovery cards, not a new report.' };
 }
 
 /** Tools prepare changes; only a same-origin authenticated browser confirmation executes them. */

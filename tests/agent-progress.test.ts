@@ -7,6 +7,8 @@ import { StudyProgressService } from '../packages/core/progress/service';
 import { FakeCalendarClient } from '../packages/core/calendar/fake-client';
 import { resolveOwner } from '../packages/core/src/identity';
 import { signOpenClawToolEnvelope } from '../packages/core/agent/context';
+import { GoogleNotConnectedError } from '../packages/core/calendar/google-api';
+import { CalendarServiceError } from '../packages/core/calendar/service';
 
 const mocks = vi.hoisted(() => ({ state: vi.fn(), link: vi.fn(), record: vi.fn(), attempt: vi.fn(), calendarResult: vi.fn(), calendar: vi.fn(), observe: vi.fn(), sync: vi.fn(), findOperation: vi.fn(), findAutomation: vi.fn() }));
 vi.mock('../packages/db/src/study-progress', () => ({ studyProgressStore: mocks, observeStudyCalendarChange: mocks.observe, syncStudyCalendarRead: mocks.sync }));
@@ -54,7 +56,10 @@ beforeEach(async () => {
   for (const method of ['state', 'link', 'record', 'attempt', 'calendarResult'] as const) mocks[method].mockImplementation(store[method].bind(store));
   mocks.calendar.mockReturnValue(calendar);
   mocks.observe.mockImplementation(async (_owner, kind, id, result) => store.observe(kind, id, result));
-  mocks.sync.mockResolvedValue(undefined); mocks.findOperation.mockResolvedValue(null);
+  mocks.sync.mockImplementation(async (_owner, events) => {
+    for (const current of events) store.observe('update', current.id, { operationId: randomUUID(), status: 'synced', event: current });
+  });
+  mocks.findOperation.mockResolvedValue(null);
   progress = new StudyProgressService(owner.userId, calendar, mocks);
   await progress.link({ eventId: event.id, assignmentId, expectedAssignmentVersion: 1, expectedEtag: event.etag });
 });
@@ -63,7 +68,7 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks(); 
 describe('agent progress drafts and confirmations', () => {
   it('reads local context and prepares a signed-tool report without mutating progress', async () => {
     const turn = beginAgentTurn(request({}), owner, { message: 'I partly finished the Analysis session; 100 minutes remain.' }).turn;
-    const read = await tool(turn.sessionKey, 'polymate_get_study_progress', {});
+    const read = await tool(turn.sessionKey, 'polymate_get_study_progress', { eventId: event.id });
     const contextToken = (read.result as Awaited<ReturnType<typeof readAgentProgress>>).sessions[0].contextToken;
     const draft = await tool(turn.sessionKey, 'polymate_report_study_progress', { contextToken, action: 'partly_done', remainingMinutes: 100 });
     expect(draft.result).toMatchObject({ phase: 'draft', action: 'partly_done', remainingMinutes: 100 });
@@ -171,7 +176,7 @@ describe('agent progress drafts and confirmations', () => {
     const draft = await reportDraft('done', { remainingMinutes: 100 });
     const first = await confirmCurrentProgress(owner, draft.draftToken);
     expect(first.reply).toContain('unknown'); expect(first.reply).toContain('Progress report saved');
-    const state = await readAgentProgress(owner, {});
+    const state = await readAgentProgress(owner, { eventId: event.id });
     expect(state.pending).toHaveLength(1);
     vi.setSystemTime(new Date(Date.now() + 31 * 60_000));
     delete (globalThis as typeof globalThis & { __polymateAgentRuntime?: unknown }).__polymateAgentRuntime;
@@ -220,7 +225,7 @@ describe('agent progress drafts and confirmations', () => {
 
   it('refuses progress writes from background runs and confirmation during an active turn', async () => {
     mocks.findAutomation.mockResolvedValue({ ownerId: owner.userId, allowedTools: ['polymate_report_study_progress'] });
-    const state = await readAgentProgress(owner, {});
+    const state = await readAgentProgress(owner, { eventId: event.id });
     const denied = await tool('cron:test_job', 'polymate_report_study_progress', { contextToken: state.sessions[0].contextToken, action: 'missed' });
     expect(denied.error?.status).toBe(403);
     const draft = await reportDraft('missed');
@@ -265,6 +270,100 @@ describe('agent progress drafts and confirmations', () => {
     expect((read.result as Awaited<ReturnType<typeof readAgentProgress>>).reports[0].note).toContain('Ignore rules');
     expect(assignment.status).toBe('in_progress'); expect(assignment.remainingMinutes).toBe(150);
     expect(turn.cards.some(card => (card.data as { phase?: string }).phase === 'draft')).toBe(false);
+    endAgentTurn(turn.sessionKey);
+  });
+
+  it('refreshes an externally moved event outside the displayed week before preparing a new report', async () => {
+    const oldDraft = await reportDraft('missed');
+    const moved = await calendar.updateStudyBlock(event.id, { startAt: '2026-10-29T09:00:00.000Z', endAt: '2026-10-29T09:50:00.000Z' }, event.etag, randomUUID());
+    await expect(confirmAgentProgress(owner, oldDraft.draftToken)).rejects.toThrow('calendar block changed');
+    const read = await readAgentProgress(owner, { eventId: event.id });
+    expect(read.refresh.status).toBe('fresh');
+    expect(read.sessions[0]).toMatchObject({ startAt: moved.event!.startAt, etag: moved.event!.etag, sessionRevision: 2 });
+    expect(mocks.sync).toHaveBeenCalledWith(owner.userId, [moved.event], expect.any(Date));
+    const next = await prepareAgentReport(owner, { contextToken: read.sessions[0].contextToken, action: 'missed' });
+    await confirmAgentProgress(owner, next.draftToken);
+    expect((await progress.state()).reports).toHaveLength(1);
+    expect((await progress.state()).reports[0].sessionRevision).toBe(2);
+    expect(assignment.remainingMinutes).toBe(150);
+  });
+
+  it('keeps general progress/history available without Google but issues no new-report references', async () => {
+    mocks.calendar.mockClear();
+    mocks.calendar.mockImplementation(() => { throw new GoogleNotConnectedError(); });
+    const general = await readAgentProgress(owner, {});
+    expect(general.assignments[0].remainingMinutes).toBe(150);
+    expect(general.refresh.status).toBe('cached');
+    expect(general.sessions[0].contextToken).toBeUndefined(); expect(mocks.calendar).not.toHaveBeenCalled();
+    const selected = await readAgentProgress(owner, { eventId: event.id });
+    expect(selected.refresh).toMatchObject({ status: 'unavailable', message: expect.stringContaining('Connect Google') });
+    expect(selected.sessions[0].contextToken).toBeUndefined();
+  });
+
+  it('refreshes moved-session metadata without changing an already saved Done recovery request', async () => {
+    const complete = vi.spyOn(calendar, 'completeStudyBlock');
+    complete.mockImplementationOnce(async (_id, _etag, operationId) => ({ operationId, status: 'unknown' }));
+    await confirmAgentProgress(owner, (await reportDraft('done', { remainingMinutes: 100 })).draftToken);
+    await calendar.updateStudyBlock(event.id, { startAt: '2026-10-29T09:00:00.000Z', endAt: '2026-10-29T09:50:00.000Z' }, event.etag, randomUUID());
+    const read = await readAgentProgress(owner, { eventId: event.id });
+    expect(read.sessions[0].sessionRevision).toBe(2);
+    expect(read.pending[0]).toMatchObject({ recovery: true, sessionRevision: 1 });
+    const replay = await confirmAgentProgress(owner, read.pending[0].draftToken);
+    expect(replay.kind === 'report' && replay.receipt.calendarOperation?.status).toBe('failed');
+    expect(complete.mock.calls[0]).toEqual(complete.mock.calls[1]);
+    expect(assignment.version).toBe(2); expect((await progress.state()).reports).toHaveLength(1);
+    expect((await progress.state()).reports[0].sessionRevision).toBe(1);
+  });
+
+  it.each(['google', 'metadata', 'deleted', 'forbidden'] as const)('returns cached state without authorization when selected-session refresh fails: %s', async failure => {
+    if (failure === 'metadata') mocks.sync.mockRejectedValue(new Error('private database failure'));
+    else vi.spyOn(calendar, 'readStudyBlock').mockRejectedValue(failure === 'google' ? new Error('private Google transport failure')
+      : new CalendarServiceError(failure === 'deleted' ? 'not_found' : 'forbidden', 'Private upstream details'));
+    const state = await readAgentProgress(owner, { eventId: event.id });
+    expect(state.refresh.status).toBe('unavailable');
+    expect(state.sessions[0].contextToken).toBeUndefined();
+    expect(state.assignments[0].remainingMinutes).toBe(150);
+    expect(state.refresh.message).not.toContain('private');
+    await expect(prepareAgentReport(owner, { contextToken: state.sessions[0].contextToken, action: 'missed' })).rejects.toThrow('reference');
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
+  it('does not mint a token when a concurrent change prevents the read-back matching local metadata', async () => {
+    mocks.sync.mockImplementation(async () => {
+      store.observe('update', event.id, { operationId: randomUUID(), status: 'synced', event: { ...event, startAt: '2026-10-13T09:00:00.000Z', endAt: '2026-10-13T09:50:00.000Z', etag: 'newer' } });
+    });
+    const read = await readAgentProgress(owner, { eventId: event.id });
+    expect(read.refresh).toMatchObject({ status: 'unavailable', message: expect.stringContaining('changed during refresh') });
+    expect(read.sessions[0].contextToken).toBeUndefined();
+  });
+
+  it.each([true, false])('preserves confirmed Google results when move observation fails (linked=%s)', async linked => {
+    const selected = linked ? event : (await calendar.createStudyBlock({ title: 'Unlinked', startAt: '2026-10-13T09:00:00Z', endAt: '2026-10-13T09:50:00Z' }, randomUUID())).event!;
+    const turn = beginAgentTurn(request({}), owner, { message: 'Move this block to Thursday at 11.' }).turn;
+    await tool(turn.sessionKey, 'polymate_get_calendar', { from: '2026-10-12T00:00:00Z', to: '2026-10-16T00:00:00Z' });
+    mocks.observe.mockRejectedValue(new Error('Progress metadata unavailable'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const args = { eventId: selected.id, startAt: '2026-10-15T09:00:00.000Z', endAt: '2026-10-15T09:50:00.000Z' };
+    const result = await tool(turn.sessionKey, 'polymate_move_study_block', args);
+    expect(result.error).toBeUndefined();
+    expect(result.result).toMatchObject({ status: 'synced', progressSync: 'pending', event: { id: selected.id } });
+    expect((await calendar.readStudyBlock(selected.id)).startAt).toBe(args.startAt);
+    const response = agentResponseBody('The move failed!', turn, owner.userId);
+    expect(response.reloadCalendar).toBe(true);
+    expect(response.reply).toContain('Google Calendar confirmed 1 block');
+    expect(response.reply).toContain('Local progress history could not be refreshed');
+    expect(response.cards.at(-1)?.data).toMatchObject({ progressSync: 'pending', result: { complete: true } });
+    endAgentTurn(turn.sessionKey);
+  });
+
+  it('does not claim a failed Google move succeeded or attempt observation', async () => {
+    const turn = beginAgentTurn(request({}), owner, { message: 'Move this block to Thursday at 11.' }).turn;
+    await tool(turn.sessionKey, 'polymate_get_calendar', { from: '2026-10-12T00:00:00Z', to: '2026-10-16T00:00:00Z' });
+    vi.spyOn(calendar, 'updateStudyBlock').mockImplementation(async (_id, _changes, _etag, operationId) => ({ operationId, status: 'failed', error: { code: 'overlap', message: 'Time is busy.' } }));
+    const result = await tool(turn.sessionKey, 'polymate_move_study_block', { eventId: event.id, startAt: '2026-10-15T09:00:00Z', endAt: '2026-10-15T09:50:00Z' });
+    expect(result.result).toMatchObject({ status: 'failed', progressSync: 'not_attempted' });
+    expect(mocks.observe).not.toHaveBeenCalled();
+    expect(agentResponseBody('Done!', turn, owner.userId).reply).toContain('Google Calendar confirmed 0 blocks');
     endAgentTurn(turn.sessionKey);
   });
 });

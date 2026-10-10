@@ -13,8 +13,13 @@ const directory = await mkdtemp(join(tmpdir(), 'polymate-progress-'));
 let db = new PGlite({ dataDir: directory, extensions: { pgcrypto } });
 process.env.DATABASE_URL = 'postgresql://isolated-test-adapter';
 let tail = Promise.resolve();
+let failNextMoveUpdate = false;
 function bind() {
   const query = async (sql, params) => {
+    if (failNextMoveUpdate && /^UPDATE assignment_block_links SET last_start_at/.test(sql)) {
+      failNextMoveUpdate = false;
+      throw new Error('Injected secondary move-metadata failure');
+    }
     const result = await db.query(sql, params);
     return { rows: result.rows, rowCount: /^\s*SELECT/i.test(sql) ? result.rows.length : result.affectedRows ?? result.rows.length };
   };
@@ -85,14 +90,19 @@ try {
   event = { ...event, startAt: '2026-10-13T09:00:00.000Z', endAt: '2026-10-13T09:50:00.000Z', etag: '"moved"' };
   const moved = { operationId: crypto.randomUUID(), status: 'synced', event };
   await insertOperation(moved.operationId, 'update', moved);
-  await observeStudyCalendarChange(owner.userId, 'update', event.id, moved);
+  failNextMoveUpdate = true;
+  await assert.rejects(observeStudyCalendarChange(owner.userId, 'update', event.id, moved), /Injected secondary/);
+  assert.equal((await sql('SELECT session_revision FROM assignment_block_links WHERE owner_id=$1 AND event_id=$2', [owner.userId, event.id])).rows[0].session_revision, 1);
+  assert.equal((await sql('SELECT count(*)::int AS count FROM study_calendar_effects WHERE owner_id=$1 AND operation_id=$2', [owner.userId, moved.operationId])).rows[0].count, 0);
+  // The confirmed Google ledger survives rollback. A subsequent state read repairs it exactly once.
+  await service.state();
   await observeStudyCalendarChange(owner.userId, 'update', event.id, moved);
   state = await service.state();
   assert.equal(state.links[0].sessionRevision, 2);
   assert.equal(state.reports.filter(item => item.sessionRevision === 2).length, 0);
   assert.equal(state.assignments[0].remainingMinutes, 100);
   assert.equal((await listStudyActivity(owner.userId, '0')).filter(item => item.kind === 'block_rescheduled').length, 1);
-  console.log('PASS missed/stuck persistence and revision-aware move with one automation event');
+  console.log('PASS failed move-metadata transaction rolls back; state recovery increments revision and emits one event');
 
   const ownerBefore = state.assignments[0];
   await assert.rejects(studyProgressStore.link(other.userId, { eventId: 'forged', assignmentId: assignment.id, expectedAssignmentVersion: 4, expectedEtag: event.etag }, { ...event, id: 'forged' }));

@@ -55,7 +55,7 @@ function AssignmentCards({ data }: { data: unknown }) {
 
 function ScheduleCard({ data }: { data: unknown }) {
   if (!data || typeof data !== 'object') return null;
-  const value = data as { timeline?: AssignmentTimeline; movedBlock?: { title: string; startAt: string; endAt: string }; result?: { complete?: boolean; results?: Array<{ operationId: string; status: string; error?: { message?: string } }> } };
+  const value = data as { timeline?: AssignmentTimeline; progressSync?: string; movedBlock?: { title: string; startAt: string; endAt: string }; result?: { complete?: boolean; results?: Array<{ operationId: string; status: string; error?: { message?: string } }> } };
   const results = Array.isArray(value.result?.results) ? value.result.results : [];
   const attempted = new Set(results.map(item => item.operationId));
   const unattempted = value.timeline?.blocks.filter(block => !attempted.has(block.operationId)) ?? [];
@@ -70,6 +70,7 @@ function ScheduleCard({ data }: { data: unknown }) {
     </li>)}</ul> : <p className="mt-2 text-sm text-[#617269]">No calendar writes were confirmed.</p>}
     {unattempted.length > 0 && <ul className="mt-3 space-y-1 text-sm text-[#8a5a26]">{unattempted.map(block => <li key={block.operationId}>{block.title} · {dateTime(block.startAt)} — not attempted</li>)}</ul>}
     {value.result?.complete && <p className="mt-3 text-sm font-medium text-[#173b32]">{value.movedBlock ? 'The move was confirmed by Google Calendar.' : 'All planned blocks were confirmed by Google Calendar.'}</p>}
+    {value.progressSync === 'pending' && <p className="mt-3 text-sm text-[#8a5a26]">Local progress history could not be refreshed yet. Refresh progress to retry synchronization; the confirmed Google move does not need to be repeated.</p>}
   </section>;
 }
 
