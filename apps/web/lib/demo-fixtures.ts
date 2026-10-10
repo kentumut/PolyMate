@@ -5,9 +5,37 @@ import type { Course } from '@polymate/contracts/courses';
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
 import { CALENDAR_TIMEZONE, shiftWeek, weekRange, zonedParts, zonedTimeToInstant, type DateRange } from '@polymate/contracts/time';
 
-export type DemoStage = 'brief' | 'remember' | 'plan' | 'approve' | 'move' | 'complete';
+export type DemoStage = 'onboarding' | 'brief' | 'remember' | 'plan' | 'approve' | 'move' | 'complete';
+export type DemoGoal = 'deadline' | 'exam' | 'balance';
+export type DemoSessionMinutes = 30 | 50;
+export type DemoCoachCadence = 'proactive' | 'weekly';
+export type DemoCommitment = 'volunteering' | 'rehearsal';
+export type DemoPlanStyle = 'spread' | 'frontload';
+export type DemoMoveTarget = 'friday-15' | 'friday-16';
 
-export const DEMO_PROMPTS: Record<Exclude<DemoStage, 'approve' | 'complete'>, string> = {
+export type DemoProfile = Readonly<{
+  goal: DemoGoal;
+  sessionMinutes: DemoSessionMinutes;
+  coachCadence: DemoCoachCadence;
+}>;
+
+export const DEMO_ONBOARDING_OPTIONS = {
+  goal: [
+    { value: 'deadline' as const, label: 'Finish urgent work', description: 'Lead with deadlines and submission risk.' },
+    { value: 'exam' as const, label: 'Build exam confidence', description: 'Connect weekly work to exam priorities.' },
+    { value: 'balance' as const, label: 'Keep the week sustainable', description: 'Protect recovery time while staying current.' },
+  ],
+  sessionMinutes: [
+    { value: 50 as const, label: '50-minute focus', description: 'Fewer, deeper study blocks.' },
+    { value: 30 as const, label: '30-minute sprints', description: 'More short sessions with breaks.' },
+  ],
+  coachCadence: [
+    { value: 'proactive' as const, label: 'Flag risks early', description: 'Coach asks when a decision needs you.' },
+    { value: 'weekly' as const, label: 'Weekly summary only', description: 'Keep coaching quiet unless requested.' },
+  ],
+} as const;
+
+export const DEMO_PROMPTS: Record<Exclude<DemoStage, 'onboarding' | 'approve' | 'complete'>, string> = {
   brief: 'What should I focus on this week?',
   remember: 'Remember that I volunteer next Wednesday from 17:00 to 20:00.',
   plan: 'Plan 150 minutes for Algorithms problem set 4 before Friday. I can study Monday to Thursday from 16:00 to 20:00.',
@@ -38,7 +66,14 @@ function nextDemoWeek(now: Date | string): DateRange {
 
 function at(range: DateRange, dayOffset: number, hour: number, minute = 0): string {
   const monday = zonedParts(range.from);
-  return zonedTimeToInstant({ year: monday.year, month: monday.month, day: monday.day + dayOffset, hour, minute }).toISOString();
+  const totalMinutes = hour * 60 + minute;
+  return zonedTimeToInstant({
+    year: monday.year,
+    month: monday.month,
+    day: monday.day + dayOffset + Math.floor(totalMinutes / (24 * 60)),
+    hour: Math.floor((totalMinutes % (24 * 60)) / 60),
+    minute: totalMinutes % 60,
+  }).toISOString();
 }
 
 function calendarEvent(range: DateRange, id: string, title: string, day: number, startHour: number, endHour: number, startMinute = 0, endMinute = 0): CalendarEvent {
@@ -107,52 +142,90 @@ export function demoMoodleSnapshot(now: Date | string): MoodleSnapshot {
   };
 }
 
-export function demoTimeline(now: Date | string): AssignmentTimeline {
+export function demoTimeline(now: Date | string, options: { sessionMinutes?: DemoSessionMinutes; style?: DemoPlanStyle; commitment?: DemoCommitment } = {}): AssignmentTimeline {
   const range = nextDemoWeek(now);
   const sourceUrl = 'https://moodle-app2.let.ethz.ch/';
+  const sessionMinutes = options.sessionMinutes ?? 50;
+  const style = options.style ?? 'spread';
+  const commitment = options.commitment ?? 'volunteering';
+  const slots = sessionMinutes === 50
+    ? style === 'frontload'
+      ? [[0, 16, 0], [0, 17, 0], [1, 18, 0]]
+      : commitment === 'rehearsal'
+        ? [[0, 16, 0], [1, 18, 0], [2, 16, 0]]
+        : [[0, 16, 0], [1, 18, 0], [3, 17, 10]]
+    : style === 'frontload'
+      ? [[0, 16, 0], [0, 16, 40], [0, 17, 20], [1, 18, 0], [1, 18, 40]]
+      : commitment === 'rehearsal'
+        ? [[0, 16, 0], [0, 16, 40], [1, 18, 0], [2, 16, 0], [2, 16, 40]]
+        : [[0, 16, 0], [0, 16, 40], [1, 18, 0], [3, 17, 10], [3, 17, 50]];
+  const labels = sessionMinutes === 50
+    ? ['Dynamic programming', 'Exercises', 'Final review']
+    : ['Dynamic programming', 'DP exercises', 'Graph exercises', 'Check solutions', 'Final review'];
   return {
-    id: 'demo-algorithms-plan',
-    blocks: [
-      { assignmentId: MOODLE_ASSIGNMENT_ID, title: 'Algorithms PS4 · Dynamic programming', startAt: at(range, 0, 16), endAt: at(range, 0, 16, 50), sourceUrl, operationId: '10000000-0000-5000-a000-000000000001' },
-      { assignmentId: MOODLE_ASSIGNMENT_ID, title: 'Algorithms PS4 · Exercises', startAt: at(range, 1, 18), endAt: at(range, 1, 18, 50), sourceUrl, operationId: '10000000-0000-5000-a000-000000000002' },
-      { assignmentId: MOODLE_ASSIGNMENT_ID, title: 'Algorithms PS4 · Final review', startAt: at(range, 3, 17, 10), endAt: at(range, 3, 18), sourceUrl, operationId: '10000000-0000-5000-a000-000000000003' },
-    ],
+    id: `demo-algorithms-${sessionMinutes}-${style}-${commitment}`,
+    blocks: slots.map(([day, hour, minute], index) => ({
+      assignmentId: MOODLE_ASSIGNMENT_ID,
+      title: `Algorithms PS4 · ${labels[index]}`,
+      startAt: at(range, day, hour, minute),
+      endAt: at(range, day, hour, minute + sessionMinutes),
+      sourceUrl,
+      operationId: `10000000-0000-5000-a000-${String(index + 1).padStart(12, '0')}`,
+    })),
     unscheduled: [],
     warnings: ['Study effort is an estimate. Check the assignment requirements and timeline before relying on it.'],
   };
 }
 
-export function demoMovedBlock(now: Date | string) {
+export function demoMovedBlock(now: Date | string, target: DemoMoveTarget = 'friday-16', sessionMinutes: DemoSessionMinutes = 50) {
   const range = nextDemoWeek(now);
-  return { startAt: at(range, 4, 16), endAt: at(range, 4, 16, 50) };
+  const hour = target === 'friday-15' ? 15 : 16;
+  return { startAt: at(range, 4, hour), endAt: at(range, 4, hour, sessionMinutes) };
 }
 
-export function demoInitialMemories(now: Date | string): StudentMemory[] {
+export function demoInitialMemories(now: Date | string, sessionMinutes: DemoSessionMinutes = 50): StudentMemory[] {
   return [{
     id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     category: 'preference',
-    content: 'Prefers focused study sessions of at most 50 minutes.',
+    content: `Prefers focused study sessions of at most ${sessionMinutes} minutes.`,
     validUntil: null,
     createdAt: typeof now === 'string' ? now : now.toISOString(),
   }];
 }
 
 export function demoVolunteerMemory(now: Date | string): StudentMemory {
+  return demoCommitmentMemory(now, 'volunteering');
+}
+
+export function demoCommitmentMemory(now: Date | string, commitment: DemoCommitment): StudentMemory {
   const range = nextDemoWeek(now);
   return {
     id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
     category: 'plan',
-    content: 'Volunteering next Wednesday from 17:00 to 20:00.',
+    content: commitment === 'volunteering'
+      ? 'Volunteering next Wednesday from 17:00 to 20:00.'
+      : 'Project rehearsal next Thursday from 17:00 to 19:00.',
     validUntil: range.to,
     createdAt: typeof now === 'string' ? now : now.toISOString(),
   };
 }
 
-export function demoCoachingState(now: Date | string, memories: StudentMemory[]): CoachingState {
+export function demoCoachingState(now: Date | string, memories: StudentMemory[], proactive = false, answered = false): CoachingState {
   const range = nextDemoWeek(now);
   return {
     currentWeekStart: range.from.slice(0, 10),
-    messages: [{
+    messages: [...(proactive ? [{
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      kind: 'weekly_question' as const,
+      title: 'Confirm this week’s pressure point',
+      body: 'Is the Algorithms deadline still the priority, or has something changed?',
+      requiresResponse: true,
+      status: answered ? 'responded' as const : 'unread' as const,
+      weekStart: range.from.slice(0, 10),
+      questionKey: 'priority',
+      createdAt: typeof now === 'string' ? now : now.toISOString(),
+      respondedAt: answered ? typeof now === 'string' ? now : now.toISOString() : null,
+    }] : []), {
       id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
       kind: 'digest',
       title: 'Your weekly plan is ready to shape',
