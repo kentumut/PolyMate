@@ -23,13 +23,14 @@ const memoryLabel: Record<StudentMemory['category'], string> = {
   plan: 'Plan', preference: 'Preference', goal: 'Goal', constraint: 'Constraint', weekly_context: 'Weekly answer',
 };
 
-export function CoachInbox({ sample, refreshKey, onRespond, onOutstandingChange }: {
+export function CoachInbox({ sample, sampleOverride, refreshKey, onRespond, onOutstandingChange }: {
   sample: boolean;
+  sampleOverride?: CoachingState;
   refreshKey: number;
   onRespond: (message: CoachReplyTarget) => void;
   onOutstandingChange?: (count: number) => void;
 }) {
-  const [state, setState] = useState<CoachingState | null>(sample ? sampleState : null);
+  const [state, setState] = useState<CoachingState | null>(sample ? sampleOverride ?? sampleState : null);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState('');
   const [reloadKey, setReloadKey] = useState(0);

@@ -17,15 +17,17 @@ export type CalendarPanelProps = {
   onSelect?: (event: CalendarEvent) => void;
   /** Change this value to reload the visible week after a mutation. */
   reloadKey?: string | number;
+  /** Opens a specific week, used by the time-relative guided demo. */
+  initialDate?: string;
   onRangeChange?: (range: DateRange) => void;
   onTimeRangeSelect?: (startAt: string, endAt: string) => void;
 } & Pick<WeekViewProps, 'proposed' | 'assignmentLabels' | 'unscheduled'>;
 
 /** Loads the visible week through the shared CalendarClient and owns navigation/selection state. */
-export function CalendarPanel({ client: suppliedClient, sample = false, onSelect, reloadKey, onRangeChange, onTimeRangeSelect, ...overlay }: CalendarPanelProps) {
+export function CalendarPanel({ client: suppliedClient, sample = false, onSelect, reloadKey, initialDate, onRangeChange, onTimeRangeSelect, ...overlay }: CalendarPanelProps) {
   const [defaultClient] = useState<CalendarClient>(() => suppliedClient ?? (sample ? new FakeCalendarClient(undefined, 250) : new HttpCalendarClient()));
   const client = suppliedClient ?? defaultClient;
-  const [range, setRange] = useState<DateRange>(() => weekRange());
+  const [range, setRange] = useState<DateRange>(() => weekRange(initialDate));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState<{ key: string; events: CalendarEvent[]; error: string | null } | null>(null);

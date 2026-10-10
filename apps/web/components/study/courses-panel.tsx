@@ -4,12 +4,9 @@ import type { Course, ExamPrepPriority } from '@polymate/contracts/courses';
 import { CalendarClock, Clock3, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
+import { DEMO_COURSES } from '@/lib/demo-fixtures';
 
-const sampleCourses: Course[] = [{
-  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Algorithms and Data Structures', exerciseSessionCount: 12,
-  lectureHoursPerWeek: 4, exerciseSessionMinutes: 120, examDate: '2027-01-25', version: 1,
-  examPrep: { must: ['Dynamic programming sheets', 'Past exam 2025'], optional: ['Extra graph problems'], not_required: ['Optional coding project'] },
-}];
+const sampleCourses: Course[] = DEMO_COURSES;
 
 type FormState = Omit<Course, 'examPrep'> & { examPrep: Record<ExamPrepPriority, string> };
 const blank = (): FormState => ({ id: crypto.randomUUID(), name: '', exerciseSessionCount: 0, lectureHoursPerWeek: 0, exerciseSessionMinutes: 90,
