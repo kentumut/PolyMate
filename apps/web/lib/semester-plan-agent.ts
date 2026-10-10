@@ -434,6 +434,57 @@ export function verifiedProposal(output: AgentOutput, candidates: Map<string, Se
   return { summary, courses, cautions };
 }
 
+const alternativeRequestSchema = z.object({
+  plan: semesterPlanRequestSchema,
+  courseId: z.number().int().positive(),
+}).strict();
+
+export async function suggestCourseAlternative(raw: unknown, options: { client?: VvzClient } = {}) {
+  const { plan, courseId } = alternativeRequestSchema.parse(raw);
+  const chosen = plan.courses.find(course => course.id === courseId);
+  if (!chosen) throw new Error('Choose a course that is currently in the semester plan.');
+  const client = options.client ?? new VvzClient();
+  const audit = await checkMscCsGraduation(client, {
+    major: plan.major,
+    minor: plan.minor,
+    courses: plan.courses.map(course => ({ unitId: course.id, status: course.status })),
+    previousBachelorLanguageCredits: 0,
+  });
+  const assignment = audit.projected.assignments.find(course => course.unitId === courseId);
+  const eligible = assignment?.eligibleCategories ?? [];
+  const category = assignment?.assignedCategory !== 'unclassified' ? assignment?.assignedCategory
+    : eligible.find(item => item !== 'free_elective') ?? eligible[0];
+  if (!category || !(VVZ_CURRICULUM_BROWSE_CATEGORIES as readonly string[]).includes(category)) {
+    throw new Error('PolyMate could not determine a curriculum category for that course.');
+  }
+  const existingIds = new Set(plan.courses.map(course => course.id));
+  const existingNumbers = new Set(plan.courses.map(course => course.number?.trim().toUpperCase()).filter((number): number is string => Boolean(number)));
+  const sourceSemester = chosen.sourceSemester ?? chosen.semester;
+  const fallbackSemester = sourceSemester.at(-1) === 'W' ? '2026W' : '2027S';
+  const candidates: SearchCourse[] = [];
+  for (const semester of [...new Set([sourceSemester, fallbackSemester])]) {
+    const result = await client.browseMscCsCurriculum({ semester, major: plan.major, minor: plan.minor, categories: [category], limitPerCategory: 8 });
+    candidates.push(...(result.categories[category as VvzCurriculumCategory] ?? []));
+  }
+  const semesterCreditsWithoutChosen = semesterCredits(plan.courses).get(chosen.semester)! - (chosen.credits ?? 0);
+  const maximumCredits = plan.targetCredits + MAX_SEMESTER_OVERAGE;
+  const alternative = candidates
+    .filter(course => course.id !== chosen.id && !existingIds.has(course.id) && course.credits !== null && course.credits > 0)
+    .filter(course => !course.number || !existingNumbers.has(course.number.trim().toUpperCase()))
+    .filter(course => semesterCreditsWithoutChosen + (course.credits ?? 0) <= maximumCredits)
+    .sort((left, right) => Math.abs((left.credits ?? 0) - (chosen.credits ?? 0)) - Math.abs((right.credits ?? 0) - (chosen.credits ?? 0)))[0];
+  if (!alternative) throw new Error(`No unused ${category.replaceAll('_', ' ')} alternative fits the ${maximumCredits}-ECTS semester limit.`);
+  return {
+    course: {
+      ...alternative,
+      semester: chosen.semester,
+      ...(alternative.semester !== chosen.semester ? { sourceSemester: alternative.semester } : {}),
+    },
+    category,
+    reason: `Alternative ${category.replaceAll('_', ' ')} course with ${alternative.credits} ECTS. It keeps the planned ${chosen.semester} workload within ${maximumCredits} ECTS; confirm prerequisites and ${alternative.semester !== chosen.semester ? `recurrence from ${alternative.semester}` : 'availability'} before replacing the original course.`,
+  };
+}
+
 export async function improveSemesterPlan(
   rawPlan: unknown,
   options: { client?: VvzClient; runner?: Runner; env?: NodeJS.ProcessEnv; signal?: AbortSignal } = {},
