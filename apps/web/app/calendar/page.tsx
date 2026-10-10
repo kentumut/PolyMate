@@ -1,9 +1,7 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { IdentityError, resolveOwner, type OwnerContext } from '@polymate/core/identity';
-import { CalendarStudyWorkflow } from '@/components/study/calendar-study-workflow';
-import { GoogleConnection } from '@/components/connections/google-connection';
-import { AssignmentsPanel } from '@/components/study/assignments-panel';
+import { StudyCompanion } from '@/components/agent/study-companion';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,20 +28,10 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#658071]">A little structure. More room to learn.</p>
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div><h1 className="text-4xl font-medium tracking-tight md:text-5xl">Make space for your week.</h1>
-            <p className="mt-4 max-w-xl text-sm leading-6 text-[#617269]">Your lectures, plans, and study blocks, together in one calm place.</p></div>
-          <span className="rounded-full bg-[#e8ede5] px-4 py-2 text-xs font-medium">{sample ? 'Sample calendar' : 'Study calendar'}</span>
+            <p className="mt-4 max-w-xl text-sm leading-6 text-[#617269]">Connect your Moodle calendar, choose what needs work, then shape a study timeline and add the blocks you approve.</p></div>
+          <span className="rounded-full bg-[#e8ede5] px-4 py-2 text-xs font-medium">Study companion</span>
         </div>
-        <div className="mt-9 grid gap-5 lg:grid-cols-[1fr_290px]">
-          <CalendarStudyWorkflow key={`${owner.userId}:${sample}`} sample={sample} />
-          <aside className="space-y-5">
-            <AssignmentsPanel key={`${owner.userId}:assignments:${sample}`} sample={sample} />
-            <section className="rounded-2xl border border-[#dce3db] bg-white p-6 text-center"><h2 className="text-sm font-semibold">Google Calendar</h2><GoogleConnection /></section>
-            <section className="rounded-2xl bg-[#173b32] p-6 text-white"><p className="text-[11px] uppercase tracking-widest text-[#c2d5c5]">Start small</p><h2 className="mt-3 text-xl font-medium leading-7">One good study block<br />is a good start.</h2><p className="mt-4 text-sm leading-6 text-[#c2d5c5]">Once connected, your study plans will live alongside your existing commitments.</p></section>
-            <section className="rounded-2xl border border-[#dce3db] bg-[#edf0e7] p-6"><h2 className="text-sm font-semibold">A week with breathing room</h2><p className="mt-3 text-sm leading-6 text-[#617269]">Keep time for friends, fresh air, and everything beyond your exercise sheets.</p></section>
-            <p className="px-1 text-xs text-[#748278]">Signed in as {owner.displayName}</p>
-          </aside>
-        </div>
-        <p className="mt-6 text-xs text-[#7a877e]">Create, move, complete, or delete PolyMate study blocks. Your personal Google events remain read-only.</p>
+        <div className="mt-9"><StudyCompanion key={owner.userId} sample={sample} ownerName={owner.displayName} /></div>
       </section>
     </main>;
 }

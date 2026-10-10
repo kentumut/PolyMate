@@ -10,8 +10,21 @@
     "./calendar/google-api": "./calendar/google-api.ts",
     "./calendar/operations": "./calendar/operations.ts",
     "./calendar/fake": "./calendar/fake-client.ts",
-    "./scheduling/intervals": "./scheduling/intervals.ts"
+    "./scheduling/intervals": "./scheduling/intervals.ts",
+    "./moodle": "./integrations/moodle/client.ts",
+    "./moodle/tools": "./integrations/moodle/tools.ts",
+    "./moodle/calendar-feed": "./integrations/moodle/calendar-feed.ts",
+    "./agent/context": "./agent/context.ts",
+    "./agent/http": "./agent/http.ts",
+    "./agent/contracts": "./agent/contracts.ts",
+    "./agent/tools": "./agent/tool-definitions.ts",
+    "./agent/automations": "./agent/automations.ts"
   },
-  "dependencies": { "@polymate/contracts": "workspace:*" },
-  "scripts": { "typecheck": "tsc --noEmit" }
+  "dependencies": {
+    "@polymate/contracts": "workspace:*",
+    "node-ical": "0.27.3"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
 }

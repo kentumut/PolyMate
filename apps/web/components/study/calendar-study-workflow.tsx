@@ -10,7 +10,7 @@ import { StudyBlockDialog } from './study-block-dialog';
 import type { StudyBlockOperationResult } from './study-block-form';
 import { createStudyCalendarClient } from './study-calendar-client';
 
-export function CalendarStudyWorkflow({ sample = false }: { sample?: boolean }) {
+export function CalendarStudyWorkflow({ sample = false, externalReloadKey = 0 }: { sample?: boolean; externalReloadKey?: number }) {
   const [readClient] = useState(() => sample ? new FakeCalendarClient(undefined, 250) : new HttpCalendarClient());
   const [client] = useState(() => createStudyCalendarClient(sample ? { calendarClient: readClient } : {}));
   const [range, setRange] = useState(() => weekRange());
@@ -109,7 +109,7 @@ export function CalendarStudyWorkflow({ sample = false }: { sample?: boolean }) 
       <button type="button" onClick={reconcile} disabled={busy || checking} className="ml-2 underline disabled:opacity-50">{checking ? 'Checking…' : 'Check change'}</button>
     </div>}
     {!open && result && !blocking && <p role="status" className="text-sm text-[#617269]">{result.status === 'synced' ? sample ? 'Sample calendar change confirmed.' : 'Google Calendar change confirmed.' : result.error?.message}</p>}
-    <CalendarPanel client={readClient} sample={sample} onSelect={event => show(event)} onRangeChange={setRange} reloadKey={reloadKey} />
+    <CalendarPanel client={readClient} sample={sample} onSelect={event => show(event)} onRangeChange={setRange} reloadKey={reloadKey + externalReloadKey} />
     <StudyBlockDialog open={open} selectedEvent={selectedEvent} initialStartAt={initialStartAt}
       onClose={() => setOpen(false)} onCreate={input => perform(() => client.onCreate(input))}
       onUpdate={(id, input, etag) => perform(() => client.onUpdate(id, input, etag))}

@@ -11,6 +11,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
     "test": "vitest run",
+    "agent:sync-openclaw-tools": "tsx scripts/sync-openclaw-tool-definitions.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "smoke": "node scripts/smoke.mjs",
     "test:containers": "bash scripts/container-check.sh",
