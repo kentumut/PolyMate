@@ -66,6 +66,7 @@ jobs:
           DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_CLIENT_ROTATION_FROM: ${{ vars.GOOGLE_CLIENT_ROTATION_FROM }}
           TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
           OAUTH_STATE_SECRET: ${{ secrets.OAUTH_STATE_SECRET }}
         run: |
@@ -85,5 +86,8 @@ jobs:
           node -e '
             const names = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "TOKEN_ENCRYPTION_KEY", "OAUTH_STATE_SECRET"];
             for (const name of names) if (!process.env[name]) throw new Error(`Missing GitHub Actions secret: ${name}`);
-            process.stdout.write(JSON.stringify(Object.fromEntries(names.map(name => [name, process.env[name]]))));
+            process.stdout.write(JSON.stringify({
+              ...Object.fromEntries(names.map(name => [name, process.env[name]])),
+              GOOGLE_CLIENT_ROTATION_FROM: process.env.GOOGLE_CLIENT_ROTATION_FROM,
+            }));
           ' | ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes "$vm" "set -e; umask 077; cd /home/viscon/polymate; git fetch /home/viscon/polymate-transfer/polymate-$DEPLOY_SHA.bundle HEAD; test \"\$(git rev-parse FETCH_HEAD)\" = '$DEPLOY_SHA'; mkdir -p .release; git show FETCH_HEAD:scripts/install-google-env.mjs > .release/install-google-env.mjs; node .release/install-google-env.mjs; scripts/deploy.sh FETCH_HEAD"

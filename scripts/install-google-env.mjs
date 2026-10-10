@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 const secretNames = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'TOKEN_ENCRYPTION_KEY', 'OAUTH_STATE_SECRET'];
 const managedNames = [...secretNames, 'GOOGLE_REDIRECT_URI', 'GOOGLE_ENABLED'];
-const stableNames = ['GOOGLE_CLIENT_ID', 'TOKEN_ENCRYPTION_KEY', 'OAUTH_STATE_SECRET'];
+const stableNames = ['TOKEN_ENCRYPTION_KEY', 'OAUTH_STATE_SECRET'];
 
 export function installGoogleEnv(path, input) {
   if (!existsSync(path)) throw new Error('The private VM .env is missing.');
@@ -36,6 +36,10 @@ export function installGoogleEnv(path, input) {
     if (old.get(name) && old.get(name) !== secret[name]) {
       throw new Error(`Existing ${name} differs. Reconcile it privately before deploying.`);
     }
+  }
+  if (old.get('GOOGLE_CLIENT_ID') && old.get('GOOGLE_CLIENT_ID') !== secret.GOOGLE_CLIENT_ID &&
+      input.GOOGLE_CLIENT_ROTATION_FROM !== old.get('GOOGLE_CLIENT_ID')) {
+    throw new Error('Existing GOOGLE_CLIENT_ID differs. Set GOOGLE_CLIENT_ROTATION_FROM to the current client ID to rotate it.');
   }
 
   const origin = /^APP_ORIGIN=(.+)$/m.exec(current)?.[1];

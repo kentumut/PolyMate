@@ -49,6 +49,22 @@ describe('install Google production configuration', () => {
     expect(readFileSync(path, 'utf8')).toBe(before);
   });
 
+  it('rotates a client only when the current ID is explicitly named, preserving encryption keys', () => {
+    const path = privateEnv();
+    installGoogleEnv(path, secrets);
+    const before = readFileSync(path, 'utf8');
+    const next = { ...secrets, GOOGLE_CLIENT_ID: 'replacement.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'GOCSPX-replacement' };
+    expect(() => installGoogleEnv(path, next)).toThrow('Existing GOOGLE_CLIENT_ID differs');
+    expect(readFileSync(path, 'utf8')).toBe(before);
+    expect(() => installGoogleEnv(path, { ...next, GOOGLE_CLIENT_ROTATION_FROM: 'wrong-client' })).toThrow('Existing GOOGLE_CLIENT_ID differs');
+    installGoogleEnv(path, { ...next, GOOGLE_CLIENT_ROTATION_FROM: secrets.GOOGLE_CLIENT_ID });
+    const result = readFileSync(path, 'utf8');
+    expect(result).toContain(`GOOGLE_CLIENT_ID=${next.GOOGLE_CLIENT_ID}`);
+    expect(result).toContain(`TOKEN_ENCRYPTION_KEY=${secrets.TOKEN_ENCRYPTION_KEY}`);
+    expect(result).toContain(`OAUTH_STATE_SECRET=${secrets.OAUTH_STATE_SECRET}`);
+    installGoogleEnv(path, next);
+  });
+
   it('accepts secret JSON on standard input without printing its values', () => {
     const path = privateEnv();
     const result = spawnSync(process.execPath, ['scripts/install-google-env.mjs', path], {
