@@ -65,7 +65,7 @@ export function parseAssignment(value: unknown): Assignment {
   let id: string;
   try { id = parseOperationId(item.id); } catch { throw new AssignmentValidationError('Assignment ID is invalid.'); }
   if (typeof item.remainingMinutes !== 'number' || !Number.isInteger(item.remainingMinutes) || item.remainingMinutes < 0 || item.remainingMinutes > ASSIGNMENT_EFFORT_MAX
-    || !['open', 'in_progress', 'completed', 'cancelled'].includes(String(item.status))
+    || typeof item.status !== 'string' || !['open', 'in_progress', 'completed', 'cancelled'].includes(item.status)
     || typeof item.version !== 'number' || !Number.isInteger(item.version) || item.version < 1) {
     throw new AssignmentValidationError('Assignment state is invalid.');
   }

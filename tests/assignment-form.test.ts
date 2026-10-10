@@ -50,7 +50,7 @@ describe('assignment deadline and effort validation', () => {
   it('rejects malformed save confirmations instead of displaying false success', () => {
     const saved = { ...input, id: requestId, remainingMinutes: 150, status: 'open', version: 1 };
     expect(parseAssignment(saved)).toEqual(saved);
-    for (const changes of [{ id: 'invalid' }, { version: 0 }, { status: 'invented' }, { remainingMinutes: -1 }]) {
+    for (const changes of [{ id: 'invalid' }, { version: 0 }, { status: 'invented' }, { status: ['open'] }, { remainingMinutes: -1 }]) {
       expect(() => parseAssignment({ ...saved, ...changes })).toThrow();
     }
   });
