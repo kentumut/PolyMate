@@ -70,6 +70,10 @@ Creating a study block accepts optional `assignmentId` plus `expectedAssignmentV
 
 ## Agent handoff for Dogancem
 
+Interactive OpenClaw progress tools are now registered in the canonical contracts and plugin manifest. See [AI agent handoff](AI_AGENT_HANDOFF.md#interactive-local-progress) for confirmation-card semantics and deployment allowlists. `polymate_get_study_progress` reads local state; `polymate_link_study_session` and `polymate_report_study_progress` prepare sealed changes. Only the authenticated browser's `confirm_progress` action saves them. Whole-assignment completion requires a separate explicit checkbox. No new migration is needed: original report requests/receipts and pending Google completions use the existing durable store.
+
+Linked agent moves now call the progress-aware rescheduling helper, and calendar reads synchronize linked revisions. Background progress tools/check-ins remain follow-up work.
+
 Shared contracts are exported from `@polymate/contracts/study-progress`. Domain behavior is in `StudyProgressService` from `@polymate/core/progress`.
 
 For an authenticated web tool turn, reuse `studyProgressServiceFor(owner)` and `rescheduleStudySessionFor(owner, args)` from `apps/web/lib/study-progress.ts`. The `owner` must be resolved by the backend, never selected by the model. Background execution must supply its own server-authenticated context.

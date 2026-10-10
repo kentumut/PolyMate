@@ -7,6 +7,9 @@ export const AGENT_TOOL_NAMES = [
   'polymate_check_connections',
   'polymate_get_calendar',
   'polymate_move_study_block',
+  'polymate_get_study_progress',
+  'polymate_link_study_session',
+  'polymate_report_study_progress',
 ] as const;
 
 export type AgentToolName = typeof AGENT_TOOL_NAMES[number];
