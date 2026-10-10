@@ -11,7 +11,7 @@ trap 'rm -rf "$work"' EXIT
 npm install --prefix "$work" --ignore-scripts --no-audit --no-fund --silent "@electric-sql/pglite@$PGLITE_VERSION"
 export PGLITE_MODULE="$work/node_modules/@electric-sql/pglite/dist/index.js"
 export PGCRYPTO_MODULE="$work/node_modules/@electric-sql/pglite/dist/contrib/pgcrypto.js"
-for suite in study-planning study-progress calendar-imports; do
+for suite in study-planning study-progress calendar-imports proactive-chats; do
   pnpm exec tsx "tests/integration/$suite.db.mjs"
 done
 echo 'Planner, planning API, migration and SQL progress checks passed.'
