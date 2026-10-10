@@ -5,7 +5,7 @@ import { currentPlanApproval } from '@polymate/core/agent/contracts';
 
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
 import type { CalendarEvent } from '@polymate/contracts/calendar';
-import { ArrowUp, Square } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Check, ClipboardPlus, GraduationCap, RotateCcw, Sparkles, Square } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CalendarStudyWorkflow } from '@/components/study/calendar-study-workflow';
@@ -21,6 +21,26 @@ import type { ProgressReceipt } from '@polymate/contracts/study-progress';
 import { CoachInbox, type CoachReplyTarget } from './coach-inbox';
 import { CoursesPanel } from '@/components/study/courses-panel';
 import { Button } from '@/components/ui/button';
+import {
+  DEMO_COURSES,
+  DEMO_ONBOARDING_OPTIONS,
+  DEMO_PROMPTS,
+  demoAssignment,
+  demoCoachingState,
+  demoCommitmentMemory,
+  demoInitialMemories,
+  demoMoodleSnapshot,
+  demoMovedBlock,
+  demoScheduleCard,
+  demoTimeline,
+  demoWeekRange,
+  type DemoCommitment,
+  type DemoPlanStyle,
+  type DemoProfile,
+  type DemoStage,
+} from '@/lib/demo-fixtures';
+import { ChatList, CheckInNotice, CheckInSettings, useChats } from './chat-list';
+import { fetchChat, unreadCheckIns } from './chat-client';
 
 type AgentCard = { kind: 'assignments' | 'timeline' | 'schedule' | 'connections' | 'progress'; data: unknown };
 type PendingPlan = { timeline: AssignmentTimeline; expiresAt: string };
@@ -172,11 +192,91 @@ function TimelinePreview({ plan, onSchedule, busy }: { plan: PendingPlan; onSche
   </section>;
 }
 
-export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerName: string }) {
+const demoStages: Array<{ id: DemoStage; label: string }> = [
+  { id: 'onboarding', label: 'Setup' },
+  { id: 'brief', label: 'Context' },
+  { id: 'remember', label: 'Memory' },
+  { id: 'plan', label: 'Draft' },
+  { id: 'approve', label: 'Approve' },
+  { id: 'move', label: 'Adapt' },
+];
+
+function DemoOnboarding({ onComplete }: { onComplete: (profile: DemoProfile) => void }) {
+  const [goal, setGoal] = useState<DemoProfile['goal']>();
+  const [sessionMinutes, setSessionMinutes] = useState<DemoProfile['sessionMinutes']>();
+  const [coachCadence, setCoachCadence] = useState<DemoProfile['coachCadence']>();
+  const ready = goal !== undefined && sessionMinutes !== undefined && coachCadence !== undefined;
+  const optionClass = (selected: boolean) => `rounded-xl border p-3 text-left transition ${selected ? 'border-primary bg-primary text-primary-foreground' : 'bg-card hover:bg-accent'}`;
+  return <section className="my-auto py-4" aria-labelledby="demo-onboarding-title">
+    <div className="rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
+      <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><Sparkles className="size-4" aria-hidden="true" /> Mentor demo · interactive walkthrough</p>
+      <h1 id="demo-onboarding-title" className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Shape Alex’s study coach</h1>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">Choose a goal, focus rhythm, and coaching style. Your decisions change the conversation, memory, notifications, and calendar plan.</p>
+
+      <fieldset className="mt-6"><legend className="text-sm font-semibold">1. What should PolyMate optimize for?</legend>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">{DEMO_ONBOARDING_OPTIONS.goal.map(option => <button key={option.value} type="button" role="radio" aria-checked={goal === option.value} onClick={() => setGoal(option.value)} className={optionClass(goal === option.value)}><span className="block text-sm font-medium">{option.label}</span><span className={`mt-1 block text-xs leading-5 ${goal === option.value ? 'text-primary-foreground/75' : 'text-muted-foreground'}`}>{option.description}</span></button>)}</div>
+      </fieldset>
+      <fieldset className="mt-5"><legend className="text-sm font-semibold">2. Which focus rhythm feels realistic?</legend>
+        <div className="mt-2 grid grid-cols-2 gap-2">{DEMO_ONBOARDING_OPTIONS.sessionMinutes.map(option => <button key={option.value} type="button" role="radio" aria-checked={sessionMinutes === option.value} onClick={() => setSessionMinutes(option.value)} className={optionClass(sessionMinutes === option.value)}><span className="block text-sm font-medium">{option.label}</span><span className={`mt-1 hidden text-xs leading-5 sm:block ${sessionMinutes === option.value ? 'text-primary-foreground/75' : 'text-muted-foreground'}`}>{option.description}</span></button>)}</div>
+      </fieldset>
+      <fieldset className="mt-5"><legend className="text-sm font-semibold">3. How visible should coaching be?</legend>
+        <div className="mt-2 grid grid-cols-2 gap-2">{DEMO_ONBOARDING_OPTIONS.coachCadence.map(option => <button key={option.value} type="button" role="radio" aria-checked={coachCadence === option.value} onClick={() => setCoachCadence(option.value)} className={optionClass(coachCadence === option.value)}><span className="block text-sm font-medium">{option.label}</span><span className={`mt-1 hidden text-xs leading-5 sm:block ${coachCadence === option.value ? 'text-primary-foreground/75' : 'text-muted-foreground'}`}>{option.description}</span></button>)}</div>
+      </fieldset>
+      <Button type="button" disabled={!ready} onClick={() => { if (ready) onComplete({ goal, sessionMinutes, coachCadence }); }} className="mt-6 w-full">Start the interactive demo <ArrowUp className="rotate-90" aria-hidden="true" /></Button>
+    </div>
+  </section>;
+}
+
+type DemoDecision = Readonly<{ label: string; description: string; prompt?: string; approve?: true }>;
+
+function decisionsFor(stage: DemoStage): DemoDecision[] {
+  if (stage === 'brief') return [
+    { label: 'Prioritize deadlines', description: 'Lead with submission risk.', prompt: 'Prioritize my deadlines and tell me what matters most.' },
+    { label: 'Connect to the exam', description: 'Use saved course priorities.', prompt: 'Which upcoming work best supports my exam preparation?' },
+  ];
+  if (stage === 'remember') return [
+    { label: 'Protect volunteering', description: 'Wednesday, 17:00–20:00.', prompt: 'Remember that I volunteer next Wednesday from 17:00 to 20:00.' },
+    { label: 'Protect rehearsal', description: 'Thursday, 17:00–19:00.', prompt: 'Remember that I have a project rehearsal next Thursday from 17:00 to 19:00.' },
+  ];
+  if (stage === 'plan') return [
+    { label: 'Spread the work', description: 'Balance sessions across the week.', prompt: 'Spread 150 minutes for Algorithms problem set 4 across the week before Friday.' },
+    { label: 'Front-load it', description: 'Finish most work by Tuesday.', prompt: 'Front-load 150 minutes for Algorithms problem set 4 before Friday.' },
+  ];
+  if (stage === 'approve') return [
+    { label: 'Approve all blocks', description: 'Write this exact draft.', approve: true },
+    { label: 'Explain the trade-off', description: 'Keep the calendar unchanged.', prompt: 'Explain why you chose these times before I approve anything.' },
+  ];
+  if (stage === 'move') return [
+    { label: 'Move to Friday 15:00', description: 'Create a longer buffer.', prompt: 'Move the final review to Friday at 15:00.' },
+    { label: 'Move to Friday 16:00', description: 'Keep it closer to the deadline.', prompt: 'Move the final review to Friday at 16:00.' },
+  ];
+  return [];
+}
+
+function DemoGuide({ stage, busy, onRun, onApprove, onOpenCalendar }: { stage: DemoStage; busy: boolean; onRun: (prompt: string) => void; onApprove: () => void; onOpenCalendar: () => void }) {
+  const index = stage === 'complete' ? demoStages.length : demoStages.findIndex(item => item.id === stage);
+  const decisions = decisionsFor(stage);
+  return <section className="mb-3 rounded-xl border bg-muted/45 p-3" aria-label="Guided chat demo">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="flex items-center gap-2 text-xs font-medium"><Sparkles className="size-3.5" aria-hidden="true" /> Mentor demo <span className="font-normal text-muted-foreground">Interactive walkthrough</span></p>
+      <ol className="flex items-center gap-1.5" aria-label={`Demo progress, ${Math.min(index + 1, demoStages.length)} of ${demoStages.length}`}>
+        {demoStages.map((item, itemIndex) => <li key={item.id} title={item.label} className={`h-1.5 w-7 rounded-full ${itemIndex < index ? 'bg-primary' : itemIndex === index ? 'bg-amber-500' : 'bg-border'}`}><span className="sr-only">{item.label}</span></li>)}
+      </ol>
+    </div>
+    {decisions.length > 0 && <div className="mt-3 grid grid-cols-2 gap-2">{decisions.map(decision => <button key={decision.label} type="button" disabled={busy} onClick={() => decision.approve ? onApprove() : onRun(decision.prompt!)} className="rounded-lg border bg-background p-2.5 text-left transition-colors hover:bg-accent disabled:opacity-50"><span className="block text-xs font-semibold sm:text-sm">{decision.label}</span><span className="mt-1 hidden text-xs text-muted-foreground sm:block">{decision.description}</span></button>)}</div>}
+    {stage === 'approve' && <p className="mt-2 text-xs text-muted-foreground">Only the approval choice writes to the calendar. The explanation choice leaves the draft untouched.</p>}
+    {stage === 'complete' && <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="flex items-center gap-2 text-sm font-medium"><Check className="size-4" /> Demo complete</p><div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => window.location.reload()}><RotateCcw /> Restart</Button><Button type="button" size="sm" onClick={onOpenCalendar}>Open calendar</Button></div></div>}
+  </section>;
+}
+
+export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { sample: boolean; ownerName: string; demo?: boolean; demoNow?: string }) {
   const workspace = useStudyWorkspace();
+  // The demo route always supplies its server timestamp. Keep the fallback stable so
+  // non-demo server/client renders cannot disagree during hydration.
+  const demoEpoch = demoNow ?? '2026-10-10T12:00:00.000Z';
   const searchParams = useSearchParams();
   const requestedView = searchParams.get('view');
-  const view: WorkspaceView = requestedView === 'calendar' || requestedView === 'courses' || requestedView === 'planner' || requestedView === 'settings' ? requestedView
+  const view: WorkspaceView = requestedView === 'calendar' || requestedView === 'courses' || requestedView === 'planner' || requestedView === 'settings' || requestedView === 'chat' ? requestedView
     : searchParams.has('google') ? 'settings' : 'chat';
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
@@ -192,6 +292,16 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   const [coachRefreshKey, setCoachRefreshKey] = useState(0);
   const [coachOutstanding, setCoachOutstanding] = useState(0);
   const [nextEvent, setNextEvent] = useState<CalendarEvent | null>(null);
+  const [assignmentsOpen, setAssignmentsOpen] = useState(false);
+  const [demoStage, setDemoStage] = useState<DemoStage>(demo ? 'onboarding' : 'brief');
+  const [demoProfile, setDemoProfile] = useState<DemoProfile | null>(null);
+  const [demoCommitment, setDemoCommitment] = useState<DemoCommitment>('volunteering');
+  const [demoPlanStyle, setDemoPlanStyle] = useState<DemoPlanStyle>('spread');
+  const [demoCoachAnswered, setDemoCoachAnswered] = useState(false);
+  const [demoMemories, setDemoMemories] = useState(() => demo ? [] : demoInitialMemories(demoEpoch));
+  // Each chat is stored under its own ID; a fresh ID is a new, still empty chat.
+  const [chatId, setChatId] = useState(() => crypto.randomUUID());
+  const chats = useChats(sample);
   const nextId = useRef(0);
   const inFlight = useRef<AbortController | null>(null);
   const messagesEnd = useRef<HTMLDivElement | null>(null);
@@ -214,6 +324,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   function hrefFor(nextView: WorkspaceView) {
     const params = new URLSearchParams(searchParams.toString());
     params.set('view', nextView);
+    params.delete('google');
     return `/calendar?${params.toString()}`;
   }
 
@@ -233,6 +344,35 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
   }
 
+  function showChatView() {
+    window.history.pushState(null, '', hrefFor('chat'));
+    window.scrollTo({ top: 0 });
+  }
+
+  async function openChat(id: string) {
+    if (busy) return;
+    setError('');
+    try {
+      const thread = await fetchChat(id);
+      setChatId(id); setCoachReply(null); setInput('');
+      setMessages(thread.messages.map(item => ({ id: ++nextId.current, role: item.role, text: item.content, cards: [] })));
+      if (thread.chat.unread) void chats.markRead(id);
+      showChatView();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'This chat could not be opened.'); }
+  }
+
+  function newChat() {
+    if (busy) return;
+    setChatId(crypto.randomUUID()); setMessages([]); setCoachReply(null); setError('');
+    showChatView();
+    window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
+  }
+
+  async function checkInNow() {
+    const id = await chats.checkInNow();
+    if (id) await openChat(id);
+  }
+
   function openRecommendation(prompt: string) {
     setInput(prompt);
     window.history.pushState(null, '', hrefFor('chat'));
@@ -240,10 +380,130 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
   }
 
-  async function sendMessage(event?: FormEvent, action?: { allowPartial: boolean } | { draftToken: string; confirmAssignmentFinished: boolean }) {
+  function completeDemoOnboarding(profile: DemoProfile) {
+    const goal = profile.goal === 'deadline' ? 'finish urgent work' : profile.goal === 'exam' ? 'build exam confidence' : 'keep the week sustainable';
+    const cadence = profile.coachCadence === 'proactive' ? 'flag risks that need a response' : 'stay quiet between weekly summaries';
+    setDemoProfile(profile);
+    setDemoMemories(demoInitialMemories(demoEpoch, profile.sessionMinutes));
+    setMessages([
+      { id: ++nextId.current, role: 'user', text: `Optimize for ${goal}; use ${profile.sessionMinutes}-minute sessions; ${cadence}.`, cards: [] },
+      { id: ++nextId.current, role: 'assistant', text: `Got it. I’ll optimize for **${goal}**, keep study blocks to **${profile.sessionMinutes} minutes**, and ${cadence}. I saved the focus rhythm as a persistent preference so future plans can reuse it.`, cards: [] },
+    ]);
+    setCoachRefreshKey(value => value + 1);
+    setDemoStage('brief');
+  }
+
+  async function runDemoTurn(text: string, action?: { allowPartial: boolean } | { draftToken: string; confirmAssignmentFinished: boolean }) {
+    const reply = (body: string, cards: AgentCard[] = []) => {
+      setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: body, cards }].slice(-40) as ChatMessage[]);
+    };
+    await new Promise(resolve => setTimeout(resolve, 450));
+
+    if (demoStage === 'onboarding') {
+      reply('Finish the three onboarding choices first so I can tailor the demo plan.');
+      return;
+    }
+
+    const profile = demoProfile ?? { goal: 'deadline', sessionMinutes: 50, coachCadence: 'weekly' } as const;
+
+    if (demoStage === 'brief') {
+      const course = DEMO_COURSES[0];
+      const examLens = /exam/i.test(text) || profile.goal === 'exam';
+      const framing = examLens
+        ? `Problem set 4 is the best near-term choice because its dynamic-programming work also advances the **${course.examPrep.must.join('** and **')}** topics marked as must-do exam preparation.`
+        : profile.goal === 'balance'
+          ? 'Problem set 4 is the clearest deadline, and it can fit without using Wednesday evening or Friday night.'
+          : 'Problem set 4 is the clearest submission risk, due Friday at 18:00.';
+      reply(`Your priority is **${course.name}: Problem set 4**. ${framing} ${course.examPrep.optional.join('')} remains optional.\n\nYour calendar is busiest Tuesday afternoon and Friday after 17:30. I also remember your ${profile.sessionMinutes}-minute focus preference.`, [{ kind: 'assignments', data: demoMoodleSnapshot(demoEpoch) }]);
+      setDemoStage('remember');
+      return;
+    }
+
+    if (demoStage === 'remember') {
+      const commitment: DemoCommitment = /rehearsal|thursday/i.test(text) ? 'rehearsal' : 'volunteering';
+      const memory = demoCommitmentMemory(demoEpoch, commitment);
+      setDemoCommitment(commitment);
+      setDemoMemories(previous => previous.some(item => item.id === memory.id) ? previous : [...previous, memory]);
+      setCoachRefreshKey(value => value + 1);
+      reply(`I saved that as a temporary plan for next week: **${memory.content}** I’ll keep that time unavailable when I build the study plan, and the context now appears in Coach → Student memory.`);
+      setDemoStage('plan');
+      return;
+    }
+
+    if (demoStage === 'plan') {
+      const style: DemoPlanStyle = /front[- ]?load/i.test(text) ? 'frontload' : 'spread';
+      const timeline = demoTimeline(demoEpoch, { sessionMinutes: profile.sessionMinutes, style, commitment: demoCommitment });
+      setDemoPlanStyle(style);
+      setPendingPlan({ timeline, expiresAt: new Date(Date.parse(demoEpoch) + 30 * 60_000).toISOString() });
+      const commitmentLabel = demoCommitment === 'volunteering' ? 'Wednesday volunteering' : 'Thursday rehearsal';
+      reply(`I found **${timeline.blocks.length} × ${profile.sessionMinutes}-minute sessions** before the deadline and ${style === 'frontload' ? 'front-loaded the work into Monday and Tuesday' : 'spread the work across the available days'}. The draft avoids your Tuesday job, ${commitmentLabel}, and Friday climbing. **Nothing has been written to the calendar yet.**`);
+      setDemoStage('approve');
+      return;
+    }
+
+    if (demoStage === 'approve') {
+      if (!action || 'draftToken' in action || !pendingPlan || !workspace) {
+        reply(/explain|why|trade-off/i.test(text)
+          ? `I chose a **${demoPlanStyle === 'frontload' ? 'front-loaded' : 'spread'}** plan using your ${profile.sessionMinutes}-minute preference. It finishes all 150 minutes before the deadline while protecting the commitment you asked me to remember. The calendar is still unchanged.`
+          : 'The draft is still unchanged. Choose **Approve all blocks** only when you want to write this exact plan.');
+        return;
+      }
+      const results = [];
+      const assignment = demoAssignment(demoEpoch);
+      for (const block of pendingPlan.timeline.blocks) {
+        const result = await workspace.calendarClient.createStudyBlock(block, block.operationId);
+        results.push(result);
+        workspace.observe('create', result.event?.id ?? null, result);
+        if (result.status === 'synced' && result.event) {
+          await workspace.progressClient.link({
+            eventId: result.event.id,
+            assignmentId: assignment.id,
+            expectedAssignmentVersion: assignment.version,
+            expectedEtag: result.event.etag,
+          });
+        }
+        if (result.status !== 'synced') break;
+      }
+      const complete = results.length === pendingPlan.timeline.blocks.length && results.every(item => item.status === 'synced');
+      reply(complete ? `All ${pendingPlan.timeline.blocks.length} study blocks were confirmed. Open Calendar at any time to inspect or adjust them.` : 'The calendar returned a partial result. The card below shows exactly which writes were confirmed.', [{ kind: 'schedule', data: demoScheduleCard(pendingPlan.timeline, results) }]);
+      setPendingPlan(null);
+      setReloadKey(value => value + 1);
+      await workspace.refresh();
+      setDemoStage('move');
+      return;
+    }
+
+    if (demoStage === 'move') {
+      if (!/\b(move|reschedule|friday)\b/i.test(text) || !workspace) {
+        reply(`I have not changed the plan. Try: “${DEMO_PROMPTS.move}”`);
+        return;
+      }
+      const range = demoWeekRange(demoEpoch);
+      const events = await workspace.calendarClient.listWeek(range);
+      const event = events.find(item => item.source === 'polymate' && item.title.includes('Final review'));
+      if (!event) {
+        reply('I could not find the final review block. Add the draft first, then ask me to move it.');
+        return;
+      }
+      const target = /15(?::00)?\b/.test(text) ? 'friday-15' : 'friday-16';
+      const moved = demoMovedBlock(demoEpoch, target, profile.sessionMinutes);
+      const result = await workspace.calendarClient.updateStudyBlock(event.id, moved, event.etag, crypto.randomUUID());
+      workspace.observe('update', event.id, result);
+      const hour = target === 'friday-15' ? '15:00' : '16:00';
+      const endMinute = profile.sessionMinutes === 30 ? target === 'friday-15' ? '15:30' : '16:30' : target === 'friday-15' ? '15:50' : '16:50';
+      reply(result.status === 'synced' ? `Done — the final review now runs Friday from ${hour}–${endMinute}, still before the 18:00 deadline and without colliding with climbing.` : 'The move was not confirmed. The result card keeps the outcome explicit.', [{ kind: 'schedule', data: { movedBlock: { title: event.title, ...moved }, result: { results: [result], complete: result.status === 'synced' } } }]);
+      setReloadKey(value => value + 1);
+      setDemoStage('complete');
+      return;
+    }
+
+    reply('The guided scenario is complete. You can inspect the resulting blocks in Calendar, the course priorities in Courses, and the saved volunteering plan in Coach.');
+  }
+
+  async function sendMessage(event?: FormEvent, action?: { allowPartial: boolean } | { draftToken: string; confirmAssignmentFinished: boolean }, quickReply?: string) {
     event?.preventDefault();
-    if (busy || sample || (!action && !input.trim())) return;
-    const studentText = input.trim();
+    const studentText = (quickReply ?? input).trim();
+    if (busy || (sample && !demo) || (!action && !studentText)) return;
     const text = action ? ('draftToken' in action ? 'Confirm this progress change.' : action.allowPartial ? 'Add only the blocks that fit to my calendar.' : 'Add this timeline to my calendar.')
       : coachReply ? `Weekly planning question: ${coachReply.body}\n\nStudent response: ${studentText}` : studentText;
     // Bind explicit chat approval to the displayed draft, just like its button.
@@ -254,7 +514,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       : undefined;
     const id = ++nextId.current;
     setMessages(previous => [...previous, { id, role: 'user', text: coachReply && !action ? studentText : text, cards: [] }].slice(-40) as ChatMessage[]);
-    if (!action) setInput('');
+    if (!action && quickReply === undefined) setInput('');
     // Only free-form turns can be stopped; scheduling and confirmations change the calendar and must finish.
     const controller = action || scheduleAction ? null : new AbortController();
     inFlight.current = controller;
@@ -262,6 +522,23 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     // Free-form turns stream tool progress and reply text; actions keep the plain JSON response.
     const streamId = controller ? ++nextId.current : null;
     try {
+      if (demo) {
+        if (coachReply && !action) {
+          await new Promise(resolve => setTimeout(resolve, 450));
+          const range = demoWeekRange(demoEpoch);
+          setDemoMemories(previous => [...previous.filter(item => item.id !== '99999999-9999-4999-8999-999999999999'), {
+            id: '99999999-9999-4999-8999-999999999999', category: 'weekly_context', content: `Coach response: ${studentText}`,
+            validUntil: range.to, createdAt: demoEpoch,
+          }]);
+          setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: 'Thanks — I marked the coaching question answered and saved that response as context for this week. The guided demo can continue from the same step.', cards: [] }].slice(-40) as ChatMessage[]);
+          setDemoCoachAnswered(true);
+          setCoachReply(null);
+          setCoachRefreshKey(value => value + 1);
+          return;
+        }
+        await runDemoTurn(text, action);
+        return;
+      }
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (controller) headers.Accept = 'application/x-ndjson, application/json';
       if (action && 'draftToken' in action) {
@@ -272,7 +549,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       }
       const response = await fetch('/api/agent/chat', {
         method: 'POST', headers, credentials: 'same-origin', cache: 'no-store',
-        body: JSON.stringify(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text }),
+        body: JSON.stringify({ ...(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text }), conversationId: chatId }),
         signal: controller?.signal,
       });
       let body: ChatResponse;
@@ -294,6 +571,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       // The final reply is authoritative (redacted, and corrected for calendar outcomes); it replaces streamed text.
       setMessages(previous => [...previous.filter(message => message.id !== streamId), { id: streamId ?? ++nextId.current, role: 'assistant', text: body.reply, cards: body.cards ?? [] }].slice(-40) as ChatMessage[]);
       setCoachRefreshKey(value => value + 1);
+      void chats.refresh();
       setPendingPlan(body.pendingPlan ?? null);
       if (action && 'draftToken' in action) {
         const result = body.cards?.find(card => card.kind === 'progress')?.data as { receipt?: ProgressReceipt } | undefined;
@@ -332,6 +610,9 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     inFlight.current?.abort();
   }
 
+  const activeChat = chats.chats.find(chat => chat.id === chatId);
+  const quickReplies = activeChat && !messages.some(message => message.role === 'user') ? activeChat.quickReplies : [];
+  const waitingCheckIns = unreadCheckIns(chats.chats, chatId);
   const firstName = ownerName.trim().split(/[\s@]/)[0] || 'there';
   const nextEventTime = nextEvent ? new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Zurich', weekday: 'long', hour: '2-digit', minute: '2-digit',
@@ -341,14 +622,24 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     : view === 'courses' ? 'Workload, exam scope, and preparation priorities for each course.'
       : view === 'planner' ? 'Choose courses that fit your major, minor, and graduation path.'
       : 'Connections and preferences for your study space.';
+  const demoRange = demo ? demoWeekRange(demoEpoch) : null;
+  const demoCoach = demo ? demoCoachingState(demoEpoch, demoMemories, demoProfile?.coachCadence === 'proactive', demoCoachAnswered) : undefined;
+  const demoOnboarding = demo && demoStage === 'onboarding';
 
   return <div className="min-h-dvh bg-background md:flex md:items-start">
-    <WorkspaceSidebar view={view} ownerName={ownerName} hrefFor={hrefFor} onNavigate={navigate} />
+    <WorkspaceSidebar view={view} ownerName={ownerName} demo={demo} hrefFor={hrefFor} onNavigate={navigate} />
     <main className={view === 'chat' ? 'flex h-[calc(100dvh-57px)] min-w-0 flex-1 flex-col overflow-hidden md:h-dvh' : 'min-w-0 flex-1'}>
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4 sm:px-6">
-        <p className="truncate text-sm font-medium">{view === 'chat' ? 'Chat' : <>PolyMate <span className="text-muted-foreground">/ {pageTitle}</span></>}</p>
-        <CoachInbox sample={sample} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
+        <p className="truncate text-sm font-medium">{view === 'chat' ? <>Chat {demo && <span className="ml-2 rounded-full bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Demo</span>}</> : <>PolyMate <span className="text-muted-foreground">/ {pageTitle}</span></>}</p>
+        <div className="flex items-center gap-1">
+          {view === 'calendar' && <Button type="button" size="sm" aria-label="Add assignment" onClick={() => { setAssignmentsOpen(true); window.dispatchEvent(new Event('polymate-add-assignment')); }}><ClipboardPlus aria-hidden="true" /><span className="hidden sm:inline">Add assignment</span></Button>}
+          {view === 'courses' && <Button asChild size="sm" variant="outline"><a href={hrefFor('planner')} aria-label="Open semester plan" onClick={event => navigate(event, 'planner')}><GraduationCap aria-hidden="true" /><span className="hidden sm:inline">Semester plan</span></a></Button>}
+          {view === 'planner' && <Button asChild size="sm" variant="ghost"><a href={hrefFor('courses')} aria-label="Back to courses" onClick={event => navigate(event, 'courses')}><ArrowLeft aria-hidden="true" /><span className="hidden sm:inline">Courses</span></a></Button>}
+          {!demo && <ChatList chats={chats.chats} activeChatId={chatId} disabled={busy} onOpen={chat => void openChat(chat.id)} onNew={newChat} />}
+          <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswered}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
+        </div>
       </header>
+      {!demo && view !== 'chat' && <CheckInNotice chats={waitingCheckIns} floating disabled={busy} onOpen={chat => void openChat(chat.id)} />}
 
       <div className={view === 'chat' ? 'min-h-0 flex-1' : 'mx-auto w-full max-w-7xl px-4 py-8 sm:px-7 md:px-10 md:py-10 lg:px-12'}>
         {view !== 'chat' && <header className="mb-8">
@@ -358,15 +649,15 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
 
         {/* Keep panels mounted so navigation preserves drafts, forms, and calendar state. */}
         <section aria-label="Calendar" className={view === 'calendar' ? 'space-y-5' : 'hidden'}>
-          <div className="min-w-0 rounded-xl border bg-card p-4 shadow-sm sm:p-6"><CalendarStudyWorkflow sample={sample} externalReloadKey={reloadKey} /></div>
-          <details className="group rounded-xl border bg-card shadow-sm">
+          <div className="min-w-0"><CalendarStudyWorkflow sample={sample} demo={demo} externalReloadKey={reloadKey} initialDate={demoRange?.from} /></div>
+          <details open={assignmentsOpen} onToggle={event => setAssignmentsOpen(event.currentTarget.open)} className="group rounded-xl border bg-card shadow-sm">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 text-sm font-medium [&::-webkit-details-marker]:hidden">
               <span>Assignments <span className="ml-2 hidden font-normal text-muted-foreground sm:inline">Deadlines and effort estimates</span></span>
               <span className="text-xl leading-none text-muted-foreground transition-transform group-open:rotate-45" aria-hidden="true">+</span>
             </summary>
             <div className="border-t [&>section]:border-0 [&>section]:bg-transparent"><AssignmentsPanel sample={sample} onCalendarChange={() => setReloadKey(value => value + 1)} /></div>
           </details>
-          {sample && <p className="text-xs text-muted-foreground">Development sample calendar. Changes stay in memory.</p>}
+          {sample && <p className="text-xs text-muted-foreground">{demo ? 'Guided demo calendar. Changes stay in this browser and reset on reload.' : 'Development sample calendar. Changes stay in memory.'}</p>}
         </section>
 
         <section aria-label="Courses" className={view === 'courses' ? 'block' : 'hidden'}><CoursesPanel sample={sample} /></section>
@@ -379,12 +670,13 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
           <h2 id="study-chat-title" className="sr-only">Plan with PolyMate</h2>
           <div className="min-h-0 flex-1 overflow-y-auto" aria-live="polite" aria-relevant="additions text">
             <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 pb-8 pt-6 sm:px-6">
-              {!messages.length && <div className="my-auto flex flex-col items-center py-10 text-center">
-                <h1 className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">How are you feeling, {firstName}?</h1>
-                <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground">{nextEvent && nextEventTime ? <>Your next event is <span className="font-medium text-foreground">{nextEvent.title}</span> on {nextEventTime}.</> : 'Your calendar is clear for now. What would you like to make progress on?'}</p>
-                {coachOutstanding > 0 && <button type="button" onClick={() => document.getElementById('coach-notifications-trigger')?.click()} className="mt-5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">Your coach needs {coachOutstanding} response{coachOutstanding === 1 ? '' : 's'} from you</button>}
+              {demoOnboarding && <DemoOnboarding onComplete={completeDemoOnboarding} />}
+              {!demoOnboarding && !messages.length && <div className="my-auto flex flex-col items-center py-5 text-center sm:py-10">
+                <h1 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-4xl">{demo ? 'See PolyMate work across your study week' : `How are you feeling, ${firstName}?`}</h1>
+                <p className="mt-3 max-w-xl text-sm leading-5 text-muted-foreground sm:mt-4 sm:leading-6">{demo ? <><span className="sm:hidden">Try the real Chat, memory, approval flow, and calendar.</span><span className="hidden sm:inline">This guided conversation uses the real Chat interface, cards, approval flow, and in-memory calendar contract. Every demonstrated capability also exists in the production agent.</span></> : nextEvent && nextEventTime ? <>Your next event is <span className="font-medium text-foreground">{nextEvent.title}</span> on {nextEventTime}.</> : 'Your calendar is clear for now. What would you like to make progress on?'}</p>
+                {coachOutstanding > 0 && <button type="button" onClick={() => document.getElementById('coach-notifications-trigger')?.click()} className="mt-5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900">Your coach needs {coachOutstanding} response{coachOutstanding === 1 ? '' : 's'} from you</button>}
                 <div className="mt-8 grid w-full gap-2 sm:grid-cols-3">
-                  {['Plan my week', 'What should I study next?', 'Show my upcoming deadlines'].map(prompt => <button key={prompt} type="button" disabled={busy || sample} onClick={() => { setInput(prompt); document.getElementById('agent-message')?.focus(); }} className="rounded-xl border bg-card px-4 py-3 text-left text-sm shadow-sm transition-colors hover:bg-accent disabled:opacity-50">{prompt}</button>)}
+                  {!demo && ['Plan my week', 'What should I study next?', 'Show my upcoming deadlines'].map(prompt => <button key={prompt} type="button" disabled={busy || sample} onClick={() => { setInput(prompt); document.getElementById('agent-message')?.focus(); }} className="rounded-xl border bg-card px-4 py-3 text-left text-sm shadow-sm transition-colors hover:bg-accent disabled:opacity-50">{prompt}</button>)}
                 </div>
               </div>}
 
@@ -393,6 +685,9 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
                   {message.role === 'assistant' ? <MessageContent text={message.text} /> : <p className="whitespace-pre-wrap text-sm leading-6">{message.text}</p>}
                   {message.role === 'assistant' && <OtherCards cards={message.cards} busy={busy} confirmed={confirmedProgress} onConfirm={(draftToken, confirmAssignmentFinished) => void sendMessage(undefined, { draftToken, confirmAssignmentFinished })} />}
                 </article>)}
+                {!demo && quickReplies.length > 0 && !busy && <div className="flex flex-wrap gap-2" aria-label="Suggested replies">
+                  {quickReplies.map(reply => <button key={reply} type="button" onClick={() => void sendMessage(undefined, undefined, reply)} className="rounded-full border bg-card px-3.5 py-1.5 text-sm shadow-sm transition-colors hover:bg-accent">{reply}</button>)}
+                </div>}
                 {busy && streamingId === null && <p className="text-sm text-muted-foreground" role="status">{status}</p>}
                 {pendingPlan && <TimelinePreview plan={pendingPlan} onSchedule={allowPartial => void sendMessage(undefined, { allowPartial })} busy={busy} />}
                 <div ref={messagesEnd} />
@@ -402,7 +697,10 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
 
           <div className="shrink-0 bg-gradient-to-t from-background via-background to-transparent px-4 pb-3 pt-3 sm:px-6 sm:pb-5">
             <div className="mx-auto max-w-3xl">
+              {demoOnboarding ? <p className="text-center text-xs text-muted-foreground">Choose one option in each group to start. Nothing connects to an external account.</p> : <>
               {error && <p className="mb-2 text-sm text-destructive" role="alert">{error}</p>}
+              {demo && <DemoGuide stage={demoStage} busy={busy} onRun={prompt => void sendMessage(undefined, undefined, prompt)} onApprove={() => void sendMessage(undefined, { allowPartial: false })} onOpenCalendar={() => { window.history.pushState(null, '', hrefFor('calendar')); window.scrollTo({ top: 0 }); }} />}
+              {!demo && view === 'chat' && waitingCheckIns.length > 0 && <div className="mb-2"><CheckInNotice chats={waitingCheckIns} floating={false} disabled={busy} onOpen={chat => void openChat(chat.id)} /></div>}
               {coachReply && <div className="mb-2 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40"><div><p className="text-xs font-medium text-amber-800 dark:text-amber-300">Answering your coach</p><p className="mt-1">{coachReply.body}</p></div><button type="button" onClick={() => setCoachReply(null)} className="shrink-0 text-xs underline">Cancel</button></div>}
               <form onSubmit={event => void sendMessage(event)} className="relative rounded-2xl border bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/30">
                 <label htmlFor="agent-message" className="sr-only">Message PolyMate</label>
@@ -410,12 +708,13 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
                   if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
                   event.preventDefault();
                   void sendMessage();
-                }} maxLength={4000} rows={2} disabled={sample} placeholder={coachReply ? 'Write your answer for this week…' : 'Ask PolyMate anything…'} className="max-h-40 min-h-12 w-full resize-none bg-transparent px-2 py-2 pr-12 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60" />
+                }} maxLength={4000} rows={2} disabled={sample && !demo} placeholder={coachReply ? 'Write your answer for this week…' : 'Ask PolyMate anything…'} className="max-h-40 min-h-12 w-full resize-none bg-transparent px-2 py-2 pr-12 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60" />
                 {busy && !input.trim()
                   ? <Button type="button" size="icon" onClick={stopMessage} disabled={!stoppable} aria-label="Stop PolyMate" className="absolute bottom-2 right-2 rounded-full"><Square className="fill-current" aria-hidden="true" /></Button>
-                  : <Button size="icon" disabled={busy || sample || !input.trim()} aria-label="Send message" className="absolute bottom-2 right-2 rounded-full"><ArrowUp aria-hidden="true" /></Button>}
+                  : <Button size="icon" disabled={busy || (sample && !demo) || !input.trim()} aria-label="Send message" className="absolute bottom-2 right-2 rounded-full"><ArrowUp aria-hidden="true" /></Button>}
               </form>
-              <p className="mt-2 text-center text-[11px] text-muted-foreground">{sample ? 'Chat is unavailable in sample mode.' : 'PolyMate can make mistakes. Review calendar changes before approving them.'}</p>
+              <p className="mt-2 text-center text-[11px] text-muted-foreground">{demo ? 'Guided fixture · no external accounts or writes.' : sample ? 'Chat is unavailable in sample mode.' : 'PolyMate can make mistakes. Review calendar changes before approving them.'}</p>
+              </>}
             </div>
           </div>
         </section>
@@ -423,7 +722,8 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
         <section aria-label="Settings" className={view === 'settings' ? 'grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]' : 'hidden'}>
           <MoodleConnection />
           <div className="space-y-5">
-            <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-lg font-medium">Optional Google Calendar overlay</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Your PolyMate calendar works on its own. Connect Google only to show its events as read-only busy time.</p><GoogleConnection /></section>
+            {!sample && <CheckInSettings paused={chats.checkInsPaused} error={chats.error} disabled={busy} onPause={paused => void chats.setPaused(paused)} onCheckInNow={() => void checkInNow()} />}
+            <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-lg font-medium">Google Calendar</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Connect your primary calendar so PolyMate can protect existing commitments while it plans. Personal events remain read-only.</p><GoogleConnection demo={demo} /></section>
             <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-sm font-medium">Your study space</h2><dl className="mt-4 space-y-4 text-sm"><div><dt className="text-xs text-muted-foreground">Signed in as</dt><dd className="mt-1 break-words">{ownerName}</dd></div><div><dt className="text-xs text-muted-foreground">Calendar timezone</dt><dd className="mt-1">Europe/Zurich</dd></div></dl></section>
           </div>
         </section>

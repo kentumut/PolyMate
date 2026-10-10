@@ -5,6 +5,8 @@
   "exports": {
     "./progress/memory": "./progress/memory.ts",
     "./progress": "./progress/service.ts",
+    "./checkins": "./checkins/service.ts",
+    "./checkins/rules": "./checkins/rules.ts",
     "./identity": "./src/identity.ts",
     "./google-auth": "./integrations/google-auth/oauth.ts",
     "./google-auth/crypto": "./integrations/google-auth/crypto.ts",

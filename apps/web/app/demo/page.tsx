@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { DemoExperience } from '@/components/agent/demo-experience';
+import { redirect } from 'next/navigation';
 
 export const metadata: Metadata = {
   title: 'PolyMate demo — plan a study week',
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function DemoPage() {
-  return <DemoExperience />;
+  redirect('/calendar?demo=1&view=chat');
 }

@@ -2,7 +2,7 @@
 
 import type { MouseEvent } from 'react';
 import { useSyncExternalStore } from 'react';
-import { BookOpen, CalendarDays, GraduationCap, MessageSquare, Moon, Settings, Sun } from 'lucide-react';
+import { BookOpen, CalendarDays, LogOut, MessageSquare, Moon, Settings, Sparkles, Sun } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -12,14 +12,14 @@ export type WorkspaceView = 'calendar' | 'planner' | 'courses' | 'chat' | 'setti
 const destinations = [
   { view: 'chat', label: 'Chat', icon: MessageSquare },
   { view: 'calendar', label: 'Calendar', icon: CalendarDays },
-  { view: 'planner', label: 'Semester plan', icon: GraduationCap },
   { view: 'courses', label: 'Courses', icon: BookOpen },
   { view: 'settings', label: 'Settings', icon: Settings },
 ] satisfies { view: WorkspaceView; label: string; icon: typeof MessageSquare }[];
 
-export function WorkspaceSidebar({ view, ownerName, hrefFor, onNavigate }: {
+export function WorkspaceSidebar({ view, ownerName, demo = false, hrefFor, onNavigate }: {
   view: WorkspaceView;
   ownerName: string;
+  demo?: boolean;
   hrefFor: (view: WorkspaceView) => string;
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, view: WorkspaceView) => void;
 }) {
@@ -46,13 +46,20 @@ export function WorkspaceSidebar({ view, ownerName, hrefFor, onNavigate }: {
       <span className="hidden sm:inline">PolyMate</span>
     </a>
 
+    {/* Full page loads: the server decides demo mode from the query, so leaving needs a fresh render without it. */}
+    <a href={demo ? '/calendar?view=chat' : '/demo'} className="ml-1 flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border bg-background px-2.5 text-xs font-medium shadow-sm transition-colors hover:bg-accent md:mt-3 md:ml-0 md:justify-start md:px-3" aria-label={demo ? 'Exit mentor demo' : 'Open mentor demo'}>
+      {demo ? <LogOut className="size-3.5" aria-hidden="true" /> : <Sparkles className="size-3.5" aria-hidden="true" />}
+      <span className="hidden sm:inline">{demo ? 'Exit demo' : 'Mentor demo'}</span>
+    </a>
+
     <nav aria-label="Study space" className="ml-auto flex items-center gap-1 md:mt-6 md:ml-0 md:flex-col md:items-stretch">
       {destinations.map(destination => {
         const Icon = destination.icon;
-        return <a key={destination.view} href={hrefFor(destination.view)} onClick={event => onNavigate(event, destination.view)} aria-current={view === destination.view ? 'page' : undefined}
-          className={cn('flex h-9 items-center gap-3 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:text-sm', view === destination.view && 'bg-accent text-foreground')}>
+        const active = view === destination.view || (view === 'planner' && destination.view === 'courses');
+        return <a key={destination.view} href={hrefFor(destination.view)} onClick={event => onNavigate(event, destination.view)} aria-label={destination.label} aria-current={active ? 'page' : undefined}
+          className={cn('flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:min-w-0 sm:justify-start sm:gap-3 sm:px-3 md:h-9 md:text-sm', active && 'bg-accent text-foreground')}>
           <Icon className="size-4" strokeWidth={1.8} aria-hidden="true" />
-          <span className={cn(view !== destination.view && 'hidden sm:inline', 'md:inline')}>{destination.label}</span>
+          <span className={cn(!active && 'hidden sm:inline', 'md:inline')}>{destination.label}</span>
         </a>;
       })}
     </nav>

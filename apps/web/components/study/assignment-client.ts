@@ -97,8 +97,11 @@ export function createAssignmentClient(options: Options = {}) {
 export type AssignmentFixtureOutcome = 'success' | 'failure' | 'unknown' | 'slow';
 
 /** Uses the same HTTP adapter but only a labelled in-memory fixture transport. */
-export function createSampleAssignmentClient() {
-  const entries = new Map<string, { input: AssignmentInput; assignment: Assignment }>();
+export function createSampleAssignmentClient(seed: Assignment[] = []) {
+  const entries = new Map<string, { input: AssignmentInput; assignment: Assignment }>(seed.map((assignment, index) => [
+    `seed-${index}`,
+    { input: { title: assignment.title, dueAt: assignment.dueAt, estimatedMinutes: assignment.estimatedMinutes }, assignment },
+  ]));
   let outcome: AssignmentFixtureOutcome = 'success';
   const fetcher: typeof fetch = async (path, init) => {
     await new Promise(resolve => setTimeout(resolve, outcome === 'slow' ? 1500 : 200));
