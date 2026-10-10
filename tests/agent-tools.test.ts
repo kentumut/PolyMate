@@ -32,7 +32,7 @@ vi.mock('../packages/db/src/assignments', () => ({
 vi.mock('../apps/web/lib/calendar-route', () => ({ calendarServiceFor: () => mocks, calendarHomeFor: async () => ({ home: 'google', connected: true }), calendarError: () => Response.json({ error: { message: 'Calendar unavailable.' } }, { status: 502 }) }));
 
 import { AGENT_SYSTEM_INSTRUCTIONS, VVZ_ROUTING_INSTRUCTIONS, agentAppContext, agentResponseBody, beginAgentTurn, callOpenClawAgent, dispatchOpenClawTool, endAgentTurn, parseAgentToolArguments, publicPendingPlan, scheduleCurrentPlan } from '../apps/web/lib/agent-runtime';
-import { currentPlanApproval, followsUpOnRequest, isCreateAssignmentRequest, isCreateBlockRequest, isExplicitCalendarConsent, isExplicitDeleteConsent, isExplicitPartialConsent } from '../packages/core/agent/contracts';
+import { AGENT_DAILY_CREATE_LIMIT, currentPlanApproval, followsUpOnRequest, isCreateAssignmentRequest, isCreateBlockRequest, isExplicitCalendarConsent, isExplicitDeleteConsent, isExplicitPartialConsent } from '../packages/core/agent/contracts';
 
 const contextSecret = 'agent-context-test-secret-that-is-long-enough';
 const bridgeSecret = 'agent-bridge-test-secret-that-is-long-enough';
@@ -498,6 +498,146 @@ describe('PolyMate agent tool routing', () => {
     await expect(scheduleCurrentPlan(request(), owner, false, timeline.id)).rejects.toThrow('per day');
     expect(mocks.executeMoodleTool).toHaveBeenCalledTimes(1);
     expect(mocks.createStudyBlock).toHaveBeenCalledTimes(32);
+  });
+
+  describe('overlapping single-block creation', () => {
+    const block = { title: 'Review analysis', startAt: '2026-10-11T08:00:00.000Z', endAt: '2026-10-11T08:50:00.000Z' };
+    const shifted = { ...block, startAt: '2026-10-11T09:00:00.000Z', endAt: '2026-10-11T09:50:00.000Z' };
+    const overlap = (operationId: string) => ({ operationId, status: 'failed', error: { code: 'overlap', message: 'The requested time is busy.' } });
+
+    beforeEach(() => {
+      vi.setSystemTime(new Date('2026-10-11T07:55:00Z'));
+      mocks.listWeek.mockResolvedValue([{ ...block, endAt: shifted.startAt }]);
+      mocks.createStudyBlock.mockImplementationOnce(async (_input, operationId) => overlap(operationId));
+    });
+
+    it('reports a confirmed relocation with its actual times and a fresh ID after definitive overlap', async () => {
+      mocks.createStudyBlock.mockImplementationOnce(async (_input, operationId) => ({ operationId, status: 'synced' }));
+      const turn = beginAgentTurn(request(), owner, { message: 'Create a study block tomorrow at 10:00.' }).turn;
+      const response = await signedCall(turn.sessionKey, 'polymate_create_study_block', block);
+      expect(response.result).toMatchObject({ status: 'synced', relocated: { placed: { startAt: shifted.startAt, endAt: shifted.endAt } } });
+      expect(mocks.createStudyBlock.mock.calls[1][0]).toEqual(shifted);
+      expect(mocks.createStudyBlock.mock.calls[1][1]).not.toBe(mocks.createStudyBlock.mock.calls[0][1]);
+      expect(agentResponseBody('Done.', turn, owner.userId).reply).toContain(`was placed in the nearest free slot instead (${shifted.startAt} to ${shifted.endAt})`);
+      endAgentTurn(turn.sessionKey);
+    });
+
+    it.each(['original', 'shifted'])('reconciles an uncertain relocation using %s arguments without another allocation', async args => {
+      mocks.createStudyBlock.mockImplementationOnce(async (_input, operationId) => ({ operationId, status: 'unknown' }));
+      const first = beginAgentTurn(request(), owner, { message: 'Create a study block at 10:00.' }).turn;
+      const response = await signedCall(first.sessionKey, 'polymate_create_study_block', block);
+      expect(response.result).toMatchObject({ status: 'unknown', relocated: { reason: expect.stringContaining('unconfirmed') } });
+      const body = agentResponseBody('The block was saved!', first, owner.userId);
+      expect(body.reply).toContain('Placement at the free slot');
+      expect(body.reply).toContain('is unconfirmed');
+      expect(body.reply).not.toContain('was placed');
+      expect(body.cards[0].data).toMatchObject({ result: { complete: false, results: [{ status: 'unknown' }] }, createdBlock: shifted });
+      endAgentTurn(first.sessionKey);
+
+      // The original requested time is now in the past, but checking the existing operation is still safe.
+      vi.setSystemTime(new Date('2026-10-11T08:05:00Z'));
+      mocks.createStudyBlock.mockImplementationOnce(async (_input, operationId) => ({ operationId, status: 'synced' }));
+      const retry = beginAgentTurn(request(), owner, { message: 'Retry.' }).turn;
+      const retryArgs = args === 'original' ? block : { title: shifted.title, startAt: shifted.startAt, endAt: shifted.endAt };
+      expect((await signedCall(retry.sessionKey, 'polymate_create_study_block', retryArgs)).result).toMatchObject({ status: 'synced' });
+      expect(mocks.createStudyBlock.mock.calls[2]).toEqual(mocks.createStudyBlock.mock.calls[1]);
+      expect(mocks.listWeek).toHaveBeenCalledTimes(1);
+      expect(agentResponseBody('Done.', retry, owner.userId).reply).toContain('was placed');
+      endAgentTurn(retry.sessionKey);
+    });
+
+    it('retains the shifted payload and operation ID when execution throws after a possible write', async () => {
+      mocks.createStudyBlock.mockRejectedValueOnce(new Error('Lost write response'));
+      const first = beginAgentTurn(request(), owner, { message: 'Create a study block at 10:00.' }).turn;
+      expect((await signedCall(first.sessionKey, 'polymate_create_study_block', block)).error).toBeDefined();
+      endAgentTurn(first.sessionKey);
+      mocks.createStudyBlock.mockImplementationOnce(async (_input, operationId) => ({ operationId, status: 'synced' }));
+      const retry = beginAgentTurn(request(), owner, { message: 'Retry.' }).turn;
+      expect((await signedCall(retry.sessionKey, 'polymate_create_study_block', block)).result).toMatchObject({ status: 'synced' });
+      expect(mocks.createStudyBlock.mock.calls[2]).toEqual(mocks.createStudyBlock.mock.calls[1]);
+      expect(mocks.listWeek).toHaveBeenCalledTimes(1);
+      endAgentTurn(retry.sessionKey);
+    });
+
+    it('retains pending relocation identity and never describes a pending write as placed', async () => {
+      mocks.createStudyBlock.mockImplementationOnce(async (_input, operationId) => ({ operationId, status: 'pending' }));
+      const first = beginAgentTurn(request(), owner, { message: 'Create a study block at 10:00.' }).turn;
+      expect((await signedCall(first.sessionKey, 'polymate_create_study_block', block)).result).toMatchObject({ status: 'pending' });
+      const body = agentResponseBody('Saved!', first, owner.userId);
+      expect(body.reply).toContain('is unconfirmed');
+      expect(body.reply).not.toContain('was placed');
+      endAgentTurn(first.sessionKey);
+      mocks.createStudyBlock.mockImplementationOnce(async (_input, operationId) => ({ operationId, status: 'synced' }));
+      const retry = beginAgentTurn(request(), owner, { message: 'Retry.' }).turn;
+      await signedCall(retry.sessionKey, 'polymate_create_study_block', block);
+      expect(mocks.createStudyBlock.mock.calls[2]).toEqual(mocks.createStudyBlock.mock.calls[1]);
+      endAgentTurn(retry.sessionKey);
+    });
+
+    it.each(['google_unavailable', 'overlap'])('reports the shifted attempt failure (%s) instead of saying no slot exists', async code => {
+      mocks.createStudyBlock.mockImplementationOnce(async (_input, operationId) => ({ operationId, status: 'failed', error: { code, message: 'The shifted attempt failed.' } }));
+      const turn = beginAgentTurn(request(), owner, { message: 'Create a study block at 10:00.' }).turn;
+      const response = await signedCall(turn.sessionKey, 'polymate_create_study_block', block);
+      expect(response.result).toMatchObject({ status: 'failed', error: { code, message: 'The shifted attempt failed.' }, operationId: mocks.createStudyBlock.mock.calls[1][1] });
+      expect(response.result).not.toHaveProperty('hint');
+      const body = agentResponseBody('Saved!', turn, owner.userId);
+      expect(body.cards[0].data).toMatchObject({ createdBlock: shifted, result: { results: [{ error: { message: 'The shifted attempt failed.' } }] } });
+      expect(body.reply).toContain('attempt at the free slot');
+      expect(body.reply).toContain('failed; no placement is confirmed');
+      expect(body.reply).not.toContain('was placed');
+      endAgentTurn(turn.sessionKey);
+    });
+
+    it('does not allocate again when reconciliation of a shifted operation definitively fails', async () => {
+      mocks.createStudyBlock.mockImplementationOnce(async (_input, operationId) => ({ operationId, status: 'unknown' }));
+      const first = beginAgentTurn(request(), owner, { message: 'Create a study block at 10:00.' }).turn;
+      await signedCall(first.sessionKey, 'polymate_create_study_block', block);
+      endAgentTurn(first.sessionKey);
+      mocks.createStudyBlock.mockImplementationOnce(async (_input, operationId) => overlap(operationId));
+      const retry = beginAgentTurn(request(), owner, { message: 'Retry.' }).turn;
+      const response = await signedCall(retry.sessionKey, 'polymate_create_study_block', block);
+      expect(response.result).toMatchObject({ status: 'failed', operationId: mocks.createStudyBlock.mock.calls[1][1] });
+      expect(response.result).not.toHaveProperty('hint');
+      expect(mocks.createStudyBlock.mock.calls[2]).toEqual(mocks.createStudyBlock.mock.calls[1]);
+      expect(mocks.listWeek).toHaveBeenCalledTimes(1);
+      expect(mocks.createStudyBlock).toHaveBeenCalledTimes(3);
+      endAgentTurn(retry.sessionKey);
+    });
+
+    it.each(['unknown', 'throws'])('charges a relocated %s write once and allows reconciliation at the daily limit', async outcome => {
+      mocks.createStudyBlock.mockReset().mockImplementation(async (_input, operationId) => ({ operationId, status: 'synced' }));
+      for (let i = 0; i < AGENT_DAILY_CREATE_LIMIT - 1; i++) {
+        const turn = beginAgentTurn(request(), owner, { message: 'Create a study block.' }).turn;
+        expect((await signedCall(turn.sessionKey, 'polymate_create_study_block', { ...block, title: `Existing ${i}` })).result).toMatchObject({ status: 'synced' });
+        endAgentTurn(turn.sessionKey);
+      }
+      mocks.createStudyBlock.mockImplementationOnce(async (_input, operationId) => overlap(operationId));
+      if (outcome === 'unknown') mocks.createStudyBlock.mockImplementationOnce(async (_input, operationId) => ({ operationId, status: 'unknown' }));
+      else mocks.createStudyBlock.mockRejectedValueOnce(new Error('Lost response'));
+      const first = beginAgentTurn(request(), owner, { message: 'Create a study block.' }).turn;
+      await signedCall(first.sessionKey, 'polymate_create_study_block', block);
+      endAgentTurn(first.sessionKey);
+      const uncertainCall = mocks.createStudyBlock.mock.calls.at(-1);
+
+      const blocked = beginAgentTurn(request(), owner, { message: 'Create another study block.' }).turn;
+      expect((await signedCall(blocked.sessionKey, 'polymate_create_study_block', { ...block, title: 'Extra' })).error).toMatchObject({ status: 429 });
+      endAgentTurn(blocked.sessionKey);
+
+      const retry = beginAgentTurn(request(), owner, { message: 'Retry.' }).turn;
+      expect((await signedCall(retry.sessionKey, 'polymate_create_study_block', block)).result).toMatchObject({ status: 'synced' });
+      expect(mocks.createStudyBlock.mock.calls.at(-1)).toEqual(uncertainCall);
+      expect(mocks.listWeek).toHaveBeenCalledTimes(1);
+      endAgentTurn(retry.sessionKey);
+    });
+
+    it('only returns the no-free-slot hint when the allocation search finds no gap', async () => {
+      mocks.listWeek.mockResolvedValue([{ startAt: block.startAt, endAt: '2026-10-26T00:00:00.000Z' }]);
+      const turn = beginAgentTurn(request(), owner, { message: 'Create a study block at 10:00.' }).turn;
+      expect((await signedCall(turn.sessionKey, 'polymate_create_study_block', block)).result).toMatchObject({ status: 'failed', hint: expect.stringContaining('No free slot') });
+      expect(mocks.createStudyBlock).toHaveBeenCalledTimes(1);
+      expect(turn.cards[0].data).not.toHaveProperty('relocatedFrom');
+      endAgentTurn(turn.sessionKey);
+    });
   });
 
   it('keeps prompt injection in retrieved Moodle text from granting calendar consent and overrides false model success claims', async () => {
