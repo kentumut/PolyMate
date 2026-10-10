@@ -37,6 +37,8 @@ Feedback: the planning chat is slow, its replies are text-heavy, and the app mus
 | Yildirim | **Visual replies:** redesign the timeline card as a day-by-day view with time blocks. Show rotating status words while the agent works ("Juggling deadlines…", "Finding free slots…"). |
 | Catalin | **Checks:** compare response times before and after. Stop the web container, freeze it, and reboot the VM; confirm it recovers each time. Check the timeline card on desktop and mobile. |
 
+Speed work follows the [agent latency plan](docs/AGENT_LATENCY_PLAN.md): measure with `pnpm agent:latency`, then change one thing at a time and record the results there.
+
 **Gate:** planning is noticeably faster, timelines are visual, and the app recovers from a crash, a hang, and a reboot without manual intervention.
 
 ### Iteration 3b: imports and adaptive rescheduling → `v0.3-adaptive`

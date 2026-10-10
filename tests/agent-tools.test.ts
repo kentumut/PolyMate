@@ -390,4 +390,42 @@ describe('PolyMate agent tool routing', () => {
     expect((await dispatchOpenClawTool(input)).error?.status).toBe(401);
     endAgentTurn(turn.sessionKey);
   });
+
+  it('records per-tool latency spans without logging arguments, owners, or session keys', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const turn = beginAgentTurn(request(), owner, { message: 'Get my assignments.' }).turn;
+    mocks.executeMoodleTool.mockImplementation(async () => { vi.setSystemTime(Date.now() + 750); return { calendarEvents: [{ title: 'Secret course title' }] }; });
+    vi.setSystemTime(Date.now() + 1_200);
+    await signedCall(turn.sessionKey, 'moodle_get_calendar_events', {});
+    mocks.moodleConnectionAvailable.mockRejectedValueOnce(new Error('down'));
+    await signedCall(turn.sessionKey, 'polymate_check_connections', {});
+    expect(turn.telemetry.tools).toEqual([
+      { name: 'moodle_get_calendar_events', startMs: 1_200, endMs: 1_950, outcome: 'ok', resultBytes: expect.any(Number) },
+      { name: 'polymate_check_connections', startMs: 1_950, endMs: 1_950, outcome: 'error', resultBytes: 0 },
+    ]);
+    expect(turn.telemetry.tools[0].resultBytes).toBeGreaterThan(0);
+    const logged = info.mock.calls.map(call => String(call[0]));
+    expect(logged.map(line => JSON.parse(line).event)).toEqual(['agent_tool', 'agent_tool']);
+    expect(JSON.parse(logged[0])).toMatchObject({ turnId: turn.telemetry.turnId, name: 'moodle_get_calendar_events', ms: 750, outcome: 'ok', index: 1 });
+    for (const line of logged) for (const secret of [owner.userId, owner.externalId, turn.sessionKey, 'Secret course title']) expect(line).not.toContain(secret);
+    endAgentTurn(turn.sessionKey);
+    info.mockRestore();
+  });
+
+  it('reports prompt sizes and passed-through token usage for each gateway call', async () => {
+    vi.stubEnv('OPENCLAW_GATEWAY_HTTP_URL', 'http://openclaw.internal:18789');
+    vi.stubEnv('OPENCLAW_GATEWAY_TOKEN', 'server-only-openclaw-token');
+    const metrics = {};
+    await callOpenClawAgent({ sessionKey: agentSessionKey(owner.userId, contextSecret), message: 'Hello', metrics,
+      history: [{ role: 'user', content: 'Earlier' }, { role: 'assistant', content: 'Reply' }], draftContext: '{"timeline":1}',
+      fetchImpl: async () => { vi.setSystemTime(Date.now() + 2_500); return Response.json({ choices: [{ message: { content: 'Hi there' } }],
+        usage: { prompt_tokens: 4_000, completion_tokens: 120, prompt_tokens_details: { cached_tokens: 3_072 }, completion_tokens_details: { reasoning_tokens: 64 } } }); } });
+    expect(metrics).toEqual({ status: 200, gatewayMs: 2_500, requestBytes: expect.any(Number), responseBytes: expect.any(Number),
+      systemChars: expect.any(Number), historyMessages: 2, historyChars: 12, draftChars: 14, messageChars: 5, replyChars: 8,
+      promptTokens: 4_000, cachedPromptTokens: 3_072, completionTokens: 120, reasoningTokens: 64 });
+    const failed: { status?: number; gatewayMs?: number } = {};
+    await expect(callOpenClawAgent({ sessionKey: agentSessionKey(owner.userId, contextSecret), message: 'Hello', metrics: failed,
+      fetchImpl: async () => new Response('busy', { status: 503 }) })).rejects.toThrow('temporarily unavailable');
+    expect(failed).toMatchObject({ status: 503, gatewayMs: 0 });
+  });
 });

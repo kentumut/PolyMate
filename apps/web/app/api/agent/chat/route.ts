@@ -5,6 +5,7 @@ import { readBoundedText } from '@polymate/core/agent/http';
 import { calendarError } from '@/lib/calendar-route';
 import { moodleError } from '@/lib/moodle';
 import { assertAgentCsrf } from '@/lib/agent-csrf';
+import { logTurn, serverTimingHeader, summarizeTurn, type TurnOutcome } from '@/lib/agent-telemetry';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -45,10 +46,27 @@ export async function POST(request: NextRequest): Promise<Response> {
       return Response.json({ reply: scheduled.reply, cards: [scheduled.card], pendingPlan: publicPendingPlan(owner.userId), reloadCalendar: scheduled.reloadCalendar }, { headers: { 'Cache-Control': 'no-store' } });
     }
     const { turn, message } = beginAgentTurn(request, owner, body);
+    let outcome: TurnOutcome = 'error';
+    let status: number | undefined;
+    let cards = 0;
+    let timing = '';
     try {
-      const reply = await callOpenClawAgent({ sessionKey: turn.sessionKey, message, signal: request.signal, history: turn.history, draftContext: turn.draftContext });
-      return Response.json(agentResponseBody(reply, turn, owner.userId), { headers: { 'Cache-Control': 'no-store' } });
-    } finally { endAgentTurn(turn.sessionKey); }
+      const reply = await callOpenClawAgent({ sessionKey: turn.sessionKey, message, signal: request.signal, history: turn.history, draftContext: turn.draftContext, metrics: turn.telemetry.gateway });
+      const responseBody = agentResponseBody(reply, turn, owner.userId);
+      outcome = 'ok';
+      cards = responseBody.cards.length;
+      const summary = summarizeTurn(turn.telemetry, { endedAt: Date.now(), outcome, cards });
+      timing = serverTimingHeader(summary);
+      logTurn(summary);
+      return Response.json(responseBody, { headers: { 'Cache-Control': 'no-store', 'Server-Timing': timing } });
+    } catch (error) {
+      if (error instanceof AgentRequestError) status = error.status;
+      outcome = request.signal.aborted ? 'aborted' : status === 504 ? 'timeout' : 'error';
+      throw error;
+    } finally {
+      endAgentTurn(turn.sessionKey);
+      if (!timing) logTurn(summarizeTurn(turn.telemetry, { endedAt: Date.now(), outcome, status, cards }));
+    }
   } catch (error) {
     if (error instanceof AgentRequestError || error instanceof SyntaxError) return agentError(error);
     return moodleError(error);
