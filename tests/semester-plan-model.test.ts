@@ -18,6 +18,7 @@ describe('semester plan model', () => {
     expect(creditsForSemester(courses, '2027S')).toBe(10);
     expect(workloadLabel(25, 30)).toBe('5 ECTS below your target');
     expect(workloadLabel(28, 30)).toBe('Close to your target');
-    expect(workloadLabel(36, 30)).toBe('6 ECTS above your target');
+    expect(workloadLabel(30, 30)).toBe('At your target');
+    expect(workloadLabel(36, 30)).toBe('6 ECTS above your hard limit');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseAlternativeSwap, degreeProgressionProfile, enforceGraduationReadyProposal, semesterPlanRequestSchema, verifiedProposal } from '../apps/web/lib/semester-plan-agent';
+import { chooseAlternativeSwap, compactRoadmapPlacements, degreeProgressionProfile, enforceGraduationReadyProposal, semesterPlanRequestSchema, verifiedProposal } from '../apps/web/lib/semester-plan-agent';
 
 const course = {
   id: 101,
@@ -35,11 +35,11 @@ describe('semester planning agent', () => {
     expect(verifiedProposal({ summary: 'No change.', recommendations: [{ unitId: 101, semester: '2026W', plannedSemester: '2026W', reason: 'Already there.', readiness: 'ready', readinessEvidence: 'Already planned.' }], cautions: [] }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [{ ...course, status: 'planned' }] }, new Set(['2026W:101'])).courses).toEqual([]);
   });
 
-  it('never lets recommendations take a semester above target plus 3 ECTS', () => {
+  it('never lets recommendations take a semester above the user target', () => {
     const majorCore = { ...course, id: 102, number: '263-0002-00L', title: 'Advanced Machine Learning', credits: 10 };
     const seminar = { ...course, id: 103, number: '263-0003-00L', title: 'Systems for AI Seminar', credits: 2 };
     const candidates = new Map([['2026W:102', majorCore], ['2026W:103', seminar]]);
-    const existing = { ...course, id: 100, title: 'Existing courses', credits: 31, status: 'planned' as const };
+    const existing = { ...course, id: 100, title: 'Existing courses', credits: 28, status: 'planned' as const };
 
     const proposal = verifiedProposal({
       summary: 'Add both courses.',
@@ -51,8 +51,8 @@ describe('semester planning agent', () => {
     }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [existing] }, new Set(['2026W:102', '2026W:103']));
 
     expect(proposal.courses.map(item => item.id)).toEqual([103]);
-    expect(31 + proposal.courses.reduce((sum, item) => sum + (item.credits ?? 0), 0)).toBe(33);
-    expect(proposal.summary).toContain('33 ECTS');
+    expect(28 + proposal.courses.reduce((sum, item) => sum + (item.credits ?? 0), 0)).toBe(30);
+    expect(proposal.summary).toContain('30 ECTS');
     expect(proposal.cautions.at(-1)).toContain('Advanced Machine Learning');
   });
 
@@ -63,14 +63,36 @@ describe('semester planning agent', () => {
         { ...course, id: 100, title: 'Advanced Machine Learning', credits: 4, status: 'planned' },
         { ...course, id: 101, title: 'First flexible course', credits: 3, status: 'planned' },
         { ...course, id: 102, title: 'Second flexible course', credits: 3, status: 'planned' },
-        { ...course, id: 103, title: 'Fixed course', credits: 23, status: 'in_progress' },
+        { ...course, id: 103, title: 'Fixed course', credits: 20, status: 'in_progress' },
       ],
     });
     const alternative = { ...course, id: 200, number: '263-0200-00L', title: 'Larger alternative', credits: 10 };
 
     const swap = chooseAlternativeSwap(plan, 100, [alternative] as never);
 
-    expect(swap).toMatchObject({ course: alternative, removeCourseIds: [100, 101, 102], resultingCredits: 33 });
+    expect(swap).toMatchObject({ course: alternative, removeCourseIds: [100, 101, 102], resultingCredits: 30 });
+  });
+
+  it('places a generated roadmap into consecutive semesters without skipping the active term', () => {
+    const plan = semesterPlanRequestSchema.parse({ major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [] });
+    const selections = [
+      { course: { ...course, id: 201, credits: 20 }, category: 'major_core' },
+      { course: { ...course, id: 202, credits: 13 }, category: 'minor' },
+      { course: { ...course, id: 203, credits: 10 }, category: 'practical_work' },
+      { course: { ...course, id: 204, credits: 30 }, category: 'masters_thesis' },
+    ];
+
+    const placements = compactRoadmapPlacements(plan, selections as never);
+
+    expect(placements.map(item => item.semester)).toEqual(['2026W', '2026W', '2027S', '2027W']);
+    expect(placements.map(item => item.sourceSemester)).toEqual(['2026W', '2026W', '2026W', '2026W']);
+  });
+
+  it('rejects a required course that is larger than the user-selected hard limit', () => {
+    const plan = semesterPlanRequestSchema.parse({ major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 27, courses: [] });
+    const thesis = { course: { ...course, id: 204, title: "Master's Thesis", credits: 30 }, category: 'masters_thesis' };
+
+    expect(() => compactRoadmapPlacements(plan, [thesis] as never)).toThrow('cannot fit the user-selected 27-ECTS hard limit');
   });
 
   it('requires readiness inspection and rejects recommendations in past semesters', () => {

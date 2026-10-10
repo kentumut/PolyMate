@@ -36,6 +36,7 @@ export function creditsForSemester(courses: readonly PlannedCourse[], semester: 
 export function workloadLabel(credits: number, target: number): string {
   if (credits === 0) return 'No courses yet';
   if (credits < target - 4) return `${target - credits} ECTS below your target`;
-  if (credits > target + 4) return `${credits - target} ECTS above your target`;
+  if (credits > target) return `${credits - target} ECTS above your hard limit`;
+  if (credits === target) return 'At your target';
   return 'Close to your target';
 }
