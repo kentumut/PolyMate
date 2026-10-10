@@ -34,4 +34,9 @@ describe('release configuration', () => {
     expect(validateConfiguration({ ...configured, POLYMATE_LLM_THINKING: 'ultra' })).toContain('POLYMATE_LLM_THINKING must be off, minimal, low, medium, or high.');
     expect(validateConfiguration({ ...configured, POLYMATE_LLM_FAST: 'yes' })).toContain('POLYMATE_LLM_FAST must be true or false.');
   });
+  it('validates the prepared direct chat model settings independently of OpenClaw', () => {
+    expect(validateConfiguration({ ...valid, POLYMATE_CHAT_MODEL: 'gpt-6-luna', POLYMATE_CHAT_REASONING: 'none' })).toEqual([]);
+    expect(validateConfiguration({ ...valid, POLYMATE_CHAT_MODEL: 'openai/gpt-6-luna' })).toContain('POLYMATE_CHAT_MODEL must be an OpenAI model ID.');
+    expect(validateConfiguration({ ...valid, POLYMATE_CHAT_REASONING: 'minimal' })).toContain('POLYMATE_CHAT_REASONING must be none, low, medium, or high.');
+  });
 });
