@@ -29,6 +29,16 @@ export function semesterSequence(start: string, count = 6): string[] {
   return result;
 }
 
+export function semesterRange(start: string, end: string): string[] {
+  const result = [start];
+  while (result.at(-1)! !== end) {
+    const next = nextSemester(result.at(-1)!);
+    if (next === result.at(-1)! || result.length >= 100) return [];
+    result.push(next);
+  }
+  return result;
+}
+
 export function creditsForSemester(courses: readonly PlannedCourse[], semester: string): number {
   return courses.filter(course => course.semester === semester).reduce((sum, course) => sum + (course.credits ?? 0), 0);
 }

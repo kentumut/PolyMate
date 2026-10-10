@@ -295,6 +295,29 @@ function nextSemester(semester: string) {
   return semester.endsWith('S') ? `${year}W` : `${year + 1}S`;
 }
 
+export function missingRoadmapSemesters(
+  activeSemester: string,
+  courses: ReadonlyArray<{ semester: string }>,
+) {
+  const planned = new Set(courses
+    .map(course => course.semester)
+    .filter(semester => semesterIndex(semester) >= semesterIndex(activeSemester)));
+  const latest = [...planned].reduce((result, semester) => (
+    semesterIndex(semester) > semesterIndex(result) ? semester : result
+  ), activeSemester);
+  const missing: string[] = [];
+  for (let semester = activeSemester; semesterIndex(semester) <= semesterIndex(latest); semester = nextSemester(semester)) {
+    if (!planned.has(semester)) missing.push(semester);
+  }
+  return missing;
+}
+
+class SemesterContinuityError extends Error {
+  constructor(readonly semesters: string[]) {
+    super(`A graduation roadmap may not skip semesters: ${semesters.join(', ')}.`);
+  }
+}
+
 export function isFlexiblePracticalWork(course: Pick<SearchCourse, 'title' | 'credits'>, category: VvzCurriculumCategory) {
   return category === 'practical_work' && course.credits === 8 && /^(practical work|semester project)$/i.test(course.title?.trim() ?? '');
 }
@@ -352,7 +375,10 @@ export function compactRoadmapPlacements(
     placements.push({ ...course, semester: placement, sourceSemester: course.semester, status: 'planned',
       reason: `Catalogue-verified ${category.replaceAll('_', ' ')} milestone placed with no more than ${MAX_THESIS_COMPANION_CREDITS} ECTS of accompanying coursework. Confirm thesis admission, supervision, timetable, and registration before enrolment.` });
   }
-  return placements.sort((left, right) => semesterIndex(left.semester) - semesterIndex(right.semester));
+  const sorted = placements.sort((left, right) => semesterIndex(left.semester) - semesterIndex(right.semester));
+  const missing = missingRoadmapSemesters(plan.activeSemester, [...plan.courses, ...sorted]);
+  if (missing.length) throw new SemesterContinuityError(missing);
+  return sorted;
 }
 
 export function enforceGraduationReadyProposal(proposal: SemesterPlanProposal, proposedAudit: GraduationAudit | null, existingAudit: GraduationAudit | null) {
@@ -434,10 +460,34 @@ async function deterministicGraduationRoadmap(plan: SemesterPlanAgentInput, clie
   if (!audit?.projected.graduationReady) return null;
 
   const maximumCredits = plan.targetCredits + MAX_SEMESTER_OVERAGE;
-  const placements = compactRoadmapPlacements(plan, [...selected.values()]);
+  let placements: SemesterPlanProposal['courses'];
+  while (true) {
+    try {
+      placements = compactRoadmapPlacements(plan, [...selected.values()]);
+      break;
+    } catch (error) {
+      if (!(error instanceof SemesterContinuityError) || selected.size >= 24) return null;
+      const missingSeason = error.semesters[0]?.at(-1);
+      const filler = [...VVZ_CURRICULUM_BROWSE_CATEGORIES]
+        .sort((left, right) => Number(left !== 'free_elective') - Number(right !== 'free_elective'))
+        .flatMap(category => (byCategory.get(category) ?? []).map(course => ({ course, category })))
+        .filter(({ category }) => category !== 'masters_thesis')
+        .filter(({ course }) => course.semester.endsWith(missingSeason ?? '') && course.credits && course.credits > 0 && course.credits <= maximumCredits)
+        .filter(({ course }) => {
+          const number = course.number?.trim().toUpperCase();
+          return !existingIds.has(course.id) && !selected.has(course.id) && (!number || !usedNumbers.has(number));
+        })
+        .sort((left, right) => (left.course.credits ?? 0) - (right.course.credits ?? 0))[0];
+      if (!filler) return null;
+      selected.set(filler.course.id, filler);
+      const number = filler.course.number?.trim().toUpperCase();
+      if (number) usedNumbers.add(number);
+      audit = await auditSelected();
+    }
+  }
   return {
     proposal: {
-      summary: `${placements.length} catalogue-verified courses were packed into the fewest practical semesters under the ${maximumCredits}-ECTS hard limit. Taught courses preserve their catalogue season except the season-flexible 8 ECTS Practical Work semester project; only the thesis semester may also contain up to ${MAX_THESIS_COMPANION_CREDITS} ECTS of coursework.`,
+      summary: `${placements.length} catalogue-verified courses were packed into the fewest continuous semesters under the ${maximumCredits}-ECTS hard limit. No semester between the active term and graduation is left empty. Taught courses preserve their catalogue season except the season-flexible 8 ECTS Practical Work semester project; only the thesis semester may also contain up to ${MAX_THESIS_COMPANION_CREDITS} ECTS of coursework.`,
       courses: placements,
       cautions: ['Future taught-course placements preserve the source catalogue season except the 8 ECTS Practical Work semester project. Confirm actual recurrence, timetable, readiness, category allocation, approvals, supervision, and thesis eligibility in the official VVZ and myStudies.'],
     },
@@ -510,6 +560,12 @@ export function verifiedProposal(output: AgentOutput, candidates: Map<string, Se
   if (uninspectedRejected.length) cautions.push(`Skipped ${uninspectedRejected.join(', ')} because detailed VVZ readiness evidence was not inspected.`);
   if (pastRejected.length) cautions.push(`Skipped ${pastRejected.join(', ')} because the proposed semester is before the active semester.`);
   if (conditionalIncluded.length) cautions.push(`Planned ${conditionalIncluded.join(', ')} only as future conditional milestones. Confirm the stated prerequisites, approvals, supervision, and availability before enrolment.`);
+  const missingSemesters = missingRoadmapSemesters(plan.activeSemester, [...plan.courses, ...courses]);
+  if (courses.length && missingSemesters.length) return {
+    summary: 'No courses were added because the proposed roadmap skipped one or more semesters before graduation.',
+    courses: [],
+    cautions: [...cautions, `Every semester must contain planned work. Missing: ${missingSemesters.join(', ')}.`],
+  };
   return { summary, courses, cautions };
 }
 
@@ -591,7 +647,7 @@ export async function improveSemesterPlan(
       maxTokens: 6_000,
       timeoutMs: 240_000,
     },
-    instructions: `Build an ETH MSc Computer Science plan as a complete, coherent multi-semester graduation roadmap. Preserve every existing course: never recommend deleting, replacing, or duplicating one. PRIMARY COMPLETION INVARIANT: unless the existing projected audit is already graduation-ready, the final recommended bundle must make evaluate_candidate_plan report projected.graduationReady=true. Do not stop at a starter roadmap or a partial improvement. Use browse_degree_catalogue first to obtain exact category candidates efficiently from published semesters; use free-text search only for unresolved gaps. Continue until the evaluated bundle satisfies major core, major total, minor, Inter Focus, seminar, practical work, Science in Perspective, exactly one Master's thesis, and 120 total ECTS. Never recommend two VVZ records with the same course number; semester-specific records of the same course count only once. Aim for 120–130 credited ECTS rather than surplus courses. Future catalogues may be unpublished: when necessary, use a verified W course as a tentative template in a later W semester or a verified S course in a later S semester. In each recommendation and evaluation item, semester is the published catalogue source and plannedSemester is its roadmap placement. Never move between W and S seasons. Explain that recurrence must be confirmed. Work efficiently: browse 2026W and 2027S with all needed categories in one call each, inspect the selected candidates together in one batch, and evaluate the complete bundle together; do not repeatedly rediscover or reinspect the same candidates. If even recurrence-based placement cannot support a fully evaluated roadmap, return zero recommendations and list the exact unresolved requirements.
+    instructions: `Build an ETH MSc Computer Science plan as a complete, coherent multi-semester graduation roadmap. Preserve every existing course: never recommend deleting, replacing, or duplicating one. PRIMARY COMPLETION INVARIANT: unless the existing projected audit is already graduation-ready, the final recommended bundle must make evaluate_candidate_plan report projected.graduationReady=true. SEMESTER CONTINUITY INVARIANT: never leave an empty semester between activeSemester and the final graduation semester. Every consecutive S and W term must contain at least one existing or recommended course, project, or thesis; if this cannot be satisfied with verified candidates, return zero recommendations instead of a roadmap with a gap. Do not stop at a starter roadmap or a partial improvement. Use browse_degree_catalogue first to obtain exact category candidates efficiently from published semesters; use free-text search only for unresolved gaps. Continue until the evaluated bundle satisfies major core, major total, minor, Inter Focus, seminar, practical work, Science in Perspective, exactly one Master's thesis, and 120 total ECTS. Never recommend two VVZ records with the same course number; semester-specific records of the same course count only once. Aim for 120–130 credited ECTS rather than surplus courses. Future catalogues may be unpublished: when necessary, use a verified W course as a tentative template in a later W semester or a verified S course in a later S semester. In each recommendation and evaluation item, semester is the published catalogue source and plannedSemester is its roadmap placement. Never move between W and S seasons. Explain that recurrence must be confirmed. Work efficiently: browse 2026W and 2027S with all needed categories in one call each, inspect the selected candidates together in one batch, and evaluate the complete bundle together; do not repeatedly rediscover or reinspect the same candidates. If even recurrence-based placement cannot support a fully evaluated, semester-continuous roadmap, return zero recommendations and list the exact unresolved requirements.
 
 First audit the full existing plan and use its progression profile: passed credits indicate actual advancement, while in-progress and planned credits are projections. Consider every saved past, active, and future semester, the inferred study semester, remaining graduation gaps, and whether foundational courses precede advanced ones. Before evaluating or recommending any candidate, call inspect_candidate_readiness and use its detailed VVZ evidence to assess course level, target group, stated preparation/prerequisites, and fit for the student's inferred stage. Mark every recommendation's readiness as ready, conditional, or unknown and cite concrete evidence. Ready courses may be placed from the active semester onward. An inspected conditional or unknown course may appear only as a future planning milestone, never in the active semester; schedule it after every stated prerequisite already present in the roadmap. Thesis, project, lab, supervisor, selection, and approval conditions therefore remain visible roadmap caveats rather than making a complete long-range plan impossible. These entries are planning placeholders, not approval for automatic enrolment. READINESS BASELINE: an enrolled MSc Computer Science student may be assumed to have the programme's normal bachelor-level admission background. Absence of explicit prerequisite wording in VVZ is not by itself missing evidence. Mark an inspected MSc-level/targeted course ready when its details contain no specific unmet prerequisite and its sequence is compatible with completed courses or foundations planned in an earlier semester. Mark it conditional or unknown only when VVZ states a specific preparation requirement not supported by the saved history, the target group/level conflicts with the inferred stage, or the evidence is genuinely contradictory.
 

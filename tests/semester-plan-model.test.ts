@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { creditsForSemester, currentSemester, nextSemester, semesterSequence, workloadLabel, type PlannedCourse } from '../apps/web/components/study/semester-plan-model';
+import { creditsForSemester, currentSemester, nextSemester, semesterRange, semesterSequence, workloadLabel, type PlannedCourse } from '../apps/web/components/study/semester-plan-model';
 
 const course = (id: number, semester: string, credits: number): PlannedCourse => ({ id, semester, credits, number: null, title: `Course ${id}`, officialVvzUrl: 'https://www.vvz.ethz.ch/', status: 'planned' });
 
@@ -8,6 +8,7 @@ describe('semester plan model', () => {
     expect(nextSemester('2026S')).toBe('2026W');
     expect(nextSemester('2026W')).toBe('2027S');
     expect(semesterSequence('2026W', 4)).toEqual(['2026W', '2027S', '2027W', '2028S']);
+    expect(semesterRange('2026W', '2028S')).toEqual(['2026W', '2027S', '2027W', '2028S']);
     expect(currentSemester(new Date('2026-03-10T12:00:00Z'))).toBe('2026S');
     expect(currentSemester(new Date('2026-10-10T12:00:00Z'))).toBe('2026W');
   });

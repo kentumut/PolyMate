@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseAlternativeSwap, compactRoadmapPlacements, degreeProgressionProfile, enforceGraduationReadyProposal, semesterPlanRequestSchema, verifiedProposal } from '../apps/web/lib/semester-plan-agent';
+import { chooseAlternativeSwap, compactRoadmapPlacements, degreeProgressionProfile, enforceGraduationReadyProposal, missingRoadmapSemesters, semesterPlanRequestSchema, verifiedProposal } from '../apps/web/lib/semester-plan-agent';
 
 const course = {
   id: 101,
@@ -97,19 +97,28 @@ describe('semester planning agent', () => {
     const winterLecture = { course: { ...course, id: 252, title: 'Winter Lecture', credits: 8 }, category: 'major_elective' };
 
     expect(compactRoadmapPlacements(plan, [practicalWork] as never)[0].semester).toBe('2027S');
-    expect(compactRoadmapPlacements(plan, [winterLecture] as never)[0].semester).toBe('2027W');
+    expect(() => compactRoadmapPlacements(plan, [winterLecture] as never)).toThrow('may not skip semesters: 2027S');
   });
 
-  it('packs taught courses to reduce the number of semesters', () => {
+  it('rejects minimum-semester packing when it would leave empty terms', () => {
     const plan = semesterPlanRequestSchema.parse({ major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 10, courses: [] });
     const credits = [4, 4, 4, 4, 6, 6];
     const selections = credits.map((value, index) => ({ course: { ...course, id: 300 + index, credits: value }, category: 'free_elective' }));
 
-    const placements = compactRoadmapPlacements(plan, selections as never);
-    const semesterTotals = new Map<string, number>();
-    for (const placement of placements) semesterTotals.set(placement.semester, (semesterTotals.get(placement.semester) ?? 0) + (placement.credits ?? 0));
+    expect(() => compactRoadmapPlacements(plan, selections as never)).toThrow('may not skip semesters: 2027S, 2028S');
+  });
 
-    expect([...semesterTotals.entries()]).toEqual([['2026W', 10], ['2027W', 10], ['2028W', 8]]);
+  it('requires every semester through graduation to contain planned work', () => {
+    expect(missingRoadmapSemesters('2026W', [
+      { semester: '2026W' },
+      { semester: '2027W' },
+      { semester: '2028S' },
+    ])).toEqual(['2027S']);
+    expect(missingRoadmapSemesters('2026W', [
+      { semester: '2026W' },
+      { semester: '2027S' },
+      { semester: '2027W' },
+    ])).toEqual([]);
   });
 
   it('allows only the thesis semester to carry up to eight ECTS above the thesis', () => {
@@ -151,7 +160,10 @@ describe('semester planning agent', () => {
       summary: 'Candidate found.',
       recommendations: [{ unitId: 101, semester: '2026W', plannedSemester: '2026W', reason: 'Potential fit.', readiness: 'conditional', readinessEvidence: 'Requires unverified linear algebra.' }],
       cautions: [],
-    }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [] }, new Set(['2026W:101']));
+    }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [
+      { ...course, id: 102, number: '263-0002-00L', credits: 4, status: 'in_progress' },
+      { ...course, id: 103, number: '263-0003-00L', semester: '2027S', credits: 4, status: 'planned' },
+    ] }, new Set(['2026W:101']));
 
     expect(proposal.courses[0]).toMatchObject({ id: 101, semester: '2027W', sourceSemester: '2026W' });
     expect(proposal.courses[0].reason).toContain('moved from the active term to 2027W');
@@ -164,7 +176,9 @@ describe('semester planning agent', () => {
       summary: 'Added a tentative recurring course.',
       recommendations: [{ unitId: 101, semester: '2026W', plannedSemester: '2027W', reason: 'Fits the later roadmap.', readiness: 'conditional', readinessEvidence: 'Requires future supervisor approval.' }],
       cautions: [],
-    }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2027S', targetCredits: 30, courses: [] }, new Set(['2026W:101']));
+    }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2027S', targetCredits: 30, courses: [
+      { ...course, id: 102, number: '263-0002-00L', semester: '2027S', credits: 4, status: 'in_progress' },
+    ] }, new Set(['2026W:101']));
 
     expect(proposal.courses[0]).toMatchObject({ id: 101, semester: '2027W', sourceSemester: '2026W' });
     expect(proposal.courses[0].reason).toContain('confirm that it recurs in 2027W');
