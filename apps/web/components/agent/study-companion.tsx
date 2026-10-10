@@ -1,6 +1,7 @@
 'use client';
 
 import { MessageContent } from './message-content';
+import { currentPlanApproval } from '@polymate/core/agent/contracts';
 
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
 import { useRef, useState, type FormEvent, type MouseEvent } from 'react';
@@ -153,6 +154,12 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
     event?.preventDefault();
     if (busy || sample || (!action && !input.trim())) return;
     const text = action ? ('draftToken' in action ? 'Confirm this progress change.' : action.allowPartial ? 'Add only the blocks that fit to my calendar.' : 'Add this timeline to my calendar.') : input.trim();
+    // Bind explicit chat approval to the displayed draft, just like its button.
+    // The model never needs to reproduce the sealed scheduling payload.
+    const approval = currentPlanApproval(text);
+    const scheduleAction = !action && pendingPlan && approval
+      ? { action: 'schedule_current_plan', allowPartial: approval.allowPartial, timelineId: pendingPlan.timeline.id }
+      : undefined;
     const id = ++nextId.current;
     setMessages(previous => [...previous, { id, role: 'user', text, cards: [] }].slice(-40) as ChatMessage[]);
     setInput(''); setBusy(true); setError('');
@@ -166,7 +173,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       }
       const response = await fetch('/api/agent/chat', {
         method: 'POST', headers, credentials: 'same-origin', cache: 'no-store',
-        body: JSON.stringify(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : { message: text }),
+        body: JSON.stringify(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text }),
       });
       const body = await response.json() as ChatResponse;
       if (!response.ok) throw new Error(body.error?.message ?? 'PolyMate could not answer. Try again.');

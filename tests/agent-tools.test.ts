@@ -23,13 +23,13 @@ vi.mock('../packages/db/src/study-progress', () => ({ studyProgressStore: { stat
 vi.mock('../apps/web/lib/calendar-route', () => ({ calendarServiceFor: () => mocks, calendarError: () => Response.json({ error: { message: 'Calendar unavailable.' } }, { status: 502 }) }));
 
 import { AGENT_SYSTEM_INSTRUCTIONS, agentResponseBody, beginAgentTurn, callOpenClawAgent, dispatchOpenClawTool, endAgentTurn, parseAgentToolArguments, publicPendingPlan, scheduleCurrentPlan } from '../apps/web/lib/agent-runtime';
-import { isExplicitCalendarConsent, isExplicitPartialConsent } from '../packages/core/agent/contracts';
+import { currentPlanApproval, isExplicitCalendarConsent, isExplicitPartialConsent } from '../packages/core/agent/contracts';
 
 const contextSecret = 'agent-context-test-secret-that-is-long-enough';
 const bridgeSecret = 'agent-bridge-test-secret-that-is-long-enough';
 const owner = { userId: '33333333-3333-5333-8333-333333333333', externalId: 'student@example.edu', displayName: 'Student' } as const;
 const timeline = {
-  id: 'draft', warnings: [], unscheduled: [],
+  id: 'a'.repeat(64), warnings: [], unscheduled: [],
   blocks: [{ assignmentId: 8, title: 'Analysis: Exercise sheet', sourceUrl: 'https://moodle.example/assignment/8', startAt: '2026-10-13T08:00:00.000Z', endAt: '2026-10-13T08:50:00.000Z', operationId: '44444444-4444-5444-8444-444444444444' }],
 };
 
@@ -86,10 +86,13 @@ describe('PolyMate agent tool routing', () => {
       work: [{ assignmentId: 8, estimatedMinutes: 50 }],
       availability: [{ startAt: '2026-10-13T08:00:00+02:00', endAt: '2026-10-13T10:00:00+02:00' }],
     });
-    expect(plan.result).toMatchObject({ planToken: 'sealed-plan-token-not-for-browser' });
+    expect(plan.result).toMatchObject({ planToken: timeline.id });
+    expect(JSON.stringify(plan.result)).not.toContain('sealed-plan-token-not-for-browser');
     expect(publicPendingPlan(owner.userId)).toEqual({ timeline, expiresAt: expect.any(String) });
     expect(JSON.stringify(publicPendingPlan(owner.userId))).not.toContain('sealed-plan-token-not-for-browser');
-    const scheduled = await signedCall(session, 'moodle_schedule_assignment_timeline', { planToken: 'sealed-plan-token-not-for-browser' });
+    const wrongDraft = await signedCall(session, 'moodle_schedule_assignment_timeline', { planToken: 'b'.repeat(64) });
+    expect(wrongDraft.error?.message).toContain('no longer available');
+    const scheduled = await signedCall(session, 'moodle_schedule_assignment_timeline', { planToken: timeline.id });
     expect(scheduled.result).toEqual({ complete: true, results: [{ status: 'synced' }] });
     expect(mocks.executeMoodleTool).toHaveBeenLastCalledWith(request, 'moodle_schedule_assignment_timeline', {
       planToken: 'sealed-plan-token-not-for-browser', allowPartial: false,
@@ -169,6 +172,18 @@ describe('PolyMate agent tool routing', () => {
     expect(isExplicitPartialConsent(message)).toBe(false);
   });
 
+  it.each(['schedule it', 'Schedule it please!', 'please add them', 'Add this timeline to my calendar.'])('routes exact approval to the displayed draft: %s', message => {
+    expect(isExplicitCalendarConsent(message)).toBe(true);
+    expect(currentPlanApproval(message)).toEqual({ allowPartial: false });
+  });
+
+  it('keeps revisions and qualified commands in chat and requires a separate partial approval', () => {
+    for (const message of ['schedule it but move everything to Tuesday', 'add it tomorrow instead', 'do not schedule it', 'why schedule it?', 'yes']) {
+      expect(currentPlanApproval(message)).toBeNull();
+    }
+    expect(currentPlanApproval('Add only the blocks that fit to my calendar.')).toEqual({ allowPartial: true });
+  });
+
   const request = () => new NextRequest('https://poly.example/api/agent/chat', { method: 'POST', headers: { origin: 'https://poly.example' }, body: '{}' });
   const planArgs = { work: [{ assignmentId: 8, estimatedMinutes: 50 }], availability: [{ startAt: '2026-10-13T08:00:00+02:00', endAt: '2026-10-13T10:00:00+02:00' }] };
   const planResult = (token = 'sealed-draft-token-with-enough-length') => ({ timeline, planToken: token, expiresAt: new Date(Date.now() + 60_000).toISOString() });
@@ -180,6 +195,8 @@ describe('PolyMate agent tool routing', () => {
     agentResponseBody('Here is your draft. Add it to your calendar?', first, owner.userId);
     endAgentTurn(first.sessionKey);
     const agreement = beginAgentTurn(request(), owner, { message: 'Yes please.' }).turn;
+    expect(JSON.parse(agreement.draftContext!).planToken).toBe(timeline.id);
+    expect(agreement.draftContext).not.toContain(planResult().planToken);
     mocks.executeMoodleTool.mockResolvedValueOnce({ complete: false, results: [{ operationId: timeline.blocks[0].operationId, status: 'unknown' }] });
     const written = await signedCall(agreement.sessionKey, 'moodle_schedule_assignment_timeline', { planToken: planResult().planToken });
     expect(written.error).toBeUndefined();
@@ -205,7 +222,7 @@ describe('PolyMate agent tool routing', () => {
     const other = { ...owner, userId: '22222222-2222-5222-8222-222222222222' };
     const otherTurn = beginAgentTurn(request(), other, { message: 'Add it to my calendar.' }).turn;
     expect(publicPendingPlan(other.userId)).toBeNull();
-    expect((await signedCall(otherTurn.sessionKey, 'moodle_schedule_assignment_timeline', { planToken: planResult().planToken })).error).toBeDefined();
+    expect((await signedCall(otherTurn.sessionKey, 'moodle_schedule_assignment_timeline', { planToken: timeline.id })).error).toBeDefined();
     endAgentTurn(next.sessionKey); endAgentTurn(otherTurn.sessionKey);
   });
 
