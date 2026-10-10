@@ -685,7 +685,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
   </div>;
 
   return <div className="min-h-dvh bg-background md:flex md:items-start">
-    <WorkspaceSidebar view={view} ownerName={ownerName} hrefFor={hrefFor} onNavigate={navigate} />
+    <WorkspaceSidebar view={view} ownerName={ownerName} demo={demo} hrefFor={hrefFor} onNavigate={navigate} />
     <main className={view === 'chat' ? 'flex h-[calc(100dvh-57px)] min-w-0 flex-1 flex-col overflow-hidden md:h-dvh' : 'min-w-0 flex-1'}>
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4 sm:px-6">
         <p className="truncate text-sm font-medium">{view === 'chat' ? <>Chat {demo && <span className="ml-2 rounded-full bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Demo</span>}</> : <>PolyMate <span className="text-muted-foreground">/ {pageTitle}</span></>}</p>

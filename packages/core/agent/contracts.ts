@@ -76,8 +76,28 @@ export function isExplicitDeleteConsent(message: string): boolean {
     /\b(delete|remove|clear)\b.{0,100}\b(blocks?|sessions?|events?|items?|calendar|it|them|all)\b/i.test(message);
 }
 
+/** A single study block is cheap to undo, so polite or conditional phrasing still counts as a request. */
+export function isCreateBlockRequest(message: string): boolean {
+  return !isRefusal(message) && !/\b(explain|example|quote|said|says|describe)\b|["“”]/i.test(message) &&
+    /\b(add|create|put|schedule|book|reserve|block (?:out|off))\b/i.test(message);
+}
+
+export function isRefusal(message: string): boolean {
+  return /^\s*(no|nope|nah|cancel|stop|wait|never ?mind|actually not)\b|\b(not|never|don['’]t|dont|do not|without)\b/i.test(message);
+}
+
+/**
+ * A follow-up such as "16:00-17:00" or "yes" completes a write the student requested in one of
+ * their previous two messages, so the agent need not make them restate it. Deletion follow-ups must
+ * be plain affirmatives.
+ */
+export function followsUpOnRequest(message: string, previousUserMessages: readonly string[], isRequest: (message: string) => boolean, affirmativeOnly = false): boolean {
+  if (affirmativeOnly ? !isAffirmative(message) : isRefusal(message)) return false;
+  return previousUserMessages.slice(-2).some(isRequest);
+}
+
 export function isAffirmative(message: string): boolean {
-  return /^(yes|yes please|go ahead|please do|confirm|confirmed|okay|ok|sure)[.!\s]*$/i.test(message.trim());
+  return /^(yes|yes please|yep|yeah|go ahead|do it|please do|confirm|confirmed|okay|ok|sure|sounds good|perfect)[.!\s]*$/i.test(message.trim());
 }
 
 export function isEmptyRecord(value: Record<string, unknown>): boolean {
