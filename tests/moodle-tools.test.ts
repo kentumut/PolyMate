@@ -74,6 +74,8 @@ describe('Moodle assignment planning and calendar tools', () => {
   it('titles blocks with the agent label or a cleaned Moodle title', async () => {
     expect(studyBlockLabel('252-0057-00L 2026W', 'Abgabe: Blatt 4 / Sheet 4 ist fällig.')).toBe('252-0057-00L · Sheet 4');
     expect(studyBlockLabel('Moodle calendar', 'Quiz 2 is due')).toBe('Quiz 2');
+    expect(studyBlockLabel('Moodle calendar', '401-0213-16L 2026W: Serie 4 ist fällig.')).toBe('401-0213-16L · Serie 4');
+    expect(studyBlockLabel('252-0057-00L 2026W', '252-0057-00L 2026W: Abgabe: Blatt 4 / Sheet 4 ist fällig.')).toBe('252-0057-00L · Sheet 4');
     const tools = new MoodleAgentTools('owner', reader(), new FakeCalendarClient([]), now);
     const plan = await tools.planAssignments({ ...input, work: [{ assignmentId: 9, estimatedMinutes: 50, label: '  Algorithms   & Probability · Sheet 4 ' }] });
     expect(plan.blocks.map(b => b.title)).toEqual(['Algorithms & Probability · Sheet 4']);

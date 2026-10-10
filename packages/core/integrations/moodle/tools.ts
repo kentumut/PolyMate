@@ -21,7 +21,10 @@ function sessionMinutes(effort: number): number {
 
 /** Readable fallback when the agent supplied no label: "252-0057-00L 2026W" + "Abgabe: Blatt 4 / Sheet 4 ist fällig." → "252-0057-00L · Sheet 4". */
 export function studyBlockLabel(courseName: string, title: string): string {
-  const course = courseName.replace(/\s+(?:\d{4}\s*[WSF]|[HF]S\s*\d{2,4})$/i, '').trim();
+  // Feed titles often lead with the course code ("401-0213-16L 2026W: Serie 4 ist fällig."); use it as the course instead.
+  const prefixed = title.match(/^(\d{3}-\d{4}-\d{2}[A-Z]{0,2}(?:\s+\S+)?)\s*:\s*(.+)$/);
+  if (prefixed) title = prefixed[2];
+  const course = (courseName === 'Moodle calendar' && prefixed ? prefixed[1] : courseName).replace(/\s+(?:\d{4}\s*[WSF]|[HF]S\s*\d{2,4})$/i, '').trim();
   let task = title.replace(/^(?:abgabe|submission|deadline|f[äa]lligkeit|due)\s*:\s*/i, '')
     .replace(/\s+(?:ist\s+f[äa]llig|is\s+due|f[äa]llig|due)\.?$/i, '').replace(/\.$/, '').trim();
   // Bilingual Moodle titles ("Blatt 4 / Sheet 4"): keep the English half.
