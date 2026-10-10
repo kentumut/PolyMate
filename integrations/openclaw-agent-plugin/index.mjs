@@ -7,7 +7,7 @@ const definitions = JSON.parse(readFileSync(new URL('./moodle-tool-definitions.j
 export default defineToolPlugin({
   id: 'polymate-agent',
   name: 'PolyMate Study Tools',
-  description: 'Owner-scoped Moodle study planning and connection status tools for PolyMate.',
+  description: 'Owner-scoped study planning, calendar, progress, ETH VVZ course discovery, and graduation-planning tools for PolyMate.',
   tools: tool => definitions.map(definition => {
     const parameters = Type.Unsafe(definition.parameters);
     return tool({

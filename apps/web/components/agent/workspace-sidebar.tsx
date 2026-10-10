@@ -3,10 +3,11 @@
 import type { MouseEvent } from 'react';
 import { useSyncExternalStore } from 'react';
 
-export type WorkspaceView = 'calendar' | 'chat' | 'settings';
+export type WorkspaceView = 'calendar' | 'planner' | 'chat' | 'settings';
 
 const destinations: { view: WorkspaceView; label: string }[] = [
   { view: 'calendar', label: 'Calendar' },
+  { view: 'planner', label: 'Semester plan' },
   { view: 'chat', label: 'Chat' },
   { view: 'settings', label: 'Settings' },
 ];
@@ -14,6 +15,7 @@ const destinations: { view: WorkspaceView; label: string }[] = [
 function NavigationIcon({ view }: { view: WorkspaceView }) {
   return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {view === 'calendar' && <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M16 3v4M8 3v4M3 11h18M8 15h2M14 15h2M8 18h2" /></>}
+    {view === 'planner' && <><path d="M4 5.5h16M6 3v5M18 3v5M4 10h16v10H4z" /><path d="m8 15 2 2 5-5" /></>}
     {view === 'chat' && <path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z" />}
     {view === 'settings' && <><path d="m9 3-.5 2-2 1-2-.5-2 3 1.5 1.5v3L2.5 15l2 3 2-.5 2 1 .5 2h4l.5-2 2-1 2 .5 2-3-1.5-2v-3L20.5 8l-2-3-2 .5-2-1-.5-2z" /><circle cx="11.5" cy="12" r="3" /></>}
   </svg>;

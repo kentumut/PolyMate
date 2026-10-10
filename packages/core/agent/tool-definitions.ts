@@ -1,4 +1,6 @@
 import { MOODLE_AGENT_TOOL_DEFINITIONS } from '../integrations/moodle/tools';
+import { VVZ_AGENT_TOOL_DEFINITIONS } from '../integrations/vvz/client';
+import { MSC_CS_GRADUATION_TOOL_DEFINITION } from '../integrations/vvz/graduation';
 
 export const POLYMATE_CONNECTIONS_TOOL_DEFINITION = {
   name: 'polymate_check_connections',
@@ -9,6 +11,8 @@ export const POLYMATE_CONNECTIONS_TOOL_DEFINITION = {
 /** Canonical allowlisted tool contracts shared with the OpenClaw tool plugin. */
 export const AGENT_TOOL_DEFINITIONS = [
   ...MOODLE_AGENT_TOOL_DEFINITIONS,
+  ...VVZ_AGENT_TOOL_DEFINITIONS,
+  MSC_CS_GRADUATION_TOOL_DEFINITION,
   POLYMATE_CONNECTIONS_TOOL_DEFINITION,
   {
     name: 'polymate_get_study_progress',
