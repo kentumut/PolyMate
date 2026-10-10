@@ -18,6 +18,8 @@
     "./moodle": "./integrations/moodle/client.ts",
     "./moodle/tools": "./integrations/moodle/tools.ts",
     "./moodle/calendar-feed": "./integrations/moodle/calendar-feed.ts",
+    "./vvz": "./integrations/vvz/client.ts",
+    "./vvz/graduation": "./integrations/vvz/graduation.ts",
     "./agent/context": "./agent/context.ts",
     "./agent/http": "./agent/http.ts",
     "./agent/contracts": "./agent/contracts.ts",

@@ -12,6 +12,7 @@ import { GoogleConnection } from '@/components/connections/google-connection';
 import { MoodleConnection } from '@/components/connections/moodle-connection';
 import { MoodleCalendarPreview } from '@/components/connections/moodle-calendar-preview';
 import { WorkspaceSidebar, type WorkspaceView } from './workspace-sidebar';
+import { SemesterPlanner } from '@/components/study/semester-planner';
 import { ProgressCardView } from './progress-cards';
 import { useStudyWorkspace } from '@/components/study/study-workspace-context';
 import type { ProgressReceipt } from '@polymate/contracts/study-progress';
@@ -125,7 +126,7 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
   const workspace = useStudyWorkspace();
   const searchParams = useSearchParams();
   const requestedView = searchParams.get('view');
-  const view: WorkspaceView = requestedView === 'chat' || requestedView === 'settings' ? requestedView
+  const view: WorkspaceView = requestedView === 'chat' || requestedView === 'planner' || requestedView === 'settings' ? requestedView
     : requestedView === 'calendar' ? 'calendar' : searchParams.has('google') ? 'settings' : 'calendar';
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
@@ -151,6 +152,13 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       window.history.pushState(null, '', hrefFor(nextView));
       window.scrollTo({ top: 0 });
     }
+  }
+
+  function openRecommendation(prompt: string) {
+    setInput(prompt);
+    window.history.pushState(null, '', hrefFor('chat'));
+    window.scrollTo({ top: 0 });
+    window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
   }
 
   async function sendMessage(event?: FormEvent, action?: { allowPartial: boolean } | { draftToken: string; confirmAssignmentFinished: boolean }) {
@@ -219,8 +227,8 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
       <div className={`mx-auto ${view === 'chat' ? 'max-w-4xl' : 'max-w-7xl'}`}>
         <header className="mb-7 flex items-start justify-between gap-4">
           <div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#748278]">{view === 'settings' ? 'Make it yours' : 'A little structure. More room to learn.'}</p>
-            <h1 className="mt-2 text-3xl font-medium tracking-tight">{view === 'calendar' ? 'Your calendar' : view === 'chat' ? 'Chat with PolyMate' : 'Settings'}</h1>
-            <p className="mt-2 text-sm text-[#617269]">{view === 'calendar' ? 'See your week and make time for what matters.' : view === 'chat' ? 'Turn course dates and available time into a study plan.' : 'Connect your calendars and keep your study space up to date.'}</p></div>
+            <h1 className="mt-2 text-3xl font-medium tracking-tight">{view === 'calendar' ? 'Your calendar' : view === 'planner' ? 'Semester planning' : view === 'chat' ? 'Chat with PolyMate' : 'Settings'}</h1>
+            <p className="mt-2 text-sm text-[#617269]">{view === 'calendar' ? 'See your week and make time for what matters.' : view === 'planner' ? 'Choose courses that fit your major, minor, and graduation path.' : view === 'chat' ? 'Turn course dates and available time into a study plan.' : 'Connect your calendars and keep your study space up to date.'}</p></div>
           <div className="mt-5 hidden items-center gap-2 sm:flex">
             <a href="/demo" className="rounded-full bg-[#173b32] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#224e41]">View demo</a>
             <span className="rounded-full border border-[#dce3db] px-3 py-1.5 text-xs text-[#617269]">{view === 'settings' ? 'Your connections' : 'Europe/Zurich'}</span>
@@ -240,6 +248,10 @@ export function StudyCompanion({ sample, ownerName }: { sample: boolean; ownerNa
             <div className="border-t border-[#e5eae4] [&>section]:border-0 [&>section]:bg-transparent"><AssignmentsPanel sample={sample} onCalendarChange={() => setReloadKey(value => value + 1)} /></div>
           </details>
           {sample && <p className="text-xs text-[#8a5a26]">Development sample calendar. Changes stay in memory.</p>}
+        </section>
+
+        <section aria-label="Semester planning" className={view === 'planner' ? '' : 'hidden'}>
+          <SemesterPlanner sample={sample} onRecommend={openRecommendation} />
         </section>
 
         <section aria-labelledby="study-chat-title" className={view === 'chat' ? 'flex h-[calc(100dvh-13rem)] min-h-[32rem] flex-col rounded-2xl border border-[#dce3db] bg-white p-5 md:p-6' : 'hidden'}>

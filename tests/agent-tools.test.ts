@@ -70,6 +70,12 @@ describe('PolyMate agent tool routing', () => {
   it('rejects unknown tools, extra properties, and invalid timeline arguments before dispatch', () => {
     expect(() => parseAgentToolArguments('exec', {})).toThrow('not available');
     expect(() => parseAgentToolArguments('moodle_get_calendar_events', { ownerId: owner.userId })).toThrow('unsupported fields');
+    expect(() => parseAgentToolArguments('vvz_search_courses', {})).toThrow('at least one');
+    expect(() => parseAgentToolArguments('vvz_search_courses', { semester: '2026W', title: 'vision' })).not.toThrow();
+    expect(() => parseAgentToolArguments('vvz_get_course_details', { unitId: 204421 })).not.toThrow();
+    expect(() => parseAgentToolArguments('vvz_get_course_details', { unitId: '204421' })).toThrow('positive VVZ unitId');
+    expect(() => parseAgentToolArguments('msc_cs_check_graduation', { major: 'Machine Intelligence', minor: 'Computer Vision', courses: [{ unitId: 204421, status: 'in_progress' }] })).not.toThrow();
+    expect(() => parseAgentToolArguments('msc_cs_check_graduation', { major: 'Machine Intelligence', minor: 'Machine Learning', courses: [] })).toThrow('1 to 50');
     expect(() => parseAgentToolArguments('moodle_plan_assignment_timeline', {
       work: [{ assignmentId: 8, estimatedMinutes: 25 }], availability: [{ startAt: '2026-10-13T08:00:00Z', endAt: '2026-10-13T09:00:00Z', timezone: 'UTC' }],
     })).toThrow('only a start and end');
