@@ -8,7 +8,8 @@ import { executePlanning } from '../apps/web/lib/planning';
 import { FakeCalendarClient } from '../packages/core/calendar/fake-client';
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), latest: vi.fn(), preferences: vi.fn(), save: vi.fn(), update: vi.fn(),
-  links: vi.fn(), unresolved: vi.fn(), operation: vi.fn(), calendar: vi.fn(), lock: vi.fn() }));
+  links: vi.fn(), unresolved: vi.fn(), operation: vi.fn(), calendar: vi.fn(), lock: vi.fn(), imported: vi.fn() }));
+vi.mock('../packages/db/src/imports', () => ({ listImportedCommitments: mocks.imported }));
 vi.mock('../packages/db/src/assignments', () => ({ listAssignments: mocks.list, AssignmentRequestConflict: class extends Error {} }));
 vi.mock('../packages/db/src/planning', () => ({ getStudyPlan: mocks.get, getStudyPreferences: mocks.preferences, saveStudyPlan: mocks.save,
   updateStudyPlan: mocks.update, linkedStudyBlocks: mocks.links, withPlanningLock: mocks.lock }));
@@ -34,6 +35,7 @@ beforeEach(() => {
   calendar = Object.assign(fake, { listBusy: fake.listWeek.bind(fake), getStudyBlock: vi.fn().mockResolvedValue(null) });
   mocks.calendar.mockReturnValue(calendar); mocks.list.mockResolvedValue([assignment]); mocks.preferences.mockResolvedValue(null);
   mocks.links.mockResolvedValue([]); mocks.unresolved.mockResolvedValue([]); mocks.operation.mockResolvedValue(null);
+  mocks.imported.mockResolvedValue([]);
   mocks.lock.mockImplementation((_owner, run) => run());
   mocks.get.mockImplementation((_owner, id) => saved && (!id || id === saved.plan.id) ? structuredClone(saved) : null);
   mocks.save.mockImplementation((_owner, snapshot) => { saved = structuredClone(snapshot); });
@@ -42,6 +44,17 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe('manual assignment planning journey', () => {
+  it('avoids imported lectures and rechecks them before applying, without treating them as study effort', async () => {
+    const lecture = { id: 'imported-lecture', title: 'Lecture', source: 'imported', editable: false, startAt: '2026-10-12T07:00:00Z', endAt: '2026-10-12T10:00:00Z', allDay: false };
+    mocks.imported.mockResolvedValue([lecture]);
+    const preview = await executePlanning(owner, { action: 'generate', preferences: DEFAULT_STUDY_PREFERENCES });
+    expect(preview.plan!.blocks.every(block => Date.parse(block.startAt) >= Date.parse(lecture.endAt) || Date.parse(block.endAt) <= Date.parse(lecture.startAt))).toBe(true);
+    const first = preview.plan!.blocks[0];
+    mocks.imported.mockResolvedValue([{ ...lecture, startAt: first.startAt, endAt: first.endAt }]);
+    const create = vi.spyOn(calendar, 'createStudyBlock');
+    await expect(executePlanning(owner, { action: 'apply', planId: preview.plan!.id, allowPartial: false })).rejects.toThrow('commitments changed');
+    expect(create).not.toHaveBeenCalled();
+  });
   it('previews without writing, persists preferences, applies only the saved draft, and safely retries', async () => {
     const create = vi.spyOn(calendar, 'createStudyBlock');
     const generated = await POST(request({ action: 'generate', preferences: DEFAULT_STUDY_PREFERENCES }));

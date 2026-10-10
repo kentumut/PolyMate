@@ -7,6 +7,7 @@ import { intervalsOverlap } from './intervals';
 
 const MINUTE = 60_000;
 export type LinkedStudyEvent = { assignmentId: string; event: CalendarEvent };
+export type PlanningBusyEvent = { startAt: string; endAt: string; source: CalendarEvent['source'] | 'imported' };
 
 function studyWindowTime(day: ReturnType<typeof zonedParts>, time: string): number {
   const [hour, minute] = time.split(':').map(Number);
@@ -23,7 +24,7 @@ function studyWindowTime(day: ReturnType<typeof zonedParts>, time: string): numb
 
 /** Pure planner: no model, network, random IDs, or implicit clock. Existing events are never moved. */
 export function planStudyWeek(input: {
-  assignments: readonly Assignment[]; events: readonly CalendarEvent[]; linkedEvents: readonly LinkedStudyEvent[];
+  assignments: readonly Assignment[]; events: readonly PlanningBusyEvent[]; linkedEvents: readonly LinkedStudyEvent[];
   preferences: StudyPreferences; now: Date; planId: string; operationId: (index: number) => string;
 }): StudyPlan {
   const { now, planId, operationId, assignments, events, linkedEvents } = input;
@@ -99,7 +100,7 @@ export function planStudyWeek(input: {
 }
 
 /** Revalidate the exact approved times and capacity against fresh Google events. */
-export function assertStudyPlanFits(plan: StudyPlan, events: readonly CalendarEvent[], pendingBlocks: readonly PlannedBlock[]): void {
+export function assertStudyPlanFits(plan: StudyPlan, events: readonly PlanningBusyEvent[], pendingBlocks: readonly PlannedBlock[]): void {
   for (const block of pendingBlocks) {
     const padded = { startAt: new Date(Date.parse(block.startAt) - 10 * MINUTE).toISOString(), endAt: new Date(Date.parse(block.endAt) + 10 * MINUTE).toISOString() };
     if (events.some(event => intervalsOverlap(event.source === 'polymate' ? padded : block, event))) {
