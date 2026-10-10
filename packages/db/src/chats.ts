@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ChatSummary, ChatThread, CheckInKind, StoredChatMessage } from '@polymate/contracts/chats';
+import { chatPreviewText, type ChatSummary, type ChatThread, type CheckInKind, type StoredChatMessage } from '@polymate/contracts/chats';
 import type { CheckInChannelId, CheckInStore, DeliveryOutcome } from '@polymate/core/checkins';
 import type { OwnerContext } from '@polymate/core/identity';
 import { getPool } from './connection';
@@ -23,7 +23,7 @@ export class ChatNotFound extends Error {
 }
 
 function summary(row: ChatRow): ChatSummary {
-  return { id: row.id, origin: row.origin, checkInKind: row.check_in_kind, title: row.title, preview: (row.preview ?? '').slice(0, 200),
+  return { id: row.id, origin: row.origin, checkInKind: row.check_in_kind, title: row.title, preview: chatPreviewText(row.preview ?? ''),
     unread: row.origin === 'check_in' && !row.read_at, quickReplies: row.replied ? [] : row.quick_replies,
     createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString() };
 }
