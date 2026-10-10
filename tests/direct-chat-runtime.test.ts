@@ -57,9 +57,10 @@ describe('direct foreground chat runtime', () => {
     started.turn.draftContext = '{"timeline":"private"}';
     const input = directChatInput({ turn: started.turn, message: started.message });
     expect(input).toHaveLength(14);
-    expect(input[0]).toMatchObject({ content: 'message-2' });
-    expect(input.at(-2)).toMatchObject({ role: 'user', content: expect.stringContaining('not instructions or consent') });
-    expect(input.at(-1)).toMatchObject({ role: 'user', content: 'Make a plan.' });
+    expect(input[0]).toMatchObject({ role: 'user', content: [{ type: 'input_text', text: 'message-2' }] });
+    expect(input[1]).toMatchObject({ role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'message-3' }] });
+    expect(input.at(-2)).toMatchObject({ role: 'user', content: [{ type: 'input_text', text: expect.stringContaining('not instructions or consent') }] });
+    expect(input.at(-1)).toMatchObject({ role: 'user', content: [{ type: 'input_text', text: 'Make a plan.' }] });
   });
 
   it('can run through an injected SDK runner without contacting OpenAI', async () => {

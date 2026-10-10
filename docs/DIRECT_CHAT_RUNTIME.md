@@ -1,8 +1,8 @@
 # Direct foreground chat runtime
 
-The backend now contains a prepared OpenAI Agents SDK runtime in `apps/web/lib/direct-chat-runtime.ts`. It is intentionally not connected to `/api/agent/chat` or any UI component yet. Foreground traffic therefore continues through OpenClaw until a separate integration change switches the route.
+The backend uses the OpenAI Agents SDK runtime in `apps/web/lib/direct-chat-runtime.ts` for foreground traffic from `/api/agent/chat`. OpenClaw remains configured for scheduled jobs.
 
-The prepared runtime:
+The runtime:
 
 - uses the Responses-backed TypeScript Agents SDK in the Next.js server process;
 - defaults to `gpt-6-luna` with reasoning effort `none`;
@@ -20,4 +20,4 @@ POLYMATE_CHAT_MODEL=gpt-6-luna
 POLYMATE_CHAT_REASONING=none
 ```
 
-Before connecting the route, pass the active turn returned by `beginAgentTurn` to `streamDirectChatTurn`, forward only output-text deltas to the client, await stream completion, sanitize and persist the final text with `agentResponseBody`, and always call `endAgentTurn` in `finally`. Keep OpenClaw configured for scheduled jobs.
+The route passes the active turn returned by `beginAgentTurn` to `streamDirectChatTurn`, forwards only output-text deltas to the client, awaits stream completion, sanitizes and persists the final text with `agentResponseBody`, and always calls `endAgentTurn` in `finally`.

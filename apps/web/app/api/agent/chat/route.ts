@@ -1,12 +1,13 @@
 import type { NextRequest } from 'next/server';
 import { assertSameOrigin, resolveOwner } from '@polymate/core/identity';
-import { AgentRequestError, agentAppContext, agentResponseBody, beginAgentTurn, callOpenClawAgent, endAgentTurn, scheduleCurrentPlan, publicPendingPlan, confirmCurrentProgress } from '@/lib/agent-runtime';
+import { AgentRequestError, agentAppContext, agentResponseBody, beginAgentTurn, endAgentTurn, scheduleCurrentPlan, publicPendingPlan, confirmCurrentProgress } from '@/lib/agent-runtime';
 import { readBoundedText } from '@polymate/core/agent/http';
 import { calendarError } from '@/lib/calendar-route';
 import { moodleError } from '@/lib/moodle';
 import { assertAgentCsrf } from '@/lib/agent-csrf';
 import { logTurn, serverTimingHeader, summarizeTurn, type TurnOutcome } from '@/lib/agent-telemetry';
 import { AGENT_STREAM_CONTENT_TYPE, StreamRedactor, encodeAgentEvent, wantsAgentStream, type AgentStreamEvent } from '@/lib/agent-stream';
+import { runDirectChatTurn, streamDirectChatTurn } from '@/lib/direct-chat-runtime';
 import { listActiveStudentMemories } from '@polymate/db/coaching';
 import { listCourses } from '@polymate/db/courses';
 
@@ -29,17 +30,38 @@ function agentError(error: unknown): Response {
 
 type Turn = ReturnType<typeof beginAgentTurn>['turn'];
 type Owner = ReturnType<typeof resolveOwner>;
+const OPTIONAL_CONTEXT_TIMEOUT_MS = 1_500;
 
-/** Durable student memories and courses, sent as untrusted factual context. */
+type OptionalContextResult<T> = { available: true; value: T } | { available: false };
+
+async function readOptionalContext<T>(load: () => Promise<T>): Promise<OptionalContextResult<T>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const unavailable = { available: false } as const;
+  const timeout = new Promise<typeof unavailable>(resolve => {
+    timer = setTimeout(() => resolve(unavailable), OPTIONAL_CONTEXT_TIMEOUT_MS);
+  });
+  const read = Promise.resolve().then(load)
+    .then(value => ({ available: true, value }) as const)
+    .catch(() => unavailable);
+  try { return await Promise.race([read, timeout]); }
+  finally { clearTimeout(timer); }
+}
+
+/** Optional durable context; source failures become explicit prompt notices instead of blocking chat. */
 async function persistentStudentContext(ownerId: string): Promise<string | undefined> {
-  const [memories, courses] = await Promise.all([listActiveStudentMemories(ownerId), listCourses(ownerId)]);
-  const memoryContext = memories.map(item => `- [${item.category}] ${item.content}${item.validUntil ? ` (valid until ${item.validUntil})` : ''}`);
-  const courseContext = courses.map(course => [
+  const [memories, courses] = await Promise.all([
+    readOptionalContext(() => listActiveStudentMemories(ownerId)),
+    readOptionalContext(() => listCourses(ownerId)),
+  ]);
+  const memoryContext = memories.available
+    ? memories.value.map(item => `- [${item.category}] ${item.content}${item.validUntil ? ` (valid until ${item.validUntil})` : ''}`)
+    : ['- [availability] Saved student memory is unavailable for this turn. Do not treat it as empty; mention the limitation when relevant.'];
+  const courseContext = courses.available ? courses.value.map(course => [
     `- [course] ${course.name}; exam date ${course.examDate}; ${course.lectureHoursPerWeek} lecture hours/week; ${course.exerciseSessionCount} exercise sessions at ${course.exerciseSessionMinutes} minutes each.`,
     `  Must solve: ${course.examPrep.must.join('; ') || 'none listed'}.`,
     `  Optional: ${course.examPrep.optional.join('; ') || 'none listed'}.`,
     `  Not required: ${course.examPrep.not_required.join('; ') || 'none listed'}.`,
-  ].join('\n'));
+  ].join('\n')) : ['- [availability] Saved course data is unavailable for this turn. Do not assume the student has no courses; mention the limitation when relevant.'];
   return [...memoryContext, ...courseContext].join('\n') || undefined;
 }
 
@@ -51,7 +73,23 @@ async function runTurn(owner: Owner, turn: Turn, message: string, signal: AbortS
   try {
     const [appContext, persistentContext] = await Promise.all([agentAppContext(owner.userId), persistentStudentContext(owner.userId)]);
     turn.telemetry.contextMs = Date.now() - turn.telemetry.startedAt;
-    const reply = await callOpenClawAgent({ sessionKey: turn.sessionKey, message, signal, history: turn.history, draftContext: turn.draftContext, appContext, persistentContext, metrics: turn.telemetry.gateway, onDelta });
+    const input = { turn, message, signal, history: turn.history, draftContext: turn.draftContext, appContext, persistentContext };
+    let reply: string;
+    if (onDelta) {
+      const streamed = await streamDirectChatTurn(input);
+      for await (const event of streamed) {
+        if (event.type === 'raw_model_stream_event' && event.data.type === 'output_text_delta') onDelta(event.data.delta);
+      }
+      await streamed.completed;
+      if (streamed.error) throw streamed.error;
+      if (streamed.cancelled) throw new AgentRequestError('The AI assistant response was interrupted. Try again.', 503);
+      if (typeof streamed.finalOutput !== 'string' || !streamed.finalOutput.trim()) {
+        throw new AgentRequestError('The AI assistant returned an empty response. Try asking again.', 502);
+      }
+      reply = streamed.finalOutput.slice(0, 20_000);
+    } else {
+      reply = await runDirectChatTurn(input);
+    }
     const body = agentResponseBody(reply, turn, owner.userId);
     outcome = 'ok';
     const summary = summarizeTurn(turn.telemetry, { endedAt: Date.now(), outcome, cards: body.cards.length });
