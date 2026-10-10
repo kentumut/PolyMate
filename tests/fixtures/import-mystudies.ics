@@ -1,0 +1,19 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//PolyMate//Synthetic timetable fixture//EN
+BEGIN:VEVENT
+UID:fixture-mystudies-lecture
+DTSTART;TZID=Europe/Zurich:20261012T100000
+DTEND;TZID=Europe/Zurich:20261012T120000
+RRULE:FREQ=WEEKLY;COUNT=4
+EXDATE;TZID=Europe/Zurich:20261019T100000
+SUMMARY:Machine Learning lecture — not an assignment
+DESCRIPTION:Synthetic myStudies timetable fixture.
+END:VEVENT
+BEGIN:VEVENT
+UID:fixture-mystudies-independent
+DTSTART:20261015T140000
+DTEND:20261015T150000
+SUMMARY:Floating-time seminar — interpreted in Zurich
+END:VEVENT
+END:VCALENDAR

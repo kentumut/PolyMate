@@ -6,6 +6,7 @@ import { AssignmentDialog } from './assignment-dialog';
 import { AssignmentSaveError, createAssignmentClient, createSampleAssignmentClient, type AssignmentFixtureOutcome } from './assignment-client';
 import { useStudyWorkspace } from './study-workspace-context';
 import { PlanningPanel } from './planning-panel';
+import { CalendarImportPanel } from './calendar-import-panel';
 
 const deadlineFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', dateStyle: 'medium', timeStyle: 'short' });
 const statusLabels: Record<AssignmentStatus, string> = { open: 'Open', in_progress: 'In progress', completed: 'Completed', cancelled: 'Cancelled' };
@@ -25,6 +26,7 @@ export function AssignmentsPanel({ sample = false, onCalendarChange = () => {} }
   });
   const client = source.client;
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{ key: number; assignments: Assignment[]; error: string }>();
   const [busy, setBusy] = useState(false);
@@ -68,9 +70,13 @@ export function AssignmentsPanel({ sample = false, onCalendarChange = () => {} }
   return <section className="space-y-4 rounded-2xl border border-[#dce3db] bg-white p-6" aria-label="Assignments">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-lg font-semibold">Assignments</h2>
-      <button type="button" onClick={() => { setNotice(''); setOpen(true); }} disabled={busy || Boolean(pending)} className="rounded-lg bg-[#173b32] px-3 py-2 text-sm font-medium text-white disabled:opacity-50">Add assignment</button>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" aria-expanded={importOpen} onClick={() => setImportOpen(value => !value)} className="min-h-11 rounded-lg border border-[#173b32] px-3 py-2 text-sm">{importOpen ? 'Hide import review' : 'Import calendar'}</button>
+        <button type="button" onClick={() => { setNotice(''); setOpen(true); }} disabled={busy || Boolean(pending)} className="min-h-11 rounded-lg bg-[#173b32] px-3 py-2 text-sm font-medium text-white disabled:opacity-50">Add assignment</button>
+      </div>
     </div>
     <p className="text-xs text-[#617269]">Deadlines in Europe/Zurich. Assignments are saved independently of Google Calendar.</p>
+    <div hidden={!importOpen}><CalendarImportPanel fixture={sample} onSaved={() => { setReloadKey(key => key + 1); void workspace?.refresh(); }} /></div>
     {sample && <div className="space-y-2 rounded-lg bg-[#e8ede5] p-3 text-xs">
       <p>Sample assignments — in memory only; reset after reload.</p>
       <label htmlFor="assignment-fixture-outcome" className="block font-medium">Sample save outcome</label>
