@@ -301,19 +301,41 @@ export function compactRoadmapPlacements(
   const workloads = semesterCredits(plan.courses);
   const maximumCredits = plan.targetCredits + MAX_SEMESTER_OVERAGE;
   const placements: SemesterPlanProposal['courses'] = [];
-  const ordered = [...selections].sort((left, right) => Number(left.category === 'masters_thesis') - Number(right.category === 'masters_thesis'));
-  let latestNonThesis = [...workloads.keys()].filter(semester => semesterIndex(semester) >= semesterIndex(plan.activeSemester))
-    .reduce((latest, semester) => semesterIndex(semester) > semesterIndex(latest) ? semester : latest, plan.activeSemester);
-  for (const { course, category } of ordered) {
+  const nonThesis = selections.filter(item => item.category !== 'masters_thesis')
+    .sort((left, right) => (right.course.credits ?? 0) - (left.course.credits ?? 0));
+  const theses = selections.filter(item => item.category === 'masters_thesis');
+  const openSemesters = [plan.activeSemester];
+  for (const { course, category } of nonThesis) {
     if ((course.credits ?? 0) > maximumCredits) {
       throw new Error(`${course.title ?? course.number ?? 'A required course'} has ${course.credits} ECTS and cannot fit the user-selected ${maximumCredits}-ECTS hard limit. Raise the limit to at least ${course.credits} ECTS or adjust the plan manually.`);
     }
-    let placement = category === 'masters_thesis' ? nextSemester(latestNonThesis) : plan.activeSemester;
-    while ((workloads.get(placement) ?? 0) + (course.credits ?? 0) > maximumCredits) placement = nextSemester(placement);
-    if (category !== 'masters_thesis' && semesterIndex(placement) > semesterIndex(latestNonThesis)) latestNonThesis = placement;
+    let fitting = openSemesters.filter(semester => (workloads.get(semester) ?? 0) + (course.credits ?? 0) <= maximumCredits);
+    while (!fitting.length) {
+      const semester = nextSemester(openSemesters.at(-1)!);
+      openSemesters.push(semester);
+      if ((workloads.get(semester) ?? 0) + (course.credits ?? 0) <= maximumCredits) fitting = [semester];
+    }
+    const placement = fitting.sort((left, right) => {
+      const leftRemaining = maximumCredits - (workloads.get(left) ?? 0) - (course.credits ?? 0);
+      const rightRemaining = maximumCredits - (workloads.get(right) ?? 0) - (course.credits ?? 0);
+      return leftRemaining - rightRemaining || semesterIndex(left) - semesterIndex(right);
+    })[0];
     workloads.set(placement, (workloads.get(placement) ?? 0) + (course.credits ?? 0));
     placements.push({ ...course, semester: placement, sourceSemester: course.semester, status: 'planned',
-      reason: `Catalogue-verified ${category.replaceAll('_', ' ')} milestone in a graduation-ready projection. Confirm prerequisites, allocation, restrictions, timetable, and recurrence before enrolment.` });
+      reason: `Catalogue-verified ${category.replaceAll('_', ' ')} milestone packed into a minimum-semester graduation projection. Confirm prerequisites, allocation, restrictions, timetable, and recurrence before enrolment.` });
+  }
+  let latestNonThesis = [...workloads.keys()].filter(semester => semesterIndex(semester) >= semesterIndex(plan.activeSemester))
+    .reduce((latest, semester) => semesterIndex(semester) > semesterIndex(latest) ? semester : latest, plan.activeSemester);
+  for (const { course, category } of theses) {
+    if ((course.credits ?? 0) > maximumCredits) {
+      throw new Error(`${course.title ?? course.number ?? 'A required course'} has ${course.credits} ECTS and cannot fit the user-selected ${maximumCredits}-ECTS hard limit. Raise the limit to at least ${course.credits} ECTS or adjust the plan manually.`);
+    }
+    let placement = nextSemester(latestNonThesis);
+    while ((workloads.get(placement) ?? 0) + (course.credits ?? 0) > maximumCredits) placement = nextSemester(placement);
+    latestNonThesis = placement;
+    workloads.set(placement, (workloads.get(placement) ?? 0) + (course.credits ?? 0));
+    placements.push({ ...course, semester: placement, sourceSemester: course.semester, status: 'planned',
+      reason: `Catalogue-verified ${category.replaceAll('_', ' ')} milestone placed after the compact taught-course plan. Confirm prerequisites, allocation, restrictions, timetable, and recurrence before enrolment.` });
   }
   return placements.sort((left, right) => semesterIndex(left.semester) - semesterIndex(right.semester));
 }
@@ -399,7 +421,7 @@ async function deterministicGraduationRoadmap(plan: SemesterPlanAgentInput, clie
   const placements = compactRoadmapPlacements(plan, [...selected.values()]);
   return {
     proposal: {
-      summary: `${placements.length} catalogue-verified courses were added as a complete projected graduation roadmap. Every semester stays at or below ${maximumCredits} ECTS.`,
+      summary: `${placements.length} catalogue-verified courses were packed into the fewest practical consecutive semesters under the ${maximumCredits}-ECTS hard limit.`,
       courses: placements,
       cautions: ['Future placements are compact timetable templates and may differ from the source catalogue season. Confirm actual offering term, timetable, readiness, category allocation, approvals, supervision, and thesis eligibility in the official VVZ and myStudies.'],
     },

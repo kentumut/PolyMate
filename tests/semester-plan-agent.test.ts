@@ -88,6 +88,18 @@ describe('semester planning agent', () => {
     expect(placements.map(item => item.sourceSemester)).toEqual(['2026W', '2026W', '2026W', '2026W']);
   });
 
+  it('packs taught courses to reduce the number of semesters', () => {
+    const plan = semesterPlanRequestSchema.parse({ major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 10, courses: [] });
+    const credits = [4, 4, 4, 4, 6, 6];
+    const selections = credits.map((value, index) => ({ course: { ...course, id: 300 + index, credits: value }, category: 'free_elective' }));
+
+    const placements = compactRoadmapPlacements(plan, selections as never);
+    const semesterTotals = new Map<string, number>();
+    for (const placement of placements) semesterTotals.set(placement.semester, (semesterTotals.get(placement.semester) ?? 0) + (placement.credits ?? 0));
+
+    expect([...semesterTotals.entries()]).toEqual([['2026W', 10], ['2027S', 10], ['2027W', 8]]);
+  });
+
   it('rejects a required course that is larger than the user-selected hard limit', () => {
     const plan = semesterPlanRequestSchema.parse({ major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 27, courses: [] });
     const thesis = { course: { ...course, id: 204, title: "Master's Thesis", credits: 30 }, category: 'masters_thesis' };
