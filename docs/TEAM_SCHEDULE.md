@@ -6,6 +6,8 @@
 
 **Schedule owner:** Kent. **Release acceptance owner:** Catalin.
 
+**Current milestone:** Iteration 1 is complete as of 10 October 2026, following live Google Calendar acceptance with Kent. [Recorded results](ITERATION_1_ACCEPTANCE.md). Next: iteration 2, deadlines and automatic backend planning.
+
 This is the team's execution order. [POLYMATE_SPEC.md](POLYMATE_SPEC.md) describes the product vision; [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) supplies the detailed technical design. When a later feature appears in those documents, it does not become a prerequisite for the first release.
 
 ## 1. First release: a working Google-connected calendar
@@ -59,6 +61,8 @@ All five teammates work immediately; only Kent edits the root scaffold.
 **Gate:** shared contracts and app shell merged; each teammate has a named branch and clear file ownership. If Google client configuration is blocked, Bartek escalates immediately while everyone else continues against the fake adapter. Fixtures unblock development; they never count as Google integration.
 
 ### Iteration 1: Google-connected scheduling MVP — next 2–3 hours
+
+**Status: COMPLETE — 10 October 2026.** The deployed calendar passed the live connect/read/create/move/complete/reload/delete journey, overlap rejection, personal-event protection, revoked-access handling, and web-container restart with token refresh. See [acceptance results](ITERATION_1_ACCEPTANCE.md).
 
 | Teammate | Parallel task | Acceptance / handoff |
 |---|---|---|
