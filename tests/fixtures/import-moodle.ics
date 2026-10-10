@@ -1,0 +1,17 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//PolyMate//Synthetic import acceptance fixture//EN
+BEGIN:VEVENT
+UID:fixture-moodle-sheet-5
+DTSTART;TZID=Europe/Zurich:20261016T170000
+DTEND;TZID=Europe/Zurich:20261016T170000
+SUMMARY:Algorithms sheet 5
+DESCRIPTION:Review exercises 1–4. Synthetic fixture, not live Moodle data.
+END:VEVENT
+BEGIN:VEVENT
+UID:fixture-moodle-all-day
+DTSTART;VALUE=DATE:20261020
+DTEND;VALUE=DATE:20261021
+SUMMARY:All-day course entry — choose the actual deadline
+END:VEVENT
+END:VCALENDAR

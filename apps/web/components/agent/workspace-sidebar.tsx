@@ -2,7 +2,7 @@
 
 import type { MouseEvent } from 'react';
 import { useSyncExternalStore } from 'react';
-import { BookOpen, CalendarDays, MessageSquare, Moon, Settings, Sun } from 'lucide-react';
+import { BookOpen, CalendarDays, MessageSquare, Moon, Settings, Sparkles, Sun } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -43,6 +43,11 @@ export function WorkspaceSidebar({ view, ownerName, hrefFor, onNavigate }: {
     <a href={hrefFor('chat')} onClick={event => onNavigate(event, 'chat')} className="flex h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-sm font-semibold tracking-tight" aria-label="PolyMate chat">
       <span className="grid size-7 place-items-center rounded-md bg-foreground text-xs font-semibold text-background" aria-hidden="true">P</span>
       <span className="hidden sm:inline">PolyMate</span>
+    </a>
+
+    <a href="/demo" className="ml-1 flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border bg-background px-2.5 text-xs font-medium shadow-sm transition-colors hover:bg-accent md:mt-3 md:ml-0 md:justify-start md:px-3" aria-label="Open mentor demo">
+      <Sparkles className="size-3.5" aria-hidden="true" />
+      <span className="hidden sm:inline">Mentor demo</span>
     </a>
 
     <nav aria-label="Study space" className="ml-auto flex items-center gap-1 md:mt-6 md:ml-0 md:flex-col md:items-stretch">

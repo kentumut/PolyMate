@@ -123,7 +123,7 @@ The deterministic demo does not call the model gateway or external Moodle/Google
 
 ## Guardrails and failure behavior
 
-- Always show `Demo` and `Safe sample data` labels.
+- Always identify the experience as a mentor demo and interactive walkthrough.
 - Never imply that the fixture is a live ETH, Moodle, or Google connection.
 - Never create study blocks before the approval step.
 - A coaching answer must not advance or reset the guided demo stage.

@@ -1,3 +1,4 @@
+import { OFFSET_INSTANT_SCHEMA } from '@polymate/contracts/calendar';
 import { AGENT_DELETE_LIMIT_PER_TURN } from './contracts';
 import { MOODLE_AGENT_TOOL_DEFINITIONS } from '../integrations/moodle/tools';
 import { VVZ_AGENT_TOOL_DEFINITIONS } from '../integrations/vvz/client';
@@ -23,7 +24,7 @@ export const AGENT_TOOL_DEFINITIONS = [
         category: { type: 'string', enum: ['plan', 'preference', 'goal', 'constraint'] },
         content: { type: 'string', maxLength: 500 },
         sourceText: { type: 'string', maxLength: 500 },
-        validUntil: { type: 'string' },
+        validUntil: OFFSET_INSTANT_SCHEMA,
       }, required: ['category', 'content', 'sourceText'], additionalProperties: false,
     },
   },
@@ -45,13 +46,13 @@ export const AGENT_TOOL_DEFINITIONS = [
   {
     name: 'polymate_get_calendar',
     description: 'Retrieve this student’s PolyMate and optional Google calendar events for explicit dates (at most 42 days). Personal Google events are read-only. Read the current editable PolyMate event before editing it.',
-    parameters: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } }, required: ['from', 'to'], additionalProperties: false },
+    parameters: { type: 'object', properties: { from: OFFSET_INSTANT_SCHEMA, to: OFFSET_INSTANT_SCHEMA }, required: ['from', 'to'], additionalProperties: false },
   },
   {
     name: 'polymate_create_study_block',
     description: 'Create one PolyMate study block only when the student explicitly asks to add it. Supply a clear title and exact start/end instants. The application supplies the owner and a stable retry operation ID.',
     parameters: {
-      type: 'object', properties: { title: { type: 'string' }, startAt: { type: 'string' }, endAt: { type: 'string' } },
+      type: 'object', properties: { title: { type: 'string' }, startAt: OFFSET_INSTANT_SCHEMA, endAt: OFFSET_INSTANT_SCHEMA },
       required: ['title', 'startAt', 'endAt'], additionalProperties: false,
     },
   },
@@ -59,14 +60,14 @@ export const AGENT_TOOL_DEFINITIONS = [
     name: 'polymate_edit_study_block',
     description: 'Edit the title and/or exact times of an existing PolyMate study block only when the student explicitly requests it. First retrieve the eventId using polymate_get_calendar. The application supplies the owner, current etag, and stable retry operation ID.',
     parameters: {
-      type: 'object', properties: { eventId: { type: 'string' }, title: { type: 'string' }, startAt: { type: 'string' }, endAt: { type: 'string' } },
+      type: 'object', properties: { eventId: { type: 'string' }, title: { type: 'string' }, startAt: OFFSET_INSTANT_SCHEMA, endAt: OFFSET_INSTANT_SCHEMA },
       required: ['eventId'], anyOf: [{ required: ['title'] }, { required: ['startAt', 'endAt'] }], additionalProperties: false,
     },
   },
   {
     name: 'polymate_move_study_block',
     description: 'Move an existing PolyMate study block only when the student explicitly requests it. First retrieve its eventId using polymate_get_calendar. The application supplies the owner, current etag, and stable retry operation ID. Never create a replacement event.',
-    parameters: { type: 'object', properties: { eventId: { type: 'string' }, startAt: { type: 'string' }, endAt: { type: 'string' } }, required: ['eventId', 'startAt', 'endAt'], additionalProperties: false },
+    parameters: { type: 'object', properties: { eventId: { type: 'string' }, startAt: OFFSET_INSTANT_SCHEMA, endAt: OFFSET_INSTANT_SCHEMA }, required: ['eventId', 'startAt', 'endAt'], additionalProperties: false },
   },
   {
     name: 'polymate_delete_study_blocks',

@@ -41,9 +41,9 @@ try {
   const count = await client.query("select count(*)::int as count from polymate_migration_probe");
   const failed = await client.query("select to_regclass($1) as name", ["polymate_failed_migration_probe"]);
   if (count.rows[0].count !== 1 || failed.rows[0].name !== null) throw new Error("Migration repeatability or rollback failed.");
-  for (const table of ["study_preferences", "study_plans", "study_plan_blocks"]) {
+  for (const table of ["study_preferences", "study_plans", "study_plan_blocks", "calendar_import_collections", "calendar_import_entries", "calendar_import_previews", "calendar_import_confirmations"]) {
     const found = await client.query("select to_regclass($1) as name", [table]);
-    if (found.rows[0].name === null) throw new Error(`Planner migration did not create ${table}.`);
+    if (found.rows[0].name === null) throw new Error(`Planning/import migration did not create ${table}.`);
   }
 } finally { await client.end(); }
 '

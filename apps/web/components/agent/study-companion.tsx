@@ -45,6 +45,51 @@ type PendingPlan = { timeline: AssignmentTimeline; expiresAt: string };
 type ChatMessage = { id: number; role: 'user' | 'assistant'; text: string; cards: AgentCard[] };
 type ChatResponse = { reply: string; cards?: AgentCard[]; pendingPlan?: PendingPlan | null; reloadCalendar?: boolean; reloadProgress?: boolean; error?: { message?: string } };
 
+type StreamEvent = { type: 'status'; tool: string } | { type: 'delta'; text: string } | ({ type: 'done' } & ChatResponse) | { type: 'error'; error?: { message?: string } };
+
+const WORKING = 'PolyMate is checking your study space…';
+const TOOL_STATUS: Record<string, string> = {
+  moodle_get_calendar_events: 'Reading your Moodle calendar…',
+  moodle_plan_assignment_timeline: 'Drafting your timeline…',
+  moodle_schedule_assignment_timeline: 'Adding blocks to your calendar…',
+  polymate_check_connections: 'Checking your connections…',
+  polymate_get_calendar: 'Looking at your calendar…',
+  polymate_create_study_block: 'Updating your calendar…',
+  polymate_edit_study_block: 'Updating your calendar…',
+  polymate_move_study_block: 'Updating your calendar…',
+  polymate_delete_study_blocks: 'Updating your calendar…',
+  polymate_get_study_progress: 'Reading your study progress…',
+  polymate_link_study_session: 'Preparing a confirmation card…',
+  polymate_report_study_progress: 'Preparing a confirmation card…',
+  vvz_search_courses: 'Searching the course catalogue…',
+  vvz_get_course_details: 'Reading course details…',
+  msc_cs_check_graduation: 'Checking graduation requirements…',
+};
+
+/** Reads the chat NDJSON stream until `done`; the done event carries the authoritative reply and cards. */
+async function readAgentStream(response: Response, onEvent: (event: StreamEvent) => void): Promise<ChatResponse> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('PolyMate could not answer. Try again.');
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline: number;
+    while ((newline = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (!line) continue;
+      const event = JSON.parse(line) as StreamEvent;
+      if (event.type === 'done') return event;
+      if (event.type === 'error') throw new Error(event.error?.message ?? 'PolyMate could not answer. Try again.');
+      onEvent(event);
+    }
+  }
+  throw new Error('PolyMate stopped before finishing. Try again.');
+}
+
 const dateTime = (value: string) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en-GB', {
@@ -162,7 +207,7 @@ function DemoOnboarding({ onComplete }: { onComplete: (profile: DemoProfile) => 
   const optionClass = (selected: boolean) => `rounded-xl border p-3 text-left transition ${selected ? 'border-primary bg-primary text-primary-foreground' : 'bg-card hover:bg-accent'}`;
   return <section className="my-auto py-4" aria-labelledby="demo-onboarding-title">
     <div className="rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
-      <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><Sparkles className="size-4" aria-hidden="true" /> Interactive demo · safe sample data</p>
+      <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><Sparkles className="size-4" aria-hidden="true" /> Mentor demo · interactive walkthrough</p>
       <h1 id="demo-onboarding-title" className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Shape Alex’s study coach</h1>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">Choose a goal, focus rhythm, and coaching style. Your decisions change the conversation, memory, notifications, and calendar plan.</p>
 
@@ -211,7 +256,7 @@ function DemoGuide({ stage, busy, onRun, onApprove, onOpenCalendar }: { stage: D
   const decisions = decisionsFor(stage);
   return <section className="mb-3 rounded-xl border bg-muted/45 p-3" aria-label="Guided chat demo">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="flex items-center gap-2 text-xs font-medium"><Sparkles className="size-3.5" aria-hidden="true" /> Interactive demo <span className="font-normal text-muted-foreground">Safe sample data</span></p>
+      <p className="flex items-center gap-2 text-xs font-medium"><Sparkles className="size-3.5" aria-hidden="true" /> Mentor demo <span className="font-normal text-muted-foreground">Interactive walkthrough</span></p>
       <ol className="flex items-center gap-1.5" aria-label={`Demo progress, ${Math.min(index + 1, demoStages.length)} of ${demoStages.length}`}>
         {demoStages.map((item, itemIndex) => <li key={item.id} title={item.label} className={`h-1.5 w-7 rounded-full ${itemIndex < index ? 'bg-primary' : itemIndex === index ? 'bg-amber-500' : 'bg-border'}`}><span className="sr-only">{item.label}</span></li>)}
       </ol>
@@ -229,7 +274,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
   const demoEpoch = demoNow ?? '2026-10-10T12:00:00.000Z';
   const searchParams = useSearchParams();
   const requestedView = searchParams.get('view');
-  const view: WorkspaceView = requestedView === 'calendar' || requestedView === 'courses' || requestedView === 'planner' || requestedView === 'settings' ? requestedView
+  const view: WorkspaceView = requestedView === 'calendar' || requestedView === 'courses' || requestedView === 'planner' || requestedView === 'settings' || requestedView === 'chat' ? requestedView
     : searchParams.has('google') ? 'settings' : 'chat';
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
@@ -239,6 +284,8 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [confirmedProgress, setConfirmedProgress] = useState<ReadonlySet<string>>(new Set());
+  const [status, setStatus] = useState(WORKING);
+  const [streamingId, setStreamingId] = useState<number | null>(null);
   const [coachReply, setCoachReply] = useState<CoachReplyTarget | null>(null);
   const [coachRefreshKey, setCoachRefreshKey] = useState(0);
   const [coachOutstanding, setCoachOutstanding] = useState(0);
@@ -272,6 +319,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
   function hrefFor(nextView: WorkspaceView) {
     const params = new URLSearchParams(searchParams.toString());
     params.set('view', nextView);
+    params.delete('google');
     return `/calendar?${params.toString()}`;
   }
 
@@ -436,7 +484,9 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
     // Only free-form turns can be stopped; scheduling and confirmations change the calendar and must finish.
     const controller = action || scheduleAction ? null : new AbortController();
     inFlight.current = controller;
-    setBusy(true); setStoppable(Boolean(controller)); setError('');
+    setBusy(true); setStoppable(Boolean(controller)); setError(''); setStatus(WORKING);
+    // Free-form turns stream tool progress and reply text; actions keep the plain JSON response.
+    const streamId = controller ? ++nextId.current : null;
     try {
       if (demo) {
         if (coachReply && !action) {
@@ -456,6 +506,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
         return;
       }
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (controller) headers.Accept = 'application/x-ndjson, application/json';
       if (action && 'draftToken' in action) {
         const csrf = await fetch('/api/agent/csrf', { credentials: 'same-origin', cache: 'no-store' });
         const csrfBody = await csrf.json().catch(() => ({})) as { csrfToken?: unknown };
@@ -467,9 +518,24 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
         body: JSON.stringify(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text }),
         signal: controller?.signal,
       });
-      const body = await response.json() as ChatResponse;
-      if (!response.ok) throw new Error(body.error?.message ?? 'PolyMate could not answer. Try again.');
-      setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: body.reply, cards: body.cards ?? [] }].slice(-40) as ChatMessage[]);
+      let body: ChatResponse;
+      if (response.ok && streamId !== null && response.headers.get('content-type')?.includes('application/x-ndjson')) {
+        let streamed = '';
+        body = await readAgentStream(response, event => {
+          if (event.type === 'status') setStatus(TOOL_STATUS[event.tool] ?? WORKING);
+          if (event.type !== 'delta') return;
+          streamed += event.text;
+          setStreamingId(streamId);
+          setMessages(previous => previous.some(message => message.id === streamId)
+            ? previous.map(message => message.id === streamId ? { ...message, text: streamed } : message)
+            : [...previous, { id: streamId, role: 'assistant' as const, text: streamed, cards: [] }].slice(-40));
+        });
+      } else {
+        body = await response.json() as ChatResponse;
+        if (!response.ok) throw new Error(body.error?.message ?? 'PolyMate could not answer. Try again.');
+      }
+      // The final reply is authoritative (redacted, and corrected for calendar outcomes); it replaces streamed text.
+      setMessages(previous => [...previous.filter(message => message.id !== streamId), { id: streamId ?? ++nextId.current, role: 'assistant', text: body.reply, cards: body.cards ?? [] }].slice(-40) as ChatMessage[]);
       setCoachRefreshKey(value => value + 1);
       setPendingPlan(body.pendingPlan ?? null);
       if (action && 'draftToken' in action) {
@@ -490,6 +556,8 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
         }
       }
     } catch (reason) {
+      // Never leave an unconfirmed partial reply on screen.
+      if (streamId !== null) setMessages(previous => previous.filter(message => message.id !== streamId));
       if (controller?.signal.aborted) {
         setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: 'Stopped.', cards: [] }].slice(-40) as ChatMessage[]);
         return;
@@ -499,7 +567,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
       if (action) setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: message, cards: [] }]);
     } finally {
       if (inFlight.current === controller) inFlight.current = null;
-      setBusy(false); setStoppable(false);
+      setBusy(false); setStoppable(false); setStreamingId(null);
     }
   }
 
@@ -566,18 +634,18 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
               {!demoOnboarding && !messages.length && <div className="my-auto flex flex-col items-center py-5 text-center sm:py-10">
                 <h1 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-4xl">{demo ? 'See PolyMate work across your study week' : `How are you feeling, ${firstName}?`}</h1>
                 <p className="mt-3 max-w-xl text-sm leading-5 text-muted-foreground sm:mt-4 sm:leading-6">{demo ? <><span className="sm:hidden">Try the real Chat, memory, approval flow, and calendar.</span><span className="hidden sm:inline">This guided conversation uses the real Chat interface, cards, approval flow, and in-memory calendar contract. Every demonstrated capability also exists in the production agent.</span></> : nextEvent && nextEventTime ? <>Your next event is <span className="font-medium text-foreground">{nextEvent.title}</span> on {nextEventTime}.</> : 'Your calendar is clear for now. What would you like to make progress on?'}</p>
-                {coachOutstanding > 0 && <button type="button" onClick={() => document.getElementById('coach-notifications-trigger')?.click()} className="mt-5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">Your coach needs {coachOutstanding} response{coachOutstanding === 1 ? '' : 's'} from you</button>}
+                {coachOutstanding > 0 && <button type="button" onClick={() => document.getElementById('coach-notifications-trigger')?.click()} className="mt-5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900">Your coach needs {coachOutstanding} response{coachOutstanding === 1 ? '' : 's'} from you</button>}
                 <div className="mt-8 grid w-full gap-2 sm:grid-cols-3">
                   {!demo && ['Plan my week', 'What should I study next?', 'Show my upcoming deadlines'].map(prompt => <button key={prompt} type="button" disabled={busy || sample} onClick={() => { setInput(prompt); document.getElementById('agent-message')?.focus(); }} className="rounded-xl border bg-card px-4 py-3 text-left text-sm shadow-sm transition-colors hover:bg-accent disabled:opacity-50">{prompt}</button>)}
                 </div>
               </div>}
 
               {messages.length > 0 && <div className="space-y-7 py-4">
-                {messages.map(message => <article key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[85%] rounded-2xl bg-secondary px-4 py-3' : 'max-w-full'}>
+                {messages.map(message => <article key={message.id} aria-busy={message.id === streamingId} className={message.role === 'user' ? 'ml-auto max-w-[85%] rounded-2xl bg-secondary px-4 py-3' : 'max-w-full'}>
                   {message.role === 'assistant' ? <MessageContent text={message.text} /> : <p className="whitespace-pre-wrap text-sm leading-6">{message.text}</p>}
                   {message.role === 'assistant' && <OtherCards cards={message.cards} busy={busy} confirmed={confirmedProgress} onConfirm={(draftToken, confirmAssignmentFinished) => void sendMessage(undefined, { draftToken, confirmAssignmentFinished })} />}
                 </article>)}
-                {busy && <p className="text-sm text-muted-foreground" role="status">PolyMate is checking your study space…</p>}
+                {busy && streamingId === null && <p className="text-sm text-muted-foreground" role="status">{status}</p>}
                 {pendingPlan && <TimelinePreview plan={pendingPlan} onSchedule={allowPartial => void sendMessage(undefined, { allowPartial })} busy={busy} />}
                 <div ref={messagesEnd} />
               </div>}
@@ -610,7 +678,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
         <section aria-label="Settings" className={view === 'settings' ? 'grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]' : 'hidden'}>
           <MoodleConnection />
           <div className="space-y-5">
-            <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-lg font-medium">Optional Google Calendar overlay</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Your PolyMate calendar works on its own. Connect Google only to show its events as read-only busy time.</p><GoogleConnection /></section>
+            <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-lg font-medium">Google Calendar</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Connect your primary calendar so PolyMate can protect existing commitments while it plans. Personal events remain read-only.</p><GoogleConnection demo={demo} /></section>
             <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-sm font-medium">Your study space</h2><dl className="mt-4 space-y-4 text-sm"><div><dt className="text-xs text-muted-foreground">Signed in as</dt><dd className="mt-1 break-words">{ownerName}</dd></div><div><dt className="text-xs text-muted-foreground">Calendar timezone</dt><dd className="mt-1">Europe/Zurich</dd></div></dl></section>
           </div>
         </section>

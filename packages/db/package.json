@@ -5,6 +5,7 @@
   "exports": {
     "./study-progress": "./src/study-progress.ts",
     "./assignments": "./src/assignments.ts",
+    "./imports": "./src/imports.ts",
     ".": "./src/connection.ts",
     "./google-oauth": "./src/google-oauth.ts",
     "./calendar-operations": "./src/calendar-operations.ts",

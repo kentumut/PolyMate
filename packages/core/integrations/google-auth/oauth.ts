@@ -1,4 +1,5 @@
 import { randomToken, sha256 } from "./crypto";
+import { GoogleCalendarApi } from "../../calendar/google-api";
 
 export const GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar.events.owned"] as const;
 const STATE_TTL_MS = 10 * 60 * 1000;
@@ -114,4 +115,17 @@ export async function refreshAccessToken(input: {
     expiresAt: new Date(Date.now() + body.expires_in * 1000),
     scopes: typeof body.scope === "string" ? body.scope.split(" ").filter(Boolean) : undefined,
   };
+}
+
+/** Confirms that the token can read the primary calendar before the UI reports a working connection. */
+export async function verifyGoogleCalendarAccess(input: {
+  accessToken: () => Promise<string>;
+  fetcher?: typeof fetch;
+  now?: Date;
+}): Promise<void> {
+  const now = input.now ?? new Date();
+  await new GoogleCalendarApi({ accessToken: input.accessToken, fetcher: input.fetcher }).list(
+    new Date(now.getTime() - 60 * 60 * 1000).toISOString(),
+    new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+  );
 }

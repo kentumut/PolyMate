@@ -10,11 +10,24 @@ COPY packages/core/package.json ./packages/core/package.json
 COPY packages/db/package.json ./packages/db/package.json
 RUN pnpm install --frozen-lockfile
 
-FROM dependencies AS tooling
-COPY . .
+# Migrations and database checks only need the root runtime dependency (pg).
+# Keeping dev dependencies out makes this image small and quick to export.
+FROM ${NODE_IMAGE} AS tooling
+WORKDIR /app
+RUN npm install --global pnpm@11.1.1
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY apps/web/package.json ./apps/web/package.json
+COPY packages/contracts/package.json ./packages/contracts/package.json
+COPY packages/core/package.json ./packages/core/package.json
+COPY packages/db/package.json ./packages/db/package.json
+RUN pnpm install --frozen-lockfile --prod --filter polymate
+COPY packages/db/migrations ./packages/db/migrations
+COPY tests/fixtures/migrations ./tests/fixtures/migrations
+COPY scripts ./scripts
 CMD ["node", "scripts/db-check.mjs"]
 
-FROM tooling AS builder
+FROM dependencies AS builder
+COPY . .
 RUN pnpm build
 
 FROM ${NODE_IMAGE} AS web
