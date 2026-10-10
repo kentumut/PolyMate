@@ -16,12 +16,12 @@ describe('OpenClaw plugin contract', () => {
     const visit = (tool: string, schema: unknown) => {
       if (!schema || typeof schema !== 'object') return;
       for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
-        if (['from', 'to', 'startAt', 'endAt'].includes(key) && value && typeof value === 'object' && (value as { type?: unknown }).type === 'string') fields.push([`${tool}.${key}`, value as Record<string, unknown>]);
+        if (['from', 'to', 'startAt', 'endAt', 'validUntil'].includes(key) && value && typeof value === 'object' && (value as { type?: unknown }).type === 'string') fields.push([`${tool}.${key}`, value as Record<string, unknown>]);
         visit(tool, value);
       }
     };
     for (const tool of AGENT_TOOL_DEFINITIONS) visit(tool.name, tool.parameters);
-    expect(fields.map(([name]) => name)).toEqual(expect.arrayContaining(['polymate_get_calendar.from', 'polymate_get_calendar.to', 'moodle_plan_assignment_timeline.startAt', 'polymate_create_study_block.startAt', 'polymate_move_study_block.endAt']));
+    expect(fields.map(([name]) => name)).toEqual(expect.arrayContaining(['polymate_get_calendar.from', 'polymate_get_calendar.to', 'moodle_plan_assignment_timeline.startAt', 'polymate_create_study_block.startAt', 'polymate_move_study_block.endAt', 'polymate_remember_student_context.validUntil']));
     for (const [, schema] of fields) {
       expect(schema.description).toContain('+02:00');
       const pattern = new RegExp(String(schema.pattern));

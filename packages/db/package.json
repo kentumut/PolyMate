@@ -11,7 +11,9 @@
     "./calendar-events": "./src/calendar-events.ts",
     "./agent-automations": "./src/agent-automations.ts",
     "./moodle-calendar": "./src/moodle-calendar.ts",
-    "./planning": "./src/planning.ts"
+    "./planning": "./src/planning.ts",
+    "./coaching": "./src/coaching.ts",
+    "./courses": "./src/courses.ts"
   },
   "dependencies": { "@polymate/contracts": "workspace:*", "@polymate/core": "workspace:*", "pg": "8.23.1" },
   "scripts": { "typecheck": "tsc --noEmit" }

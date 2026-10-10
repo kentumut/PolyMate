@@ -12,6 +12,7 @@ export const AGENT_TOOL_NAMES = [
   'vvz_get_course_details',
   'msc_cs_check_graduation',
   'polymate_check_connections',
+  'polymate_remember_student_context',
   'polymate_get_calendar',
   'polymate_create_study_block',
   'polymate_edit_study_block',

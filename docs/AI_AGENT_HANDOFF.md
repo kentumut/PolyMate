@@ -31,6 +31,7 @@ Enable the OpenAI-compatible chat-completions endpoint on the Gateway and config
       "moodle_plan_assignment_timeline",
       "moodle_schedule_assignment_timeline",
       "polymate_check_connections",
+      "polymate_remember_student_context",
       "polymate_get_calendar",
       "polymate_create_study_block",
       "polymate_edit_study_block",
@@ -50,6 +51,7 @@ Enable the OpenAI-compatible chat-completions endpoint on the Gateway and config
           "moodle_plan_assignment_timeline",
           "moodle_schedule_assignment_timeline",
           "polymate_check_connections",
+          "polymate_remember_student_context",
           "polymate_get_calendar",
           "polymate_create_study_block",
           "polymate_edit_study_block",
@@ -74,7 +76,11 @@ The app calls `/v1/chat/completions` with a signed, owner-scoped session key. Th
 
 ## Supported behavior
 
-The chat lives on `/calendar` beside the weekly calendar and Google/Moodle connection cards. The subscription card previews Moodle events without AI or Google. Calendar event cards show source links, retrieval time and feed limitations; dates are planning targets, not independently verified deadlines. The agent asks for effort estimates and explicit availability, previews a sealed timeline, and only writes after explicit consent. Partial plans require their own choice. The agent can also create one explicitly requested study block or edit an existing block after reading its current owner-scoped event and etag, and delete explicitly requested PolyMate blocks after reading them (personal Google events stay read-only). Agent writes are capped on the server: at most 3 deletions per student message, 20 blocks per timeline, and 30 created / 10 deleted blocks per student per rolling 24 hours (retries of the same operation count once; the budget is in-process and resets on restart). Confirmed, failed, and uncertain writes are shown per block; the calendar reloads after a write attempt. Retrieved Moodle text is always treated as untrusted source content. The calendar retains manual study-block creation, editing, completion and deletion, and the separate assignment-entry panel. Confirmed AI calendar writes refresh the same interactive calendar. Manually entered assignments are not yet an AI planning source.
+The Coach notification surface is a durable web inbox for automatic messages. On the first inbox read in each Europe/Zurich week, the server creates one fixed round of questions covering priorities, commitments, capacity and unfinished work. Questions requiring input expose a **Respond** action into Chat; a successful response is stored as weekly context and remains available to later weeks. The foreground agent can also use `polymate_remember_student_context` to persist an explicitly stated plan, constraint, preference or goal. The tool must include an exact quote from the current message, and temporary plans should include an expiry. Students can inspect and remove saved memories in Coach. These web messages are generated lazily when the inbox is loaded; this increment does not add push delivery.
+
+The Courses view stores owner-scoped course workload and exam context: exercise-session count, expected minutes per exercise session, weekly lecture hours, exam date, and must/optional/not-required preparation topics. Every foreground chat turn receives the current profiles as untrusted factual context. Course profiles do not prove progress, modify assignments, or authorize calendar writes.
+
+Chat is the default surface on `/calendar`, with the weekly calendar, semester planner, courses, and Google/Moodle settings available from the sidebar. The subscription card previews Moodle events without AI or Google. Calendar event cards show source links, retrieval time and feed limitations; dates are planning targets, not independently verified deadlines. The agent asks for effort estimates and explicit availability, previews a sealed timeline, and only writes after explicit consent. Partial plans require their own choice. The agent can also create one explicitly requested study block or edit an existing block after reading its current owner-scoped event and etag, and delete explicitly requested PolyMate blocks after reading them (personal Google events stay read-only). Agent writes are capped on the server: at most 3 deletions per student message, 20 blocks per timeline, and 30 created / 10 deleted blocks per student per rolling 24 hours (retries of the same operation count once; the budget is in-process and resets on restart). Confirmed, failed, and uncertain writes are shown per block; the calendar reloads after a write attempt. Retrieved Moodle text is always treated as untrusted source content. The calendar retains manual study-block creation, editing, completion and deletion, and the separate assignment-entry panel. Confirmed AI calendar writes refresh the same interactive calendar. Manually entered assignments are not yet an AI planning source.
 
 ### Interactive local progress
 

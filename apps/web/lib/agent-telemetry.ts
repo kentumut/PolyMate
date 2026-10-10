@@ -17,6 +17,8 @@ export type GatewayMetrics = {
   historyChars?: number;
   draftChars?: number;
   appContextChars?: number;
+  /** Durable student memories and courses. */
+  persistentChars?: number;
   messageChars?: number;
   replyChars?: number;
   promptTokens?: number;

@@ -40,7 +40,7 @@ Every chat turn now produces structured JSON log lines on the web container (`do
 | `status` | HTTP status of a failed turn |
 | `totalMs` | Time from receiving the message until the reply is ready |
 | `toolMs` / `toolCalls` / `toolErrors` | Wall-clock time in tools (overlapping parallel reads count once), and how many ran or failed |
-| `contextMs` | Time to build the app context (upcoming Moodle entries) before the first model call; capped at 1.5 s |
+| `contextMs` | Time to load the app context (upcoming Moodle entries, capped at 1.5 s) and student memories and courses before the first model call |
 | `modelMs` | `totalMs − toolMs − contextMs`: model time plus gateway and network overhead |
 | `modelSteps` / `modelStepMs` | The model time split into steps: before the first tool, between tool batches (parallel reads count as one batch), and after the last tool. Each entry is roughly one LLM round trip. |
 | `tools` | Per-tool `name`, `ms`, `outcome`, `resultBytes` in call order |
@@ -49,7 +49,7 @@ Every chat turn now produces structured JSON log lines on the web container (`do
 | `gateway.requestBytes` / `responseBytes` | Size of what we sent to and received from the gateway |
 | `gateway.systemChars` | Characters in our two system messages |
 | `gateway.historyMessages` / `historyChars` | History we sent (at most 12 messages) |
-| `gateway.draftChars` / `appContextChars` / `messageChars` | Pending draft context, app context (upcoming Moodle entries), and the student's message size |
+| `gateway.draftChars` / `appContextChars` / `persistentChars` / `messageChars` | Pending draft context, app context (upcoming Moodle entries), durable student memories and courses, and the student's message size |
 | `gateway.firstDeltaMs` | Streaming only: from the gateway call to the first reply text |
 | `gateway.replyChars` | Length of the model's reply |
 | `gateway.promptTokens` / `cachedPromptTokens` / `completionTokens` / `reasoningTokens` | OpenAI usage, **only if OpenClaw passes `usage` through** (missing otherwise). Totals for the whole turn, as reported by the gateway. |

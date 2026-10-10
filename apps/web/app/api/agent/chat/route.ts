@@ -7,6 +7,8 @@ import { moodleError } from '@/lib/moodle';
 import { assertAgentCsrf } from '@/lib/agent-csrf';
 import { logTurn, serverTimingHeader, summarizeTurn, type TurnOutcome } from '@/lib/agent-telemetry';
 import { AGENT_STREAM_CONTENT_TYPE, StreamRedactor, encodeAgentEvent, wantsAgentStream, type AgentStreamEvent } from '@/lib/agent-stream';
+import { listActiveStudentMemories } from '@polymate/db/coaching';
+import { listCourses } from '@polymate/db/courses';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -28,15 +30,28 @@ function agentError(error: unknown): Response {
 type Turn = ReturnType<typeof beginAgentTurn>['turn'];
 type Owner = ReturnType<typeof resolveOwner>;
 
+/** Durable student memories and courses, sent as untrusted factual context. */
+async function persistentStudentContext(ownerId: string): Promise<string | undefined> {
+  const [memories, courses] = await Promise.all([listActiveStudentMemories(ownerId), listCourses(ownerId)]);
+  const memoryContext = memories.map(item => `- [${item.category}] ${item.content}${item.validUntil ? ` (valid until ${item.validUntil})` : ''}`);
+  const courseContext = courses.map(course => [
+    `- [course] ${course.name}; exam date ${course.examDate}; ${course.lectureHoursPerWeek} lecture hours/week; ${course.exerciseSessionCount} exercise sessions at ${course.exerciseSessionMinutes} minutes each.`,
+    `  Must solve: ${course.examPrep.must.join('; ') || 'none listed'}.`,
+    `  Optional: ${course.examPrep.optional.join('; ') || 'none listed'}.`,
+    `  Not required: ${course.examPrep.not_required.join('; ') || 'none listed'}.`,
+  ].join('\n'));
+  return [...memoryContext, ...courseContext].join('\n') || undefined;
+}
+
 /** Runs one model turn, logs its latency (no content), and always releases the turn. */
 async function runTurn(owner: Owner, turn: Turn, message: string, signal: AbortSignal, onDelta?: (text: string) => void) {
   let outcome: TurnOutcome = 'error';
   let status: number | undefined;
   let logged = false;
   try {
-    const appContext = await agentAppContext(owner.userId);
+    const [appContext, persistentContext] = await Promise.all([agentAppContext(owner.userId), persistentStudentContext(owner.userId)]);
     turn.telemetry.contextMs = Date.now() - turn.telemetry.startedAt;
-    const reply = await callOpenClawAgent({ sessionKey: turn.sessionKey, message, signal, history: turn.history, draftContext: turn.draftContext, appContext, metrics: turn.telemetry.gateway, onDelta });
+    const reply = await callOpenClawAgent({ sessionKey: turn.sessionKey, message, signal, history: turn.history, draftContext: turn.draftContext, appContext, persistentContext, metrics: turn.telemetry.gateway, onDelta });
     const body = agentResponseBody(reply, turn, owner.userId);
     outcome = 'ok';
     const summary = summarizeTurn(turn.telemetry, { endedAt: Date.now(), outcome, cards: body.cards.length });

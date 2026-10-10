@@ -9,7 +9,9 @@
     "./time": "./src/time.ts",
     "./http-client": "./src/http-client.ts",
     "./moodle": "./src/moodle.ts",
-    "./planning": "./src/planning.ts"
+    "./planning": "./src/planning.ts",
+    "./coaching": "./src/coaching.ts",
+    "./courses": "./src/courses.ts"
   },
   "scripts": { "typecheck": "tsc --noEmit" }
 }
