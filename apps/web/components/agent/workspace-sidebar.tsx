@@ -49,8 +49,8 @@ export function WorkspaceSidebar({ view, ownerName, hrefFor, onNavigate }: {
       {destinations.map(destination => {
         const Icon = destination.icon;
         const active = view === destination.view || (view === 'planner' && destination.view === 'courses');
-        return <a key={destination.view} href={hrefFor(destination.view)} onClick={event => onNavigate(event, destination.view)} aria-current={active ? 'page' : undefined}
-          className={cn('flex h-9 items-center gap-3 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:text-sm', active && 'bg-accent text-foreground')}>
+        return <a key={destination.view} href={hrefFor(destination.view)} onClick={event => onNavigate(event, destination.view)} aria-label={destination.label} aria-current={active ? 'page' : undefined}
+          className={cn('flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:min-w-0 sm:justify-start sm:gap-3 sm:px-3 md:h-9 md:text-sm', active && 'bg-accent text-foreground')}>
           <Icon className="size-4" strokeWidth={1.8} aria-hidden="true" />
           <span className={cn(!active && 'hidden sm:inline', 'md:inline')}>{destination.label}</span>
         </a>;

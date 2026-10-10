@@ -71,7 +71,7 @@ function AssignmentDialogForm({ initialInput, onClose, onCreateAssignment, fixtu
 
   return <dialog ref={dialogRef} aria-labelledby={`${id}-heading`} aria-describedby={`${id}-description`}
     onCancel={event => { event.preventDefault(); if (!inFlight.current) onClose(); }}
-    className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-lg overflow-y-auto rounded-xl border bg-card p-6 text-card-foreground shadow-xl backdrop:bg-black/35">
+    className="fixed inset-0 m-auto max-h-[calc(100dvh-1rem)] w-[calc(100%_-_1rem)] max-w-lg overflow-y-auto rounded-xl border bg-card p-4 text-card-foreground shadow-xl backdrop:bg-black/35 sm:max-h-[90dvh] sm:w-[calc(100%_-_2rem)] sm:p-6">
     <h2 id={`${id}-heading`} className="text-2xl font-semibold">Add assignment</h2>
     <p id={`${id}-description`} className="mt-2 text-sm leading-6 text-muted-foreground">Choose the deadline in Europe/Zurich and estimate the total study effort. Saving does not schedule calendar blocks.</p>
     {fixtureMode && <p className="mt-3 rounded-lg bg-muted p-3 text-sm text-muted-foreground">Sample data — changes reset after reload.</p>}
