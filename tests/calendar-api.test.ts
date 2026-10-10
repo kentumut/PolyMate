@@ -6,6 +6,7 @@ import { PATCH, DELETE } from '../apps/web/app/api/calendar/events/[id]/route';
 import { POST as complete } from '../apps/web/app/api/calendar/events/[id]/complete/route';
 import { GET as csrf } from '../apps/web/app/api/calendar/csrf/route';
 import { CalendarBusyError } from '../packages/core/calendar/operations';
+import { syncStudyCalendarRead } from '../packages/db/src/study-progress';
 
 const mocks = vi.hoisted(() => ({ token: vi.fn(), begin: vi.fn(), finish: vi.fn(), lock: vi.fn() }));
 vi.mock('../packages/db/src/google-oauth', () => ({ getValidAccessToken: mocks.token }));
@@ -112,6 +113,16 @@ describe('authenticated calendar API', () => {
     expect(response.status).toBe(202);
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(await response.json()).toMatchObject({ operationId, status: 'unknown' });
+  });
+
+  it('still lists Google events when progress metadata sync fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ items: [] })));
+    vi.mocked(syncStudyCalendarRead).mockRejectedValueOnce(new Error('relation "assignment_block_links" does not exist'));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const response = await GET(new NextRequest(`${origin}/api/calendar/events?from=2026-10-12T00:00:00Z&to=2026-10-19T00:00:00Z`, { headers }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ events: [] });
+    expect(logged).toHaveBeenCalledWith('Study progress calendar sync failed.', expect.stringContaining('assignment_block_links'));
   });
 
   it('validates read ranges and issues an HttpOnly CSRF cookie', async () => {

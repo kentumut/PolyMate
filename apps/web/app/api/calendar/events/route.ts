@@ -13,7 +13,9 @@ export async function GET(request: NextRequest) {
     const range = parseDateRange({ from: query.get('from') ?? undefined, to: query.get('to') ?? undefined });
     const observedAt = new Date();
     const events = await calendarServiceFor(owner).listWeek(range);
-    await syncStudyCalendarRead(owner.userId, events, observedAt);
+    // Progress metadata is secondary: a sync failure must not hide events Google already returned.
+    try { await syncStudyCalendarRead(owner.userId, events, observedAt); }
+    catch (error) { console.error('Study progress calendar sync failed.', error instanceof Error ? error.message : 'unknown error'); }
     return Response.json({ range, events } satisfies ListEventsResponse, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     return calendarError(error);
