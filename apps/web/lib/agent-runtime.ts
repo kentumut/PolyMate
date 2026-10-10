@@ -558,7 +558,7 @@ export async function scheduleCurrentPlan(request: NextRequest, owner: OwnerCont
   const synced = result.results.filter(item => item.status === 'synced').length;
   const uncertain = result.results.some(item => item.status === 'unknown');
   const reply = result.complete
-    ? `Added all ${synced} study blocks to your calendar.`
+    ? `Added ${allowPartial ? `the ${synced} blocks that fit` : `all ${synced} study blocks`} to your calendar.`
     : `${synced} block${synced === 1 ? '' : 's'} synced${uncertain ? '; at least one write has an uncertain result' : ''}. Review the result below before retrying; the same draft is retained.`;
   const history = runtime.histories.get(owner.userId)?.messages ?? [];
   runtime.histories.set(owner.userId, { updatedAt: Date.now(), messages: [...history,

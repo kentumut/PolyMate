@@ -123,7 +123,7 @@ export class MoodleAgentTools {
       // Do not keep writing after a conflict or an uncertain write. Return exact outcomes for safe retry.
       if (result.status !== 'synced') break;
     }
-    return { timelineId: timeline.id, results, complete: results.length === timeline.blocks.length && results.every(r => r.status === 'synced') && !timeline.unscheduled.length };
+    return { timelineId: timeline.id, results, complete: results.length === timeline.blocks.length && results.every(r => r.status === 'synced') && (allowPartial || !timeline.unscheduled.length) };
   }
 }
 
