@@ -33,8 +33,9 @@ vi.mock('../apps/web/lib/moodle', () => ({
   moodleError: () => Response.json({ error: { message: 'Unavailable.' } }, { status: 500 }),
 }));
 vi.mock('../apps/web/lib/agent-runtime', async original => ({
-  ...await original<typeof import('../apps/web/lib/agent-runtime')>(), callOpenClawAgent: mocks.callAgent, agentAppContext: mocks.appContext,
+  ...await original<typeof import('../apps/web/lib/agent-runtime')>(), agentAppContext: mocks.appContext,
 }));
+vi.mock('../apps/web/lib/direct-chat-runtime', () => ({ runDirectChatTurn: mocks.callAgent, streamDirectChatTurn: vi.fn() }));
 
 import { GET as getOnboarding, POST as saveOnboarding } from '../apps/web/app/api/onboarding/route';
 import { GET as googleCallback } from '../apps/web/app/api/integrations/google/callback/route';
