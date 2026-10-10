@@ -373,13 +373,6 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
     if (id) await openChat(id);
   }
 
-  function openRecommendation(prompt: string) {
-    setInput(prompt);
-    window.history.pushState(null, '', hrefFor('chat'));
-    window.scrollTo({ top: 0 });
-    window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
-  }
-
   function completeDemoOnboarding(profile: DemoProfile) {
     const goal = profile.goal === 'deadline' ? 'finish urgent work' : profile.goal === 'exam' ? 'build exam confidence' : 'keep the week sustainable';
     const cadence = profile.coachCadence === 'proactive' ? 'flag risks that need a response' : 'stay quiet between weekly summaries';
@@ -663,7 +656,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow }: { s
         <section aria-label="Courses" className={view === 'courses' ? 'block' : 'hidden'}><CoursesPanel sample={sample} /></section>
 
         <section aria-label="Semester planning" className={view === 'planner' ? '' : 'hidden'}>
-          <SemesterPlanner sample={sample} onRecommend={openRecommendation} />
+          <SemesterPlanner sample={sample} />
         </section>
 
         <section aria-labelledby="study-chat-title" className={view === 'chat' ? 'flex h-full min-h-0 flex-col' : 'hidden'}>

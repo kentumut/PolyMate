@@ -55,13 +55,14 @@ function useSemesterPlan() {
   return [plan, (update: (current: SemesterPlan) => SemesterPlan) => savePlan(update(readPlan()))] as const;
 }
 
-export function SemesterPlanner({ sample, onRecommend }: { sample: boolean; onRecommend: (prompt: string) => void }) {
+export function SemesterPlanner({ sample }: { sample: boolean }) {
   const [plan, updatePlan] = useSemesterPlan();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Course[]>([]);
   const [audit, setAudit] = useState<Audit | null>(null);
-  const [busy, setBusy] = useState<'search' | 'audit' | ''>('');
+  const [busy, setBusy] = useState<'search' | 'audit' | 'recommend' | ''>('');
   const [error, setError] = useState('');
+  const [agentResult, setAgentResult] = useState<{ summary: string; courses: Array<Course & { reason: string }>; cautions: string[] } | null>(null);
   const validMinors = MSC_CS_MAJOR_MINOR_COMBINATIONS[plan.major];
   const semesters = useMemo(() => [...new Set([...semesterSequence(currentSemester()), ...plan.courses.map(course => course.semester), plan.activeSemester])].sort(), [plan.activeSemester, plan.courses]);
   const activeCredits = creditsForSemester(plan.courses, plan.activeSemester);
@@ -101,10 +102,24 @@ export function SemesterPlanner({ sample, onRecommend }: { sample: boolean; onRe
     changePlan(current => ({ ...current, courses: [...current.courses, { ...course, status: 'planned' }] }));
   }
 
-  function recommend() {
-    const courseList = plan.courses.length ? plan.courses.map(course => `${course.semester}: ${course.number ?? course.id} ${course.title ?? ''} (${course.credits ?? '?'} ECTS, ${course.status})`).join('; ') : 'none yet';
-    const deficits = audit?.projected.requirements.filter(item => !item.satisfied).map(item => `${requirementLabels[item.key] ?? item.key}: ${item.missing} ECTS missing`).join('; ') ?? 'not checked yet';
-    onRecommend(`Help me improve my ETH MSc Computer Science degree plan. My major is ${plan.major} and minor is ${plan.minor}. I am planning ${plan.activeSemester} with a target of ${plan.targetCredits} ECTS. Current multi-semester plan: ${courseList}. Projected requirement gaps: ${deficits}. Search VVZ for ${plan.activeSemester}, recommend a balanced set of courses that closes the most important gaps, avoid duplicate credit counting, and explain the workload and curriculum fit. Verify details with the VVZ tools and include official VVZ links.`);
+  async function improvePlan() {
+    if (busy || sample) return;
+    setBusy('recommend'); setError(''); setAgentResult(null);
+    try {
+      const response = await fetch('/api/vvz/plan', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(plan),
+      });
+      const body = await response.json() as { proposal?: { summary: string; courses: Array<Course & { status: 'planned'; reason: string }>; cautions: string[] }; audit?: Audit | null; error?: { message?: string } };
+      if (!response.ok || !body.proposal) throw new Error(body.error?.message ?? 'PolyMate could not improve this plan.');
+      const additions = body.proposal.courses;
+      updatePlan(current => {
+        const existing = new Set(current.courses.map(course => course.id));
+        return { ...current, courses: [...current.courses, ...additions.filter(course => !existing.has(course.id))] };
+      });
+      setAudit(body.audit ?? null);
+      setAgentResult({ summary: body.proposal.summary, courses: additions, cautions: body.proposal.cautions });
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'PolyMate could not improve this plan.'); }
+    finally { setBusy(''); }
   }
 
   const totalCredits = plan.courses.reduce((sum, course) => sum + (course.credits ?? 0), 0);
@@ -143,7 +158,9 @@ export function SemesterPlanner({ sample, onRecommend }: { sample: boolean; onRe
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Your plan</h2><p className="mt-1 text-sm text-muted-foreground">Review courses by semester and keep their status current.</p></div><span className="rounded-md bg-muted px-2.5 py-1 text-xs">{totalCredits} ECTS planned</span></div>
           {plan.courses.length === 0 ? <div className="mt-5 rounded-lg border border-dashed p-8 text-center"><p className="text-sm font-medium">No planned courses yet</p><p className="mt-2 text-sm text-muted-foreground">Search above, then add courses to a semester.</p></div> : <div className="mt-5 space-y-5">{groupedCourses.map(group => <section key={group.semester}><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-semibold">{group.semester}</h3><span className="text-xs text-muted-foreground">{group.credits} ECTS</span></div><div className="divide-y rounded-lg border">{group.courses.map(course => <div key={course.id} className="flex flex-wrap items-center gap-3 p-3"><div className="min-w-48 flex-1"><a href={course.officialVvzUrl} target="_blank" rel="noreferrer" className="text-sm font-medium hover:underline">{course.title}</a><p className="mt-1 text-xs text-muted-foreground">{course.number} · {course.credits ?? '?'} ECTS {assignments.get(course.id) && <>· {categoryLabels[assignments.get(course.id)!] ?? assignments.get(course.id)}</>}</p></div><select aria-label={`Status for ${course.title}`} value={course.status} onChange={event => changePlan(current => ({ ...current, courses: current.courses.map(item => item.id === course.id ? { ...item, status: event.target.value as CourseStatus } : item) }))} className="rounded-md border bg-background px-2 py-1.5 text-xs"><option value="passed">Passed</option><option value="in_progress">In progress</option><option value="planned">Planned</option></select><Button type="button" size="icon" variant="ghost" aria-label={`Remove ${course.title}`} onClick={() => changePlan(current => ({ ...current, courses: current.courses.filter(item => item.id !== course.id) }))} className="size-8 text-muted-foreground"><X aria-hidden="true" /></Button></div>)}</div></section>)}</div>}
           {error && <p role="alert" className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p>}
-          <div className="mt-5 flex flex-wrap gap-2"><Button type="button" disabled={sample || !plan.courses.length || busy !== ''} onClick={() => void checkRequirements()}>{busy === 'audit' ? 'Checking…' : audit ? 'Refresh degree check' : 'Check degree progress'}</Button><Button type="button" variant="outline" disabled={sample} onClick={recommend}><Sparkles aria-hidden="true" /> Ask PolyMate to improve it</Button></div>
+          {busy === 'recommend' && <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4" role="status"><p className="flex items-center gap-2 text-sm font-medium"><Sparkles className="size-4 animate-pulse" aria-hidden="true" /> PolyMate is improving the plan</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Auditing the existing courses, searching VVZ, and comparing curriculum gaps. Your current plan stays intact.</p></div>}
+          {agentResult && <div className="mt-4 rounded-lg border border-emerald-300/60 bg-emerald-50/70 p-4 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100" aria-live="polite"><p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="size-4" aria-hidden="true" /> {agentResult.courses.length ? `${agentResult.courses.length} course${agentResult.courses.length === 1 ? '' : 's'} added to your plan` : 'Plan reviewed'}</p><p className="mt-2 text-sm leading-6">{agentResult.summary}</p>{agentResult.courses.length > 0 && <ul className="mt-3 space-y-2">{agentResult.courses.map(course => <li key={course.id} className="rounded-md bg-background/70 p-3 text-sm"><a href={course.officialVvzUrl} target="_blank" rel="noreferrer" className="font-medium underline underline-offset-2">{course.number} · {course.title}</a><span className="ml-2 text-xs opacity-75">{course.semester} · {course.credits ?? '?'} ECTS</span><p className="mt-1 text-xs leading-5 opacity-80">{course.reason}</p></li>)}</ul>}{agentResult.cautions.length > 0 && <p className="mt-3 text-xs leading-5 opacity-80">{agentResult.cautions.join(' ')}</p>}</div>}
+          <div className="mt-5 flex flex-wrap gap-2"><Button type="button" disabled={sample || !plan.courses.length || busy !== ''} onClick={() => void checkRequirements()}>{busy === 'audit' ? 'Checking…' : audit ? 'Refresh degree check' : 'Check degree progress'}</Button><Button type="button" variant="outline" disabled={sample || busy !== ''} onClick={() => void improvePlan()}><Sparkles aria-hidden="true" /> {busy === 'recommend' ? 'Improving plan…' : 'Improve plan with PolyMate'}</Button></div>
         </section>
       </div>
 
