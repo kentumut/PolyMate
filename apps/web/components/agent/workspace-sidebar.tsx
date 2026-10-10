@@ -1,7 +1,7 @@
 'use client';
 
 import type { MouseEvent } from 'react';
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 export type WorkspaceView = 'calendar' | 'chat' | 'settings';
 
@@ -25,17 +25,20 @@ export function WorkspaceSidebar({ view, ownerName, hrefFor, onNavigate }: {
   hrefFor: (view: WorkspaceView) => string;
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, view: WorkspaceView) => void;
 }) {
-  const [darkMode, setDarkMode] = useState(false);
+  const darkMode = useSyncExternalStore(
+    callback => {
+      document.documentElement.addEventListener('polymate-theme-change', callback);
+      return () => document.documentElement.removeEventListener('polymate-theme-change', callback);
+    },
+    () => document.documentElement.classList.contains('dark'),
+    () => false,
+  );
   const initials = ownerName.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
-
-  useEffect(() => {
-    setDarkMode(document.documentElement.classList.contains('dark'));
-  }, []);
 
   function toggleTheme() {
     const nextDarkMode = !document.documentElement.classList.contains('dark');
     document.documentElement.classList.toggle('dark', nextDarkMode);
-    setDarkMode(nextDarkMode);
+    document.documentElement.dispatchEvent(new Event('polymate-theme-change'));
     try { localStorage.setItem('polymate-theme', nextDarkMode ? 'dark' : 'light'); } catch { /* Theme still works for this session. */ }
   }
 
