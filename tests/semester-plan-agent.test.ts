@@ -73,11 +73,11 @@ describe('semester planning agent', () => {
     expect(swap).toMatchObject({ course: alternative, removeCourseIds: [100, 101, 102], resultingCredits: 30 });
   });
 
-  it('places a generated roadmap into consecutive semesters without skipping the active term', () => {
+  it('places taught courses only in semesters matching their catalogue season', () => {
     const plan = semesterPlanRequestSchema.parse({ major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [] });
     const selections = [
       { course: { ...course, id: 201, credits: 20 }, category: 'major_core' },
-      { course: { ...course, id: 202, credits: 13 }, category: 'minor' },
+      { course: { ...course, id: 202, semester: '2027S', credits: 13 }, category: 'minor' },
       { course: { ...course, id: 203, credits: 10 }, category: 'practical_work' },
       { course: { ...course, id: 204, credits: 30 }, category: 'masters_thesis' },
     ];
@@ -85,7 +85,7 @@ describe('semester planning agent', () => {
     const placements = compactRoadmapPlacements(plan, selections as never);
 
     expect(placements.map(item => item.semester)).toEqual(['2026W', '2026W', '2027S', '2027W']);
-    expect(placements.map(item => item.sourceSemester)).toEqual(['2026W', '2026W', '2026W', '2026W']);
+    expect(placements.map(item => item.sourceSemester)).toEqual(['2026W', '2026W', '2027S', '2026W']);
   });
 
   it('packs taught courses to reduce the number of semesters', () => {
@@ -97,14 +97,21 @@ describe('semester planning agent', () => {
     const semesterTotals = new Map<string, number>();
     for (const placement of placements) semesterTotals.set(placement.semester, (semesterTotals.get(placement.semester) ?? 0) + (placement.credits ?? 0));
 
-    expect([...semesterTotals.entries()]).toEqual([['2026W', 10], ['2027S', 10], ['2027W', 8]]);
+    expect([...semesterTotals.entries()]).toEqual([['2026W', 10], ['2027W', 10], ['2028W', 8]]);
   });
 
-  it('rejects a required course that is larger than the user-selected hard limit', () => {
+  it('allows only the thesis semester to carry up to eight ECTS above the thesis', () => {
     const plan = semesterPlanRequestSchema.parse({ major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 27, courses: [] });
+    const companion = { course: { ...course, id: 203, credits: 8 }, category: 'seminar' };
     const thesis = { course: { ...course, id: 204, title: "Master's Thesis", credits: 30 }, category: 'masters_thesis' };
 
-    expect(() => compactRoadmapPlacements(plan, [thesis] as never)).toThrow('cannot fit the user-selected 27-ECTS hard limit');
+    const placements = compactRoadmapPlacements(plan, [companion, thesis] as never);
+
+    expect(placements.map(item => item.semester)).toEqual(['2026W', '2026W']);
+    expect(placements.reduce((sum, item) => sum + (item.credits ?? 0), 0)).toBe(38);
+
+    const overLimitCompanion = { course: { ...course, id: 205, credits: 9 }, category: 'seminar' };
+    expect(compactRoadmapPlacements(plan, [overLimitCompanion, thesis] as never).map(item => item.semester)).toEqual(['2026W', '2027S']);
   });
 
   it('requires readiness inspection and rejects recommendations in past semesters', () => {
