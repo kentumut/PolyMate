@@ -69,7 +69,7 @@ export function CoachInbox({ sample, refreshKey, onRespond, onOutstandingChange 
 
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
-      <Button type="button" variant={outstanding.length ? 'outline' : 'ghost'} className={outstanding.length ? 'relative border-amber-300 bg-amber-50 text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100' : 'text-muted-foreground'} aria-label={outstanding.length ? `Coach, ${outstanding.length} responses needed` : 'Open coach'}>
+      <Button type="button" variant={outstanding.length ? 'outline' : 'ghost'} className={outstanding.length ? 'relative border-amber-300 bg-amber-50 text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900' : 'text-muted-foreground'} aria-label={outstanding.length ? `Coach, ${outstanding.length} responses needed` : 'Open coach'}>
         <Bell aria-hidden="true" />
         <span>Coach</span>
         {outstanding.length > 0 && <><Badge variant="warning" className="ml-0.5 border-amber-400 bg-amber-100 px-1.5 text-amber-950 dark:bg-amber-900 dark:text-amber-100">{outstanding.length}</Badge><span className="absolute -right-1 -top-1 size-2.5 animate-pulse rounded-full bg-amber-500 ring-2 ring-background" /></>}
