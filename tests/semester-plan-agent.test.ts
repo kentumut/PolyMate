@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { degreeProgressionProfile, semesterPlanRequestSchema, verifiedProposal } from '../apps/web/lib/semester-plan-agent';
+import { degreeProgressionProfile, enforceGraduationReadyProposal, semesterPlanRequestSchema, verifiedProposal } from '../apps/web/lib/semester-plan-agent';
 
 const course = {
   id: 101,
@@ -23,29 +23,29 @@ describe('semester planning agent', () => {
     const proposal = verifiedProposal({
       summary: 'Added one verified course.',
       recommendations: [
-        { unitId: 999, semester: '2026W', reason: 'Invented course', readiness: 'ready', readinessEvidence: 'Claimed evidence.' },
-        { unitId: 101, semester: '2026W', reason: 'Closes a major gap.', readiness: 'ready', readinessEvidence: 'Targets MSc students.' },
-        { unitId: 101, semester: '2026W', reason: 'Duplicate suggestion.', readiness: 'ready', readinessEvidence: 'Targets MSc students.' },
+        { unitId: 999, semester: '2026W', plannedSemester: '2026W', reason: 'Invented course', readiness: 'ready', readinessEvidence: 'Claimed evidence.' },
+        { unitId: 101, semester: '2026W', plannedSemester: '2026W', reason: 'Closes a major gap.', readiness: 'ready', readinessEvidence: 'Targets MSc students.' },
+        { unitId: 101, semester: '2026W', plannedSemester: '2026W', reason: 'Duplicate suggestion.', readiness: 'ready', readinessEvidence: 'Targets MSc students.' },
       ],
       cautions: ['Confirm the final allocation in myStudies.'],
     }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [] }, new Set(['2026W:101']));
 
     expect(proposal.courses).toEqual([{ ...course, status: 'planned', reason: 'Closes a major gap. Readiness: Targets MSc students.' }]);
     expect(proposal.cautions).toHaveLength(1);
-    expect(verifiedProposal({ summary: 'No change.', recommendations: [{ unitId: 101, semester: '2026W', reason: 'Already there.', readiness: 'ready', readinessEvidence: 'Already planned.' }], cautions: [] }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [{ ...course, status: 'planned' }] }, new Set(['2026W:101'])).courses).toEqual([]);
+    expect(verifiedProposal({ summary: 'No change.', recommendations: [{ unitId: 101, semester: '2026W', plannedSemester: '2026W', reason: 'Already there.', readiness: 'ready', readinessEvidence: 'Already planned.' }], cautions: [] }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [{ ...course, status: 'planned' }] }, new Set(['2026W:101'])).courses).toEqual([]);
   });
 
   it('never lets recommendations take a semester above target plus 3 ECTS', () => {
-    const majorCore = { ...course, id: 102, title: 'Advanced Machine Learning', credits: 10 };
-    const seminar = { ...course, id: 103, title: 'Systems for AI Seminar', credits: 2 };
+    const majorCore = { ...course, id: 102, number: '263-0002-00L', title: 'Advanced Machine Learning', credits: 10 };
+    const seminar = { ...course, id: 103, number: '263-0003-00L', title: 'Systems for AI Seminar', credits: 2 };
     const candidates = new Map([['2026W:102', majorCore], ['2026W:103', seminar]]);
     const existing = { ...course, id: 100, title: 'Existing courses', credits: 31, status: 'planned' as const };
 
     const proposal = verifiedProposal({
       summary: 'Add both courses.',
       recommendations: [
-        { unitId: 102, semester: '2026W', reason: 'Closes the major-core gap.', readiness: 'ready', readinessEvidence: 'Preparation is satisfied.' },
-        { unitId: 103, semester: '2026W', reason: 'Closes the seminar gap.', readiness: 'ready', readinessEvidence: 'Open to MSc students.' },
+        { unitId: 102, semester: '2026W', plannedSemester: '2026W', reason: 'Closes the major-core gap.', readiness: 'ready', readinessEvidence: 'Preparation is satisfied.' },
+        { unitId: 103, semester: '2026W', plannedSemester: '2026W', reason: 'Closes the seminar gap.', readiness: 'ready', readinessEvidence: 'Open to MSc students.' },
       ],
       cautions: [],
     }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [existing] }, new Set(['2026W:102', '2026W:103']));
@@ -57,13 +57,13 @@ describe('semester planning agent', () => {
   });
 
   it('requires readiness inspection and rejects recommendations in past semesters', () => {
-    const candidates = new Map([['2026W:101', course], ['2027S:102', { ...course, id: 102, semester: '2027S' }]]);
+    const candidates = new Map([['2026W:101', course], ['2027S:102', { ...course, id: 102, number: '263-0002-00L', semester: '2027S' }]]);
     const plan = { major: 'Machine Intelligence' as const, minor: 'Computer Graphics', activeSemester: '2027S', targetCredits: 30, courses: [] };
     const proposal = verifiedProposal({
       summary: 'Add candidates.',
       recommendations: [
-        { unitId: 101, semester: '2026W', reason: 'Past course.', readiness: 'ready', readinessEvidence: 'Preparation is satisfied.' },
-        { unitId: 102, semester: '2027S', reason: 'Not inspected.', readiness: 'ready', readinessEvidence: 'Unsupported claim.' },
+        { unitId: 101, semester: '2026W', plannedSemester: '2026W', reason: 'Past course.', readiness: 'ready', readinessEvidence: 'Preparation is satisfied.' },
+        { unitId: 102, semester: '2027S', plannedSemester: '2027S', reason: 'Not inspected.', readiness: 'ready', readinessEvidence: 'Unsupported claim.' },
       ],
       cautions: [],
     }, candidates as never, plan, new Set());
@@ -75,17 +75,30 @@ describe('semester planning agent', () => {
     ]));
   });
 
-  it('does not automatically insert conditional recommendations', () => {
+  it('moves conditional active-term recommendations to the next same-season term', () => {
     const candidates = new Map([['2026W:101', course]]);
     const proposal = verifiedProposal({
       summary: 'Candidate found.',
-      recommendations: [{ unitId: 101, semester: '2026W', reason: 'Potential fit.', readiness: 'conditional', readinessEvidence: 'Requires unverified linear algebra.' }],
+      recommendations: [{ unitId: 101, semester: '2026W', plannedSemester: '2026W', reason: 'Potential fit.', readiness: 'conditional', readinessEvidence: 'Requires unverified linear algebra.' }],
       cautions: [],
     }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [] }, new Set(['2026W:101']));
 
-    expect(proposal.courses).toEqual([]);
-    expect(proposal.summary).toContain('readiness');
-    expect(proposal.cautions.at(-1)).toContain('conditional or unknown');
+    expect(proposal.courses[0]).toMatchObject({ id: 101, semester: '2027W', sourceSemester: '2026W' });
+    expect(proposal.courses[0].reason).toContain('moved from the active term to 2027W');
+    expect(proposal.cautions.at(-1)).toContain('future conditional milestones');
+  });
+
+  it('allows an inspected catalogue course as a tentative later same-season recurrence', () => {
+    const candidates = new Map([['2026W:101', course]]);
+    const proposal = verifiedProposal({
+      summary: 'Added a tentative recurring course.',
+      recommendations: [{ unitId: 101, semester: '2026W', plannedSemester: '2027W', reason: 'Fits the later roadmap.', readiness: 'conditional', readinessEvidence: 'Requires future supervisor approval.' }],
+      cautions: [],
+    }, candidates as never, { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2027S', targetCredits: 30, courses: [] }, new Set(['2026W:101']));
+
+    expect(proposal.courses[0]).toMatchObject({ id: 101, semester: '2027W', sourceSemester: '2026W' });
+    expect(proposal.courses[0].reason).toContain('confirm that it recurs in 2027W');
+    expect(proposal.cautions.at(-1)).toContain('future conditional milestones');
   });
 
   it('infers degree advancement and balances the saved semester timeline', () => {
@@ -109,5 +122,22 @@ describe('semester planning agent', () => {
       ],
       assumedAdmissionBaseline: expect.stringContaining('bachelor-level admission background'),
     });
+  });
+
+  it('atomically rejects a partial roadmap instead of inserting non-graduating courses', () => {
+    const proposal = { summary: 'Partial roadmap.', courses: [{ ...course, status: 'planned' as const, reason: 'Partial.' }], cautions: [] };
+    const incompleteAudit = {
+      projected: { graduationReady: false, requirements: [
+        { key: 'major_core', satisfied: false, missing: 16 },
+        { key: 'total', satisfied: false, missing: 114 },
+      ] },
+    };
+
+    const result = enforceGraduationReadyProposal(proposal, incompleteAudit as never, null);
+
+    expect(result.proposal.courses).toEqual([]);
+    expect(result.proposal.summary).toContain('No courses were added');
+    expect(result.proposal.cautions.at(-1)).toContain('total: 114 missing');
+    expect(result.audit).toBeNull();
   });
 });

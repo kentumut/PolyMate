@@ -133,8 +133,20 @@ function evaluate(assignments: Assignment[], previousBachelorLanguageCredits: nu
 export async function checkMscCsGraduation(client: VvzClient, raw: unknown) {
   const input = parseMscCsGraduationRequest(raw);
   const resolved = await client.getMscCsCurriculumCourses(input.courses.map(course => course.unitId), input.major, input.minor);
-  const courses: ResolvedCourse[] = resolved.map(course => ({ ...course, ...input.courses.find(inputCourse => inputCourse.unitId === course.id)! }));
-  const allocationWarnings: string[] = [];
+  const resolvedCourses: ResolvedCourse[] = resolved.map(course => ({ ...course, ...input.courses.find(inputCourse => inputCourse.unitId === course.id)! }));
+  const duplicateNumbers = new Set<string>();
+  const seenNumbers = new Set<string>();
+  const courses = resolvedCourses.filter(course => {
+    const number = course.number?.trim().toUpperCase();
+    if (!number) return true;
+    if (seenNumbers.has(number)) {
+      duplicateNumbers.add(number);
+      return false;
+    }
+    seenNumbers.add(number);
+    return true;
+  });
+  const allocationWarnings: string[] = [...duplicateNumbers].map(number => `${number} appeared under multiple VVZ unit IDs and was counted only once.`);
   const assigned = assignCourses(courses, allocationWarnings);
   const completed = evaluate(assigned.filter(course => course.status === 'passed'), input.previousBachelorLanguageCredits);
   const projected = evaluate(assigned, input.previousBachelorLanguageCredits);

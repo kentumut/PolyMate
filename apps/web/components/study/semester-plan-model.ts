@@ -9,6 +9,7 @@ export type PlannedCourse = {
   credits: number | null;
   officialVvzUrl: string;
   status: CourseStatus;
+  sourceSemester?: string;
 };
 export type SemesterPlan = { major: MscCsMajor; minor: MscCsMinor; activeSemester: string; targetCredits: number; courses: PlannedCourse[] };
 
