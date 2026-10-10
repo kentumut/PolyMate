@@ -2,6 +2,7 @@ import type { OwnerContext } from '@polymate/core/identity';
 import type { OAuthStateStore } from '@polymate/core/google-auth';
 import { refreshAccessToken } from '@polymate/core/google-auth';
 import { decryptSecret, encryptSecret } from '@polymate/core/google-auth/crypto';
+import type { CalendarHome } from '@polymate/core/calendar/home';
 import { getPool } from './connection';
 import { calendarOperationSessionClient } from './calendar-operations';
 
@@ -37,13 +38,22 @@ export const oauthStateStore: OAuthStateStore = {
   },
 };
 
-export async function getConnectionStatus(ownerId: string): Promise<{ connected: boolean }> {
-  const result = await getPool().query<{ connected: boolean }>(
-    `SELECT (refresh_token_ciphertext IS NOT NULL OR access_token_expires_at > now()) AS connected
+export async function getConnectionStatus(ownerId: string): Promise<{ connected: boolean; calendarHome: CalendarHome }> {
+  const result = await (calendarOperationSessionClient() ?? getPool()).query<{ connected: boolean; calendar_home: CalendarHome }>(
+    `SELECT (refresh_token_ciphertext IS NOT NULL OR access_token_expires_at > now()) AS connected, calendar_home
      FROM calendar_connections WHERE owner_id = $1`,
     [ownerId],
   );
-  return { connected: result.rows[0]?.connected ?? false };
+  // The home stays 'google' while a stored token is expired: blocks never silently move to PolyMate.
+  return { connected: result.rows[0]?.connected ?? false, calendarHome: result.rows[0]?.calendar_home ?? 'polymate' };
+}
+
+/** Google can be chosen only while a connection row exists; switching back never needs one. */
+export async function setCalendarHome(ownerId: string, home: CalendarHome): Promise<void> {
+  const result = await (calendarOperationSessionClient() ?? getPool()).query(
+    'UPDATE calendar_connections SET calendar_home = $2, updated_at = now() WHERE owner_id = $1', [ownerId, home],
+  );
+  if (home === 'google' && result.rowCount !== 1) throw new Error('Google Calendar is not connected.');
 }
 
 export async function saveConnection(ownerId: string, tokens: {
@@ -74,12 +84,24 @@ export async function saveConnection(ownerId: string, tokens: {
   );
 }
 
+/** Study blocks still live in Google; disconnecting would hide them from PolyMate. */
+export class CalendarHomeInUseError extends Error {
+  constructor() {
+    super('Your study blocks are saved in Google Calendar. Move them to the PolyMate calendar before disconnecting Google.');
+    this.name = 'CalendarHomeInUseError';
+  }
+}
+
 export async function disconnectGoogle(ownerId: string): Promise<void> {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
     await client.query('DELETE FROM oauth_states WHERE owner_id = $1', [ownerId]);
-    await client.query('DELETE FROM calendar_connections WHERE owner_id = $1', [ownerId]);
+    const removed = await client.query("DELETE FROM calendar_connections WHERE owner_id = $1 AND calendar_home = 'polymate'", [ownerId]);
+    if (!removed.rowCount) {
+      const kept = await client.query('SELECT 1 FROM calendar_connections WHERE owner_id = $1', [ownerId]);
+      if (kept.rowCount) throw new CalendarHomeInUseError();
+    }
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');

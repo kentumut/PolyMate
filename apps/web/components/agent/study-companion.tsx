@@ -157,11 +157,11 @@ function OtherCards({ cards, busy, confirmed, onConfirm }: { cards: AgentCard[];
       if (card.kind === 'assignments') return <AssignmentCards key={`assignments-${index}`} data={card.data} />;
       if (card.kind === 'schedule') return <ScheduleCard key={`schedule-${index}`} data={card.data} />;
       if (card.kind === 'connections' && card.data && typeof card.data === 'object') {
-        const value = card.data as { moodleConnected?: boolean; googleCalendarConnected?: boolean; standaloneCalendarAvailable?: boolean; backgroundMoodleAvailable?: boolean; note?: string };
+        const value = card.data as { moodleConnected?: boolean; googleCalendarConnected?: boolean; calendarHome?: 'polymate' | 'google'; standaloneCalendarAvailable?: boolean; backgroundMoodleAvailable?: boolean; note?: string };
         return <div key={`connections-${index}`} className="mt-3 rounded-xl bg-[#edf0e7] p-4 text-sm">
-          <p>PolyMate calendar: available.</p>
+          <p>Study blocks are saved to: {value.calendarHome === 'google' ? 'Google Calendar (also shown in PolyMate)' : 'the PolyMate calendar'}.</p>
           <p>Moodle calendar: {value.moodleConnected ? 'subscription connected' : 'not connected'}.</p>
-          <p>Optional Google overlay: {value.googleCalendarConnected ? 'connected' : 'not connected'}.</p>
+          <p>Google Calendar: {value.googleCalendarConnected ? 'connected' : 'not connected'}.</p>
           {!value.backgroundMoodleAvailable && <p className="mt-2 text-xs text-[#617269]">Connect a Moodle calendar subscription to enable scheduled calendar checks.</p>}
           {value.note && <p className="mt-2 text-xs text-[#617269]">{value.note}</p>}
         </div>;
@@ -780,7 +780,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
           <MoodleConnection />
           <div className="space-y-5">
             {!sample && <CheckInSettings paused={chats.checkInsPaused} error={chats.error} disabled={busy} onPause={paused => void chats.setPaused(paused)} onCheckInNow={() => void checkInNow()} />}
-            <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-lg font-medium">Google Calendar</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Connect your primary calendar so PolyMate can protect existing commitments while it plans. Personal events remain read-only.</p><GoogleConnection demo={demo} /></section>
+            <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-lg font-medium">Google Calendar</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Connect your primary calendar so PolyMate can protect existing commitments while it plans, and choose whether study blocks are saved there. Personal events remain read-only.</p><GoogleConnection demo={demo} /></section>
             <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-sm font-medium">Your study space</h2><dl className="mt-4 space-y-4 text-sm"><div><dt className="text-xs text-muted-foreground">Signed in as</dt><dd className="mt-1 break-words">{ownerName}</dd></div><div><dt className="text-xs text-muted-foreground">Calendar timezone</dt><dd className="mt-1">Europe/Zurich</dd></div></dl></section>
           </div>
         </section>
