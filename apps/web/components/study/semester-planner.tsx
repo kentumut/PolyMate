@@ -4,7 +4,8 @@ import { useMemo, useState, useSyncExternalStore } from 'react';
 import { MSC_CS_MAJORS, type MscCsMajor, type MscCsMinor } from '@polymate/core/vvz';
 import { MSC_CS_MAJOR_MINOR_COMBINATIONS } from '@polymate/core/vvz/graduation';
 import { creditsForSemester, currentSemester, semesterRange, semesterSequence, workloadLabel, type CourseStatus, type PlannedCourse, type SemesterPlan } from './semester-plan-model';
-import { RefreshCw, Search as SearchIcon, Sparkles, X } from 'lucide-react';
+import { DEMO_SEARCH_SUGGESTIONS, demoAlternative, demoAudit, demoImprovePlan, demoSearch, demoSemesterPlan } from './semester-plan-demo';
+import { RefreshCw, RotateCcw, Search as SearchIcon, Sparkles, X, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 type Course = Omit<PlannedCourse, 'status'>;
@@ -55,8 +56,16 @@ function useSemesterPlan() {
   return [plan, (update: (current: SemesterPlan) => SemesterPlan) => savePlan(update(readSemesterPlan()))] as const;
 }
 
+// Demo results are computed locally; the short pause only lets loading states register visually.
+const demoPause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export function SemesterPlanner({ sample }: { sample: boolean }) {
-  const [plan, updatePlan] = useSemesterPlan();
+  const [storedPlan, updateStoredPlan] = useSemesterPlan();
+  // The guided demo has no VVZ or model access, so it always runs the scripted planner.
+  const [demoMode, setDemoMode] = useState(sample);
+  const [demoPlan, setDemoPlan] = useState(demoSemesterPlan);
+  const plan = demoMode ? demoPlan : storedPlan;
+  const updatePlan = demoMode ? setDemoPlan : updateStoredPlan;
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Course[]>([]);
   const [audit, setAudit] = useState<Audit | null>(null);
@@ -74,7 +83,15 @@ export function SemesterPlanner({ sample }: { sample: boolean }) {
   }, [plan.activeSemester, plan.courses]);
   const activeCredits = creditsForSemester(plan.courses, plan.activeSemester);
   const assignments = new Map(audit?.projected.assignments.map(item => [item.unitId, item.assignedCategory]) ?? []);
-  const groupedCourses = semesters.map(semester => ({ semester, courses: plan.courses.filter(course => course.semester === semester), credits: creditsForSemester(plan.courses, semester) }));
+  const lastPlannedSemester = [plan.activeSemester, ...plan.courses.map(course => course.semester)].sort().at(-1)!;
+  // Empty semesters after the last planned one are not gaps, so they get no warning row.
+  const groupedCourses = semesters.filter(semester => semester <= lastPlannedSemester).map(semester => ({ semester, courses: plan.courses.filter(course => course.semester === semester), credits: creditsForSemester(plan.courses, semester) }));
+
+  function startDemo(enabled: boolean) {
+    setDemoMode(enabled);
+    if (enabled) setDemoPlan(demoSemesterPlan());
+    setQuery(''); setResults([]); setAudit(null); setAgentResult(null); setAlternative(null); setError('');
+  }
 
   function changePlan(update: (current: SemesterPlan) => SemesterPlan) {
     updatePlan(update);
@@ -85,6 +102,11 @@ export function SemesterPlanner({ sample }: { sample: boolean }) {
     if (!query.trim() || busy) return;
     setBusy('search'); setError('');
     try {
+      if (demoMode) {
+        await demoPause(120);
+        setResults(demoSearch(plan.activeSemester, query));
+        return;
+      }
       const response = await fetch(`/api/vvz/search?semester=${encodeURIComponent(plan.activeSemester)}&q=${encodeURIComponent(query.trim())}`, { credentials: 'same-origin', cache: 'no-store' });
       const body = await response.json() as { courses?: Course[]; error?: { message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? 'Course search failed.');
@@ -97,6 +119,11 @@ export function SemesterPlanner({ sample }: { sample: boolean }) {
     if (!plan.courses.length || busy) return;
     setBusy('audit'); setError('');
     try {
+      if (demoMode) {
+        await demoPause(150);
+        setAudit(demoAudit(plan));
+        return;
+      }
       const response = await fetch('/api/vvz/graduation', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ major: plan.major, minor: plan.minor, courses: plan.courses.map(({ id, status }) => ({ unitId: id, status })), previousBachelorLanguageCredits: 0 }) });
       const body = await response.json() as Audit & { error?: { message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? 'Requirements check failed.');
@@ -110,14 +137,22 @@ export function SemesterPlanner({ sample }: { sample: boolean }) {
   }
 
   async function improvePlan() {
-    if (busy || sample) return;
+    if (busy) return;
     setBusy('recommend'); setError(''); setAgentResult(null);
     try {
-      const response = await fetch('/api/vvz/plan', {
-        method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(plan),
-      });
-      const body = await response.json() as { proposal?: { summary: string; courses: Array<Course & { status: 'planned'; reason: string }>; cautions: string[] }; audit?: Audit | null; error?: { message?: string } };
-      if (!response.ok || !body.proposal) throw new Error(body.error?.message ?? 'PolyMate could not improve this plan.');
+      type PlanResponse = { proposal?: { summary: string; courses: Array<Course & { status: 'planned'; reason: string }>; cautions: string[] }; audit?: Audit | null; error?: { message?: string } };
+      let body: PlanResponse;
+      if (demoMode) {
+        await demoPause(400);
+        body = demoImprovePlan(plan);
+      } else {
+        const response = await fetch('/api/vvz/plan', {
+          method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(plan),
+        });
+        body = await response.json() as PlanResponse;
+        if (!response.ok) throw new Error(body.error?.message ?? 'PolyMate could not improve this plan.');
+      }
+      if (!body.proposal) throw new Error(body.error?.message ?? 'PolyMate could not improve this plan.');
       const additions = body.proposal.courses;
       updatePlan(current => {
         const existing = new Set(current.courses.map(course => course.id));
@@ -130,9 +165,14 @@ export function SemesterPlanner({ sample }: { sample: boolean }) {
   }
 
   async function suggestAlternative(course: PlannedCourse) {
-    if (busy || alternativeBusyId !== null || sample) return;
+    if (busy || alternativeBusyId !== null) return;
     setAlternativeBusyId(course.id); setAlternative(null); setError('');
     try {
+      if (demoMode) {
+        await demoPause(150);
+        setAlternative({ forCourseId: course.id, ...demoAlternative(plan, course.id) });
+        return;
+      }
       const response = await fetch('/api/vvz/alternative', {
         method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan, courseId: course.id }),
       });
@@ -167,6 +207,10 @@ export function SemesterPlanner({ sample }: { sample: boolean }) {
   const inputClass = 'mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/30';
 
   return <div className="space-y-5">
+    {demoMode ? <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300/60 bg-amber-50/70 px-4 py-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100" aria-label="Demo mode">
+      <div className="min-w-0"><p className="flex items-center gap-2 text-sm font-semibold"><Zap className="size-4" aria-hidden="true" /> Demo mode</p><p className="mt-0.5 text-xs leading-5 opacity-80">Scripted results from an illustrative catalogue. Nothing calls AI or VVZ, so every action answers instantly.{!sample && ' Your saved plan is untouched.'}</p></div>
+      <div className="flex gap-2"><Button type="button" size="sm" variant="ghost" disabled={busy !== '' || alternativeBusyId !== null} onClick={() => startDemo(true)}><RotateCcw aria-hidden="true" /> Reset demo</Button>{!sample && <Button type="button" size="sm" variant="outline" disabled={busy !== '' || alternativeBusyId !== null} onClick={() => startDemo(false)}>Exit demo</Button>}</div>
+    </section> : <div className="flex flex-wrap items-center justify-end gap-3"><p className="text-xs text-muted-foreground">Try the planner with a sample student and instant, scripted results.</p><Button type="button" size="sm" variant="outline" disabled={busy !== '' || alternativeBusyId !== null} onClick={() => startDemo(true)}><Zap aria-hidden="true" /> Demo mode</Button></div>}
     <section className="rounded-xl border bg-card shadow-sm">
       <div className="grid gap-px overflow-hidden rounded-xl bg-border sm:grid-cols-2 xl:grid-cols-4">
         <div className="bg-card p-4"><p className="text-xs text-muted-foreground">Degree path</p><p className="mt-1 font-semibold">{plan.major}</p><p className="mt-0.5 text-xs text-muted-foreground">Minor: {plan.minor}</p></div>
@@ -175,10 +219,10 @@ export function SemesterPlanner({ sample }: { sample: boolean }) {
         <div className="bg-card p-4"><p className="text-xs text-muted-foreground">Whole plan</p><p className="mt-1 text-2xl font-semibold">{totalCredits}<span className="ml-1 text-sm font-normal text-muted-foreground">ECTS</span></p></div>
       </div>
       <details className="group border-t">
-        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden"><span>Degree settings</span><span className="text-xs text-muted-foreground group-open:hidden">Change major, minor, or target</span><span className="hidden text-xs text-muted-foreground group-open:inline">Close</span></summary>
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden"><span>Degree settings</span><span className="text-xs text-muted-foreground group-open:hidden">{demoMode ? 'Demo uses a fixed major and minor' : 'Change major, minor, or target'}</span><span className="hidden text-xs text-muted-foreground group-open:inline">Close</span></summary>
         <div className="grid gap-4 border-t bg-muted/30 p-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_12rem]">
-          <label className="text-xs font-medium">Major<select value={plan.major} onChange={event => { const major = event.target.value as MscCsMajor; changePlan(current => ({ ...current, major, minor: MSC_CS_MAJOR_MINOR_COMBINATIONS[major].includes(current.minor) ? current.minor : MSC_CS_MAJOR_MINOR_COMBINATIONS[major][0] })); }} className={inputClass}>{MSC_CS_MAJORS.map(value => <option key={value}>{value}</option>)}</select></label>
-          <label className="text-xs font-medium">Minor<select value={plan.minor} onChange={event => changePlan(current => ({ ...current, minor: event.target.value as MscCsMinor }))} className={inputClass}>{validMinors.map(value => <option key={value}>{value}</option>)}</select></label>
+          <label className="text-xs font-medium">Major<select value={plan.major} onChange={event => { const major = event.target.value as MscCsMajor; changePlan(current => ({ ...current, major, minor: MSC_CS_MAJOR_MINOR_COMBINATIONS[major].includes(current.minor) ? current.minor : MSC_CS_MAJOR_MINOR_COMBINATIONS[major][0] })); }} disabled={demoMode} className={inputClass}>{MSC_CS_MAJORS.map(value => <option key={value}>{value}</option>)}</select></label>
+          <label className="text-xs font-medium">Minor<select value={plan.minor} onChange={event => changePlan(current => ({ ...current, minor: event.target.value as MscCsMinor }))} disabled={demoMode} className={inputClass}>{validMinors.map(value => <option key={value}>{value}</option>)}</select></label>
           <label className="text-xs font-medium">ECTS target<input type="number" min={10} max={45} value={plan.targetCredits} onChange={event => { const targetCredits = Number(event.target.value); if (targetCredits >= 10 && targetCredits <= 45) updatePlan(current => ({ ...current, targetCredits })); }} className={inputClass} /></label>
         </div>
       </details>
@@ -187,21 +231,22 @@ export function SemesterPlanner({ sample }: { sample: boolean }) {
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(19rem,.55fr)]">
       <div className="min-w-0 space-y-5">
         <section className="rounded-xl border bg-card p-5 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Find courses</h2><p className="mt-1 text-sm text-muted-foreground">Search the ETH course catalogue for one semester at a time.</p></div><p className="text-xs text-muted-foreground">Saved in this browser</p></div>
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Find courses</h2><p className="mt-1 text-sm text-muted-foreground">Search the ETH course catalogue for one semester at a time.</p></div><p className="text-xs text-muted-foreground">{demoMode ? 'Demo data, not saved' : 'Saved in this browser'}</p></div>
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1" aria-label="Semesters">{semesters.map(semester => <button key={semester} type="button" onClick={() => { updatePlan(current => ({ ...current, activeSemester: semester })); setResults([]); }} className={`shrink-0 rounded-md px-3 py-2 text-xs font-medium transition-colors ${plan.activeSemester === semester ? 'bg-primary text-primary-foreground' : 'border bg-background text-muted-foreground hover:bg-accent'}`}>{semester}<span className="ml-1.5 opacity-70">{creditsForSemester(plan.courses, semester)} ECTS</span></button>)}</div>
           <div className="mt-4 grid gap-4 rounded-lg bg-muted p-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="flex justify-between gap-3 text-sm"><span>{plan.activeSemester} workload</span><span className="font-medium">{activeCredits}/{plan.targetCredits} ECTS</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background"><div className={`h-full rounded-full ${activeCredits > plan.targetCredits ? 'bg-destructive' : 'bg-primary'}`} style={{ width: `${Math.min(100, activeCredits / plan.targetCredits * 100)}%` }} /></div><p className="mt-2 text-xs text-muted-foreground">{workloadLabel(activeCredits, plan.targetCredits)}</p></div></div>
-          <form onSubmit={event => { event.preventDefault(); void search(); }} className="mt-4 flex flex-col gap-2 sm:flex-row"><label className="relative min-w-0 flex-1"><span className="sr-only">Search VVZ</span><SearchIcon className="absolute left-3 top-3 size-4 text-muted-foreground" /><input value={query} onChange={event => setQuery(event.target.value)} disabled={sample} placeholder="Course title or number" className="w-full rounded-md border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring/30" /></label><Button disabled={sample || busy !== '' || !query.trim()}>{busy === 'search' ? 'Searching…' : `Search ${plan.activeSemester}`}</Button></form>
+          <form onSubmit={event => { event.preventDefault(); void search(); }} className="mt-4 flex flex-col gap-2 sm:flex-row"><label className="relative min-w-0 flex-1"><span className="sr-only">Search VVZ</span><SearchIcon className="absolute left-3 top-3 size-4 text-muted-foreground" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Course title or number" className="w-full rounded-md border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring/30" /></label><Button disabled={busy !== '' || !query.trim()}>{busy === 'search' ? 'Searching…' : `Search ${plan.activeSemester}`}</Button></form>
           {results.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{results.map(course => { const selected = plan.courses.some(item => item.id === course.id); return <article key={course.id} className="flex min-h-32 flex-col rounded-lg border p-4"><p className="text-xs text-muted-foreground">{course.number} · {course.credits ?? '?'} ECTS</p><h3 className="mt-1 line-clamp-2 text-sm font-medium">{course.title}</h3><div className="mt-auto flex items-center justify-between pt-4"><a href={course.officialVvzUrl} target="_blank" rel="noreferrer" className="text-xs underline underline-offset-2">VVZ details</a><Button type="button" size="sm" variant="outline" disabled={selected} onClick={() => addCourse(course)}>{selected ? 'Added' : 'Add course'}</Button></div></article>; })}</div>}
-          {!busy && query && results.length === 0 && !error && <p className="mt-4 text-sm text-muted-foreground">Search VVZ to see course options for this semester.</p>}
+          {demoMode && results.length === 0 && <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>Try</span>{DEMO_SEARCH_SUGGESTIONS.map(suggestion => <button key={suggestion} type="button" disabled={busy !== ''} onClick={() => { setQuery(suggestion); setResults(demoSearch(plan.activeSemester, suggestion)); }} className="rounded-full border bg-background px-2.5 py-1 font-medium text-foreground hover:bg-accent disabled:opacity-50">{suggestion}</button>)}</div>}
+          {!busy && query && results.length === 0 && !error && <p className="mt-4 text-sm text-muted-foreground">{demoMode ? `No demo course matches “${query.trim()}” in ${plan.activeSemester}. Try another semester or a suggestion above.` : 'Search VVZ to see course options for this semester.'}</p>}
         </section>
 
         <section className="rounded-xl border bg-card p-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Your plan</h2><p className="mt-1 text-sm text-muted-foreground">Review courses by semester and keep their status current.</p></div><span className="rounded-md bg-muted px-2.5 py-1 text-xs">{totalCredits} ECTS planned</span></div>
-          {plan.courses.length === 0 ? <div className="mt-5 rounded-lg border border-dashed p-8 text-center"><p className="text-sm font-medium">No planned courses yet</p><p className="mt-2 text-sm text-muted-foreground">Search above, then add courses to a semester.</p></div> : <div className="mt-5 space-y-5">{groupedCourses.map(group => <section key={group.semester}><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-semibold">{group.semester}</h3><span className="text-xs text-muted-foreground">{group.credits} ECTS</span></div><div className="divide-y rounded-lg border">{group.courses.length === 0 && <p className="p-3 text-sm text-amber-700 dark:text-amber-300">No course planned yet. Fill this semester before graduation.</p>}{group.courses.map(course => <div key={course.id}><div className="flex flex-wrap items-center gap-3 p-3"><div className="min-w-48 flex-1"><a href={course.officialVvzUrl} target="_blank" rel="noreferrer" className="text-sm font-medium hover:underline">{course.title}</a><p className="mt-1 text-xs text-muted-foreground">{course.number} · {course.credits ?? '?'} ECTS {assignments.get(course.id) && <>· {categoryLabels[assignments.get(course.id)!] ?? assignments.get(course.id)}</>}{course.sourceSemester && course.sourceSemester !== course.semester && <> · tentative recurrence from {course.sourceSemester}</>}</p></div><Button type="button" size="icon" variant="ghost" aria-label={`Suggest an alternative to ${course.title}`} title="Suggest alternative" disabled={sample || course.status !== 'planned' || busy !== '' || alternativeBusyId !== null} onClick={() => void suggestAlternative(course)} className="size-8 text-muted-foreground"><RefreshCw aria-hidden="true" className={alternativeBusyId === course.id ? 'animate-spin' : ''} /></Button><select aria-label={`Status for ${course.title}`} value={course.status} onChange={event => changePlan(current => ({ ...current, courses: current.courses.map(item => item.id === course.id ? { ...item, status: event.target.value as CourseStatus } : item) }))} className="rounded-md border bg-background px-2 py-1.5 text-xs"><option value="passed">Passed</option><option value="in_progress">In progress</option><option value="planned">Planned</option></select><Button type="button" size="icon" variant="ghost" aria-label={`Remove ${course.title}`} onClick={() => changePlan(current => ({ ...current, courses: current.courses.filter(item => item.id !== course.id) }))} className="size-8 text-muted-foreground"><X aria-hidden="true" /></Button></div>{alternativeSuggestion(course)}</div>)}</div></section>)}</div>}
+          {plan.courses.length === 0 ? <div className="mt-5 rounded-lg border border-dashed p-8 text-center"><p className="text-sm font-medium">No planned courses yet</p><p className="mt-2 text-sm text-muted-foreground">Search above, then add courses to a semester.</p></div> : <div className="mt-5 space-y-5">{groupedCourses.map(group => <section key={group.semester}><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-semibold">{group.semester}</h3><span className="text-xs text-muted-foreground">{group.credits} ECTS</span></div><div className="divide-y rounded-lg border">{group.courses.length === 0 && <p className="p-3 text-sm text-amber-700 dark:text-amber-300">No course planned yet. Fill this semester before graduation.</p>}{group.courses.map(course => <div key={course.id}><div className="flex flex-wrap items-center gap-3 p-3"><div className="min-w-48 flex-1"><a href={course.officialVvzUrl} target="_blank" rel="noreferrer" className="text-sm font-medium hover:underline">{course.title}</a><p className="mt-1 text-xs text-muted-foreground">{course.number} · {course.credits ?? '?'} ECTS {assignments.get(course.id) && <>· {categoryLabels[assignments.get(course.id)!] ?? assignments.get(course.id)}</>}{course.sourceSemester && course.sourceSemester !== course.semester && <> · tentative recurrence from {course.sourceSemester}</>}</p></div><Button type="button" size="icon" variant="ghost" aria-label={`Suggest an alternative to ${course.title}`} title="Suggest alternative" disabled={course.status !== 'planned' || busy !== '' || alternativeBusyId !== null} onClick={() => void suggestAlternative(course)} className="size-8 text-muted-foreground"><RefreshCw aria-hidden="true" className={alternativeBusyId === course.id ? 'animate-spin' : ''} /></Button><select aria-label={`Status for ${course.title}`} value={course.status} onChange={event => changePlan(current => ({ ...current, courses: current.courses.map(item => item.id === course.id ? { ...item, status: event.target.value as CourseStatus } : item) }))} className="rounded-md border bg-background px-2 py-1.5 text-xs"><option value="passed">Passed</option><option value="in_progress">In progress</option><option value="planned">Planned</option></select><Button type="button" size="icon" variant="ghost" aria-label={`Remove ${course.title}`} onClick={() => changePlan(current => ({ ...current, courses: current.courses.filter(item => item.id !== course.id) }))} className="size-8 text-muted-foreground"><X aria-hidden="true" /></Button></div>{alternativeSuggestion(course)}</div>)}</div></section>)}</div>}
           {error && <p role="alert" className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p>}
-          {busy === 'recommend' && <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4" role="status"><p className="flex items-center gap-2 text-sm font-medium"><Sparkles className="size-4 animate-pulse" aria-hidden="true" /> PolyMate is improving the plan</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Auditing the existing courses, searching VVZ, and comparing curriculum gaps. Your current plan stays intact.</p></div>}
+          {busy === 'recommend' && <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4" role="status"><p className="flex items-center gap-2 text-sm font-medium"><Sparkles className="size-4 animate-pulse" aria-hidden="true" /> PolyMate is improving the plan</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{demoMode ? 'Filling requirement gaps from the demo catalogue.' : 'Auditing the existing courses, searching VVZ, and comparing curriculum gaps. Your current plan stays intact.'}</p></div>}
           {agentResult && <div className="mt-4 rounded-lg border border-emerald-300/60 bg-emerald-50/70 p-4 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100" aria-live="polite"><p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="size-4" aria-hidden="true" /> {agentResult.courses.length ? `${agentResult.courses.length} course${agentResult.courses.length === 1 ? '' : 's'} added to your plan` : 'Plan reviewed'}</p><p className="mt-2 text-sm leading-6">{agentResult.summary}</p>{agentResult.courses.length > 0 && <ul className="mt-3 space-y-2">{agentResult.courses.map(course => <li key={course.id} className="rounded-md bg-background/70 p-3 text-sm"><a href={course.officialVvzUrl} target="_blank" rel="noreferrer" className="font-medium underline underline-offset-2">{course.number} · {course.title}</a><span className="ml-2 text-xs opacity-75">{course.semester} · {course.credits ?? '?'} ECTS{course.sourceSemester && course.sourceSemester !== course.semester ? ` · source ${course.sourceSemester}` : ''}</span><p className="mt-1 text-xs leading-5 opacity-80">{course.reason}</p></li>)}</ul>}{agentResult.cautions.length > 0 && <p className="mt-3 text-xs leading-5 opacity-80">{agentResult.cautions.join(' ')}</p>}</div>}
-          <div className="mt-5 flex flex-wrap gap-2"><Button type="button" disabled={sample || !plan.courses.length || busy !== ''} onClick={() => void checkRequirements()}>{busy === 'audit' ? 'Checking…' : audit ? 'Refresh degree check' : 'Check degree progress'}</Button><Button type="button" variant="outline" disabled={sample || busy !== ''} onClick={() => void improvePlan()}><Sparkles aria-hidden="true" /> {busy === 'recommend' ? 'Improving plan…' : 'Improve plan with PolyMate'}</Button></div>
+          <div className="mt-5 flex flex-wrap gap-2"><Button type="button" disabled={!plan.courses.length || busy !== ''} onClick={() => void checkRequirements()}>{busy === 'audit' ? 'Checking…' : audit ? 'Refresh degree check' : 'Check degree progress'}</Button><Button type="button" variant="outline" disabled={busy !== ''} onClick={() => void improvePlan()}><Sparkles aria-hidden="true" /> {busy === 'recommend' ? 'Improving plan…' : 'Improve plan with PolyMate'}</Button></div>
         </section>
       </div>
 
