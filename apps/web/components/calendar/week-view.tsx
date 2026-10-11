@@ -207,7 +207,7 @@ export function WeekView({
     </div>
 
     <footer className="flex flex-wrap gap-4 border-t px-4 py-2.5 text-[11px] text-muted-foreground" aria-label="Legend">
-      {events.some(event => event.source === 'google-personal') && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-l-[3px] border-[#9aa79f] bg-[#eef1ec]" />Google events (read-only)</span>}
+      {events.some(event => event.source === 'google-personal') && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-l-[3px] border-[#9aa79f] bg-[#eef1ec]" />Personal Google events · view only</span>}
       <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#2f6b55]" />PolyMate study block</span>
       <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border border-dashed border-[#2f6b55] bg-[#e4efe7]" />Done</span>
       {proposed.length > 0 && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-2 border-dashed border-[#c08a2b] bg-[#fffaf0]" />Proposed, not added yet</span>}
