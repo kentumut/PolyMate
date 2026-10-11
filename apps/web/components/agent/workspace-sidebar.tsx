@@ -51,7 +51,7 @@ export function WorkspaceSidebar({ view, ownerName, demo = false, hrefFor, onNav
     </div>
 
     {/* Full page loads: the server decides demo mode from the query, so leaving needs a fresh render without it. */}
-    <a href={demo ? '/calendar?view=chat' : '/demo'} title={collapsed ? (demo ? 'Exit demo' : 'Mentor demo') : undefined} className={cn('ml-1 flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border bg-background px-2.5 text-xs font-medium shadow-sm transition-colors hover:bg-accent md:mt-3 md:ml-0', collapsed ? 'md:size-9 md:self-center md:px-0' : 'md:justify-start md:px-3')} aria-label={demo ? 'Exit mentor demo' : 'Open mentor demo'}>
+    <a href={demo ? '/calendar?view=chat' : '/demo'} title={collapsed ? (demo ? 'Exit demo' : 'Mentor demo') : undefined} className={cn('ml-1 flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border bg-background px-2.5 text-xs font-medium shadow-sm transition-colors hover:bg-accent md:mt-3 md:ml-0', collapsed ? 'md:size-9 md:self-center md:px-0' : 'md:px-3')} aria-label={demo ? 'Exit mentor demo' : 'Open mentor demo'}>
       {demo ? <LogOut className="size-3.5" aria-hidden="true" /> : <Sparkles className="size-3.5" aria-hidden="true" />}
       <span className={cn('hidden sm:inline', collapsed && 'md:hidden')}>{demo ? 'Exit demo' : 'Mentor demo'}</span>
     </a>
