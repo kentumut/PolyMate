@@ -1,6 +1,7 @@
 name: CI
 on:
-  # Docs-only changes skip CI, and with it the deploy job that follows a passing main run.
+  # Checks run on pull requests only; branches reach main through a PR whose checks already
+  # passed, so a main push deploys directly. Docs-only changes skip CI and deploy.
   pull_request:
     paths-ignore: ['**.md']
   push:
@@ -17,6 +18,7 @@ concurrency:
 jobs:
   checks:
     name: checks
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +38,7 @@ jobs:
       - run: pnpm check
   planner:
     name: planner
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +54,7 @@ jobs:
         run: pnpm test:planner
   containers:
     name: containers
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     env:
       POSTGRES_IMAGE: mirror.gcr.io/library/postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
@@ -105,8 +109,8 @@ jobs:
       - name: Exercise isolated production containers and backup restore
         run: bash scripts/container-check.sh
   prepare:
-    # Builds the release images on the VM while the checks run, so deploy only finds cached
-    # images. It never switches the live checkout or restarts anything.
+    # Builds the release images on the VM before deploy, so deploy only finds cached images.
+    # It never switches the live checkout or restarts anything.
     name: prepare
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -166,7 +170,7 @@ jobs:
 
   deploy:
     name: deploy
-    needs: [checks, planner, containers, prepare]
+    needs: [prepare]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -174,14 +178,14 @@ jobs:
       group: polymate-team07-deploy
       cancel-in-progress: false
     steps:
-      - name: Check out the exact commit that passed CI
+      - name: Check out the pushed commit
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Ignore a successful run superseded by a newer main commit
+      - name: Ignore a commit superseded by a newer main commit
         id: current
         env:
           GH_TOKEN: ${{ github.token }}
@@ -191,7 +195,7 @@ jobs:
           if test "$current_sha" = "$DEPLOY_SHA"; then
             echo 'proceed=true' >> "$GITHUB_OUTPUT"
           else
-            echo "CI passed for $DEPLOY_SHA, but main is now $current_sha; the newer run will deploy."
+            echo "main is now $current_sha; the newer run will deploy."
             echo 'proceed=false' >> "$GITHUB_OUTPUT"
           fi
 
@@ -213,7 +217,7 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Transfer the verified commit and deploy it on the VM
+      - name: Transfer the commit and deploy it on the VM
         if: steps.current.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
