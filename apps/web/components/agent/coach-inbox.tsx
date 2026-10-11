@@ -3,7 +3,6 @@
 import type { CoachMessage, CoachingState, StudentMemory } from '@polymate/contracts/coaching';
 import { Bell, Brain, ChevronRight, LoaderCircle, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
@@ -72,7 +71,7 @@ export function CoachInbox({ sample, sampleOverride, refreshKey, onRespond, onOu
       <Button id="coach-notifications-trigger" type="button" size="sm" variant={outstanding.length ? 'outline' : 'ghost'} className={outstanding.length ? 'relative' : 'relative text-muted-foreground'} aria-label={outstanding.length ? `Coach, ${outstanding.length} responses needed` : 'Open coach'}>
         <Bell aria-hidden="true" />
         <span>Coach</span>
-        {outstanding.length > 0 && <><Badge variant="secondary" className="ml-0.5 px-1.5 tabular-nums">{outstanding.length}</Badge><span className="absolute -right-1 -top-1 size-2.5 animate-pulse rounded-full bg-orange-500 ring-2 ring-background" /></>}
+        {outstanding.length > 0 && <><span className="font-semibold tabular-nums text-orange-500">{outstanding.length}</span><span className="absolute -right-1 -top-1 size-2.5 animate-pulse rounded-full bg-orange-500 ring-2 ring-background" /></>}
       </Button>
     </PopoverTrigger>
     <PopoverContent align="end" className="max-h-[min(42rem,calc(100dvh-5rem))] w-[min(26rem,calc(100vw-2rem))] overflow-y-auto p-0">
