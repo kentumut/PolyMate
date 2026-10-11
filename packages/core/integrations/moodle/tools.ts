@@ -71,8 +71,11 @@ export function parseTimelineRequest(value: unknown, now: Date): TimelineRequest
   if (new Set(work.map(w => w.assignmentId)).size !== work.length) throw new ContractError('Assignment IDs must be unique.');
   const availability = input.availability.map(value => {
     const w = value as Record<string, unknown> | null;
-    const startAt = parseInstant(w?.startAt, 'startAt'); const endAt = parseInstant(w?.endAt, 'endAt');
-    if (Date.parse(startAt) < now.getTime() || Date.parse(endAt) <= Date.parse(startAt) || Date.parse(endAt) > now.getTime() + MAX_DAYS * 86400000) {
+    let startAt = parseInstant(w?.startAt, 'startAt'); const endAt = parseInstant(w?.endAt, 'endAt');
+    // "Today from 10:00" sent at 10:33 means the rest of today: start at the next 5-minute mark instead of rejecting it.
+    const earliest = Math.ceil(now.getTime() / (5 * MINUTE)) * 5 * MINUTE;
+    if (Date.parse(startAt) < earliest && Date.parse(startAt) < Date.parse(endAt)) startAt = new Date(earliest).toISOString();
+    if (Date.parse(endAt) <= Date.parse(startAt) || Date.parse(endAt) > now.getTime() + MAX_DAYS * 86400000) {
       throw new ContractError('Availability must be in the future, have positive duration, and end within 42 days.');
     }
     return { startAt, endAt };

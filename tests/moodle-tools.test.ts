@@ -71,6 +71,13 @@ describe('Moodle assignment planning and calendar tools', () => {
     expect(plan.unscheduled[0]?.reason ?? '').toMatch(/4 hours of study per day/);
   });
 
+  it('plans the rest of an availability window that already started, but rejects windows that already ended', async () => {
+    const tools = new MoodleAgentTools('owner', reader(), new FakeCalendarClient([]), () => new Date('2026-10-10T09:33:00Z'));
+    const plan = await tools.planAssignments({ ...input, availability: [{ startAt: '2026-10-10T08:00:00Z', endAt: '2026-10-10T14:00:00Z' }] });
+    expect(plan.blocks[0].startAt).toBe('2026-10-10T09:35:00.000Z');
+    await expect(tools.planAssignments({ ...input, availability: [{ startAt: '2026-10-10T08:00:00Z', endAt: '2026-10-10T09:30:00Z' }] })).rejects.toThrow('in the future');
+  });
+
   it('titles blocks with the agent label or a cleaned Moodle title', async () => {
     expect(studyBlockLabel('252-0057-00L 2026W', 'Abgabe: Blatt 4 / Sheet 4 ist fällig.')).toBe('252-0057-00L · Sheet 4');
     expect(studyBlockLabel('Moodle calendar', 'Quiz 2 is due')).toBe('Quiz 2');
