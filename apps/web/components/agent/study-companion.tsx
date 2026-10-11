@@ -119,19 +119,19 @@ function safeSource(value: unknown): string | null {
 function AssignmentCards({ data }: { data: unknown }) {
   if (!data || typeof data !== 'object') return null;
   const snapshot = data as MoodleSnapshot;
-  if (snapshot.source === 'calendar-subscription') return <section className="mt-3 rounded-xl border border-[#dce3db] bg-white px-4 py-3"><div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-sm font-semibold">Moodle deadlines</h3>{typeof snapshot.fetchedAt === 'string' && <p className="text-xs text-[#748278]">Updated {dateTime(snapshot.fetchedAt)}</p>}</div><MoodleDeadlineList snapshot={snapshot} /></section>;
+  if (snapshot.source === 'calendar-subscription') return <section className="mt-3 rounded-xl border border-[#dbe1ea] bg-white px-4 py-3"><div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-sm font-semibold">Moodle deadlines</h3>{typeof snapshot.fetchedAt === 'string' && <p className="text-xs text-[#767f8b]">Updated {dateTime(snapshot.fetchedAt)}</p>}</div><MoodleDeadlineList snapshot={snapshot} /></section>;
   const assignments = Array.isArray(snapshot.assignments) ? snapshot.assignments : [];
   const announcements = Array.isArray(snapshot.announcements) ? snapshot.announcements : [];
-  return <section className="mt-3 space-y-3 rounded-xl border border-[#dce3db] bg-[#fbfcf9] p-4" aria-label="Moodle source results">
+  return <section className="mt-3 space-y-3 rounded-xl border border-[#dbe1ea] bg-[#fafcfe] p-4" aria-label="Moodle source results">
     <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-sm font-semibold">Moodle assignments</h3>
-      {typeof snapshot.fetchedAt === 'string' && <p className="text-xs text-[#748278]">Retrieved {dateTime(snapshot.fetchedAt)}</p>}</div>
+      {typeof snapshot.fetchedAt === 'string' && <p className="text-xs text-[#767f8b]">Retrieved {dateTime(snapshot.fetchedAt)}</p>}</div>
     {assignments.length ? <ul className="space-y-2">{assignments.map(item => <li key={item.id} className="rounded-lg bg-white p-3 text-sm">
       <p className="font-medium">{item.courseName}: {item.title}</p>
-      <p className="mt-1 text-xs text-[#617269]">Deadline: {item.dueAt ? dateTime(item.dueAt) : 'No verified deadline'}</p>
+      <p className="mt-1 text-xs text-[#656e7c]">Deadline: {item.dueAt ? dateTime(item.dueAt) : 'No verified deadline'}</p>
       {safeSource(item.sourceUrl) && <a className="mt-1 inline-block text-xs underline" href={safeSource(item.sourceUrl)!} target="_blank" rel="noreferrer">Open in Moodle</a>}
-    </li>)}</ul> : <p className="text-sm text-[#617269]">No assignments were returned.</p>}
-    {announcements.length > 0 && <div className="border-t border-[#e5eae4] pt-3"><h4 className="text-sm font-semibold">Course announcements</h4><ul className="mt-2 space-y-2">{announcements.map(item => <li key={item.id} className="rounded-lg bg-white p-3 text-sm">
-      <p className="font-medium">{item.title}</p><p className="mt-1 text-xs text-[#617269]">Posted {dateTime(item.postedAt)}</p>
+    </li>)}</ul> : <p className="text-sm text-[#656e7c]">No assignments were returned.</p>}
+    {announcements.length > 0 && <div className="border-t border-[#e4e9ef] pt-3"><h4 className="text-sm font-semibold">Course announcements</h4><ul className="mt-2 space-y-2">{announcements.map(item => <li key={item.id} className="rounded-lg bg-white p-3 text-sm">
+      <p className="font-medium">{item.title}</p><p className="mt-1 text-xs text-[#656e7c]">Posted {dateTime(item.postedAt)}</p>
       <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{item.text}</p>
       {safeSource(item.sourceUrl) && <a className="mt-2 inline-block text-xs underline" href={safeSource(item.sourceUrl)!} target="_blank" rel="noreferrer">Open announcement</a>}
     </li>)}</ul></div>}
@@ -147,7 +147,7 @@ function ScheduleCard({ data }: { data: unknown }) {
   const results = Array.isArray(value.result?.results) ? value.result.results : [];
   const attempted = new Set(results.map(item => item.operationId));
   const unattempted = value.timeline?.blocks.filter(block => !attempted.has(block.operationId)) ?? [];
-  return <section className="mt-3 rounded-xl border border-[#dce3db] bg-[#fbfcf9] p-4" aria-label="Calendar write results">
+  return <section className="mt-3 rounded-xl border border-[#dbe1ea] bg-[#fafcfe] p-4" aria-label="Calendar write results">
     <h3 className="text-sm font-semibold">Calendar changes</h3>
     {results.length ? <ul className="mt-2 space-y-2">{results.map((item, index) => <li key={`${item.operationId}-${index}`} className="flex gap-2 text-sm">
       <span aria-hidden="true">{item.status === 'synced' ? '✓' : item.status === 'unknown' ? '?' : '!'}</span>
@@ -155,13 +155,13 @@ function ScheduleCard({ data }: { data: unknown }) {
         const block = (value.timeline?.blocks ?? value.deletedBlocks)?.find(block => block.operationId === item.operationId) ?? value.movedBlock ?? value.createdBlock;
         return block ? <span className="block">{block.title} · {dateTime(block.startAt)}–{dateTime(block.endAt)}</span> : null;
       })()}<strong>{WRITE_STATUS[item.status] ?? item.status}</strong>{item.error?.message ? ` — ${item.error.message}` : ''}</span>
-    </li>)}</ul> : <p className="mt-2 text-sm text-[#617269]">No calendar writes were confirmed.</p>}
-    {value.relocatedFrom && <p className="mt-3 text-sm text-[#617269]">{dateTime(value.relocatedFrom.startAt)} was already taken. {results.length > 0 && results.every(result => result.status === 'synced')
+    </li>)}</ul> : <p className="mt-2 text-sm text-[#656e7c]">No calendar writes were confirmed.</p>}
+    {value.relocatedFrom && <p className="mt-3 text-sm text-[#656e7c]">{dateTime(value.relocatedFrom.startAt)} was already taken. {results.length > 0 && results.every(result => result.status === 'synced')
       ? 'This block was placed in the nearest free slot.'
       : results.length > 0 && results.every(result => result.status === 'failed') ? 'The attempt at the free slot failed; no placement is confirmed.'
         : 'Placement at the free slot is unconfirmed. Retry the same operation to check its outcome.'}</p>}
     {unattempted.length > 0 && <ul className="mt-3 space-y-1 text-sm text-[#8a5a26]">{unattempted.map(block => <li key={block.operationId}>{block.title} · {dateTime(block.startAt)} — not attempted</li>)}</ul>}
-    {value.result?.complete && <p className="mt-3 text-sm font-medium text-[#173b32]">{value.movedBlock ? 'The move was saved to your calendar.' : value.deletedBlocks ? 'The selected blocks were deleted from your calendar.' : 'All planned blocks were saved to your calendar.'}</p>}
+    {value.result?.complete && <p className="mt-3 text-sm font-medium text-[#08407e]">{value.movedBlock ? 'The move was saved to your calendar.' : value.deletedBlocks ? 'The selected blocks were deleted from your calendar.' : 'All planned blocks were saved to your calendar.'}</p>}
     {value.progressSync === 'pending' && <p className="mt-3 text-sm text-[#8a5a26]">Local progress history could not be refreshed yet. Refresh progress to retry synchronization; the confirmed Google move does not need to be repeated.</p>}
   </section>;
 }
@@ -174,12 +174,12 @@ function OtherCards({ cards, busy, confirmed, onConfirm }: { cards: AgentCard[];
       if (card.kind === 'schedule') return <ScheduleCard key={`schedule-${index}`} data={card.data} />;
       if (card.kind === 'connections' && card.data && typeof card.data === 'object') {
         const value = card.data as { moodleConnected?: boolean; googleCalendarConnected?: boolean; calendarHome?: 'polymate' | 'google'; standaloneCalendarAvailable?: boolean; backgroundMoodleAvailable?: boolean; note?: string };
-        return <div key={`connections-${index}`} className="mt-3 rounded-xl bg-[#edf0e7] p-4 text-sm">
+        return <div key={`connections-${index}`} className="mt-3 rounded-xl bg-[#eaeff7] p-4 text-sm">
           <p>Study blocks are saved to: {value.calendarHome === 'google' ? 'Google Calendar (also shown in PolyMate)' : 'the PolyMate calendar'}.</p>
           <p>Moodle calendar: {value.moodleConnected ? 'subscription connected' : 'not connected'}.</p>
           <p>Google Calendar: {value.googleCalendarConnected ? 'connected' : 'not connected'}.</p>
-          {!value.backgroundMoodleAvailable && <p className="mt-2 text-xs text-[#617269]">Connect a Moodle calendar subscription to enable scheduled calendar checks.</p>}
-          {value.note && <p className="mt-2 text-xs text-[#617269]">{value.note}</p>}
+          {!value.backgroundMoodleAvailable && <p className="mt-2 text-xs text-[#656e7c]">Connect a Moodle calendar subscription to enable scheduled calendar checks.</p>}
+          {value.note && <p className="mt-2 text-xs text-[#656e7c]">{value.note}</p>}
         </div>;
       }
       return null;
@@ -190,12 +190,12 @@ function OtherCards({ cards, busy, confirmed, onConfirm }: { cards: AgentCard[];
 function TimelinePreview({ plan, onSchedule, onViewCalendar, busy }: { plan: PendingPlan; onSchedule: (partial: boolean) => void; onViewCalendar: () => void; busy: boolean }) {
   const timeline = plan.timeline;
   const unscheduled = timeline.unscheduled.length > 0;
-  return <section className="rounded-2xl border border-[#b9cbbd] bg-[#f5f8f2] p-5" aria-label="Current study timeline draft">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[11px] font-semibold uppercase tracking-widest text-[#658071]">Draft timeline</p>
-      <p className="mt-1 text-sm text-[#617269]">Effort is an estimate. Times are shown in Europe/Zurich.</p></div>
-      <p className="text-xs text-[#748278]">Expires {dateTime(plan.expiresAt)}</p></div>
+  return <section className="rounded-2xl border border-[#bbc7d8] bg-[#f3f7fd] p-5" aria-label="Current study timeline draft">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[11px] font-semibold uppercase tracking-widest text-[#6b7a90]">Draft timeline</p>
+      <p className="mt-1 text-sm text-[#656e7c]">Effort is an estimate. Times are shown in Europe/Zurich.</p></div>
+      <p className="text-xs text-[#767f8b]">Expires {dateTime(plan.expiresAt)}</p></div>
     {timeline.blocks.length ? <div className="mt-4">
-      <p className="mb-2 text-xs text-[#617269]">{timeline.blocks.length} {timeline.blocks.length === 1 ? 'session' : 'sessions'} · {Math.round(timeline.blocks.reduce((sum, block) => sum + Date.parse(block.endAt) - Date.parse(block.startAt), 0) / 60_000 / 6) / 10} h total. Select a block to open its Moodle source.</p>
+      <p className="mb-2 text-xs text-[#656e7c]">{timeline.blocks.length} {timeline.blocks.length === 1 ? 'session' : 'sessions'} · {Math.round(timeline.blocks.reduce((sum, block) => sum + Date.parse(block.endAt) - Date.parse(block.startAt), 0) / 60_000 / 6) / 10} h total. Select a block to open its Moodle source.</p>
       <DayTimelineGrid blocks={timeline.blocks.map((block, index) => ({ id: `${block.operationId}-${index}`, title: block.title, startAt: block.startAt, endAt: block.endAt, allDay: false, href: safeSource(block.sourceUrl) }))} />
     </div> : <p className="mt-4 rounded-xl bg-white p-3 text-sm">No study blocks fit those constraints.</p>}
     {unscheduled && <div className="mt-3 rounded-xl border border-[#e7d7b9] bg-[#fffaf0] p-3"><h3 className="text-sm font-semibold">Work not scheduled</h3>
@@ -203,10 +203,10 @@ function TimelinePreview({ plan, onSchedule, onViewCalendar, busy }: { plan: Pen
     </div>}
     {timeline.warnings.map((warning, index) => <p key={index} className="mt-2 text-xs text-[#8a5a26]">{warning}</p>)}
     <div className="mt-4 flex flex-wrap gap-2">
-      {!unscheduled && timeline.blocks.length > 0 && <button type="button" disabled={busy} onClick={() => onSchedule(false)} className="rounded-xl bg-[#173b32] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Add to calendar</button>}
-      {unscheduled && timeline.blocks.length > 0 && <button type="button" disabled={busy} onClick={() => onSchedule(true)} className="rounded-xl bg-[#173b32] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Add only the blocks that fit</button>}
-      {timeline.blocks.length > 0 && <button type="button" onClick={onViewCalendar} className="rounded-xl border border-[#cbd7ce] px-4 py-2 text-sm">View on calendar</button>}
-      <button type="button" disabled={busy} onClick={() => document.getElementById('agent-message')?.focus()} className="rounded-xl border border-[#cbd7ce] px-4 py-2 text-sm disabled:opacity-50">Revise constraints</button>
+      {!unscheduled && timeline.blocks.length > 0 && <button type="button" disabled={busy} onClick={() => onSchedule(false)} className="rounded-xl bg-[#08407e] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Add to calendar</button>}
+      {unscheduled && timeline.blocks.length > 0 && <button type="button" disabled={busy} onClick={() => onSchedule(true)} className="rounded-xl bg-[#08407e] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Add only the blocks that fit</button>}
+      {timeline.blocks.length > 0 && <button type="button" onClick={onViewCalendar} className="rounded-xl border border-[#ccd4df] px-4 py-2 text-sm">View on calendar</button>}
+      <button type="button" disabled={busy} onClick={() => document.getElementById('agent-message')?.focus()} className="rounded-xl border border-[#ccd4df] px-4 py-2 text-sm disabled:opacity-50">Revise constraints</button>
     </div>
   </section>;
 }
@@ -289,7 +289,7 @@ function DemoGuide({ stage, busy, coachOutstanding, tradeoffExplained, onRun, on
       <button type="button" onClick={onOpenCoach} className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left text-xs font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"><span>Coach check-ins</span><span className="rounded-full bg-amber-200 px-1.5 py-0.5 tabular-nums dark:bg-amber-800">{coachOutstanding}</span></button>
     </div>
     {decisions.length > 0 && <div className="mt-3 grid grid-cols-2 gap-2">{decisions.map(decision => <button key={decision.label} type="button" disabled={busy} onClick={() => decision.approve ? onApprove() : onRun(decision.prompt!)} className="rounded-lg border bg-background p-2.5 text-left transition-colors hover:bg-accent disabled:opacity-50"><span className="block text-xs font-semibold sm:text-sm">{decision.label}</span><span className="mt-1 hidden text-xs text-muted-foreground sm:block">{decision.description}</span></button>)}</div>}
-    {stage === 'approve' && <p className={`mt-2 text-xs ${tradeoffExplained ? 'font-medium text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'}`} role="status">{tradeoffExplained ? 'Trade-off explained in Chat. The draft is still waiting for your decision.' : 'Only the approval choice writes to the calendar. The explanation choice leaves the draft untouched.'}</p>}
+    {stage === 'approve' && <p className={`mt-2 text-xs ${tradeoffExplained ? 'font-medium text-blue-700 dark:text-blue-400' : 'text-muted-foreground'}`} role="status">{tradeoffExplained ? 'Trade-off explained in Chat. The draft is still waiting for your decision.' : 'Only the approval choice writes to the calendar. The explanation choice leaves the draft untouched.'}</p>}
     {stage === 'complete' && <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="flex items-center gap-2 text-sm font-medium"><Check className="size-4" /> Demo complete</p><div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => window.location.reload()}><RotateCcw /> Restart</Button><Button type="button" size="sm" onClick={onOpenCalendar}>Open calendar</Button></div></div>}
   </section>;
 }

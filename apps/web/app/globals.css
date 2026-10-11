@@ -84,26 +84,26 @@ button, a { -webkit-tap-highlight-color: transparent; }
   input, textarea, select { font-size: 16px; }
 }
 .week-grid { display: grid; grid-template-columns: 42px repeat(7, minmax(74px, 1fr)); }
-.calendar-hour { min-height: 58px; border-top: 1px solid #edf0eb; }
+.calendar-hour { min-height: 58px; border-top: 1px solid #eceff4; }
 
 /* The app's hand-authored utility palette is translated here so theme changes
    apply consistently to existing panels, dialogs, and calendar surfaces. */
-.dark [class*="bg-white"] { background-color: #1b2922 !important; }
-.dark [class*="bg-[#f6f7f3]"], .dark [class*="bg-[#fbfcf9]"] { background-color: #17231d !important; }
-.dark [class*="bg-[#f5f8f2]"], .dark [class*="bg-[#eef2eb]"] { background-color: #22342a !important; }
-.dark [class*="bg-[#f1f4ee]"], .dark [class*="bg-[#f2f5f0]"], .dark [class*="bg-[#fafcf8]"], .dark [class*="bg-[#edf0eb]"], .dark [class*="bg-[#e8ede5]"], .dark [class*="bg-[#e1e8dc]"] { background-color: #26372d !important; }
-.dark [class*="bg-[#e4efe7]"], .dark [class*="bg-[#eef2e9]"] { background-color: #263b30 !important; }
+.dark [class*="bg-white"] { background-color: #1e2631 !important; }
+.dark [class*="bg-[#f4f7fa]"], .dark [class*="bg-[#fafcfe]"] { background-color: #1a202a !important; }
+.dark [class*="bg-[#f3f7fd]"], .dark [class*="bg-[#ecf1f8]"] { background-color: #26303e !important; }
+.dark [class*="bg-[#eff3f9]"], .dark [class*="bg-[#f1f4f9]"], .dark [class*="bg-[#fafbfe]"], .dark [class*="bg-[#eceff4]"], .dark [class*="bg-[#e6ecf3]"], .dark [class*="bg-[#dee6f1]"] { background-color: #293341 !important; }
+.dark [class*="bg-[#e5ecf7]"], .dark [class*="bg-[#ebf1f9]"] { background-color: #2b3647 !important; }
 .dark [class*="bg-[#fbf5e6]"], .dark [class*="bg-[#fffaf0]"] { background-color: #3b3322 !important; }
 .dark [class*="bg-[#fbf0ee]"] { background-color: #3d2927 !important; }
-.dark [class*="bg-[#173b32]"] { background-color: #286047 !important; }
-.dark [class*="text-[#173b32]"], .dark [class*="text-[#21362d]"], .dark [class*="text-[#617269]"] { color: #e0ebe3 !important; }
-.dark [class*="text-[#748278]"], .dark [class*="text-[#8a5a26]"] { color: #a9b9ad !important; }
+.dark [class*="bg-[#08407e]"] { background-color: #215caf !important; }
+.dark [class*="text-[#08407e]"], .dark [class*="text-[#273141]"], .dark [class*="text-[#656e7c]"] { color: #e1e8f3 !important; }
+.dark [class*="text-[#767f8b]"], .dark [class*="text-[#8a5a26]"] { color: #abb5c4 !important; }
 .dark [class*="text-[#7a5d1c]"] { color: #e6cf91 !important; }
 .dark [class*="text-[#9e3e38]"], .dark [class*="text-[#9b302b]"] { color: #f0aaa2 !important; }
-.dark [class*="border-[#dce3db]"], .dark [class*="border-[#d6dfd1]"], .dark [class*="border-[#cbd7ce]"], .dark [class*="border-[#c8d3c8]"], .dark [class*="border-[#e5eae4]"], .dark [class*="border-[#edf0eb]"] { border-color: #3b4d42 !important; }
-.dark [class*="border-[#b9cbbd]"] { border-color: #526d5c !important; }
+.dark [class*="border-[#dbe1ea]"], .dark [class*="border-[#d3dcea]"], .dark [class*="border-[#ccd4df]"], .dark [class*="border-[#c8d0dc]"], .dark [class*="border-[#e4e9ef]"], .dark [class*="border-[#eceff4]"] { border-color: #3e4958 !important; }
+.dark [class*="border-[#bbc7d8]"] { border-color: #57677e !important; }
 .dark [class*="border-[#f0e3c4]"] { border-color: #655638 !important; }
 .dark [class*="border-[#f1d9d6]"], .dark [class*="border-[#d9aaa5]"] { border-color: #68413d !important; }
-.dark input, .dark textarea, .dark select { color: #e5eee8; }
-.dark input::placeholder, .dark textarea::placeholder { color: #a9b9ad; }
-.dark .calendar-hour { border-color: #2c3b32; }
+.dark input, .dark textarea, .dark select { color: #e6ecf4; }
+.dark input::placeholder, .dark textarea::placeholder { color: #abb5c4; }
+.dark .calendar-hour { border-color: #2f3744; }

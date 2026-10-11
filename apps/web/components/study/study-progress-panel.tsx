@@ -92,34 +92,34 @@ export function StudyProgressPanel({ event, disabled, onBusy, onCalendarResult, 
     <h3 className="text-lg font-semibold">How did this session go?</h3>
     {workspace.error && <p className="text-sm text-[#9b302b]">{workspace.error} <button type="button" onClick={workspace.refresh} className="underline">Reload progress</button></p>}
     {!linked ? <div className="space-y-3">
-      <p className="text-sm text-[#617269]">Link this block to an assignment to keep track of remaining work.</p>
-      <label className="block text-sm">Assignment<select value={assignmentId} onChange={e => setAssignmentId(e.target.value)} disabled={busy || disabled} className="mt-2 w-full rounded-lg border border-[#c8d3c8] bg-white p-2">
+      <p className="text-sm text-[#656e7c]">Link this block to an assignment to keep track of remaining work.</p>
+      <label className="block text-sm">Assignment<select value={assignmentId} onChange={e => setAssignmentId(e.target.value)} disabled={busy || disabled} className="mt-2 w-full rounded-lg border border-[#c8d0dc] bg-white p-2">
         <option value="">Choose an assignment</option>{workspace.data?.assignments.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
       </select></label>
-      <button type="button" onClick={linkAssignment} disabled={busy || disabled || !assignmentId} className="min-h-11 rounded-lg border border-[#173b32] px-3 py-2 text-sm disabled:opacity-50">Link assignment</button>
+      <button type="button" onClick={linkAssignment} disabled={busy || disabled || !assignmentId} className="min-h-11 rounded-lg border border-[#08407e] px-3 py-2 text-sm disabled:opacity-50">Link assignment</button>
     </div> : assignment ? <>
       <p className="text-sm"><strong>{assignment.title}</strong> · {assignment.remainingMinutes} minutes remaining</p>
-      <p className="text-xs text-[#617269]">This session: {currentReport ? labels[currentReport.action] : linked.completion === 'done' ? 'Done in Google' : 'Not reported yet'}. Session Done does not finish the whole assignment. Moodle submission remains separate.</p>
+      <p className="text-xs text-[#656e7c]">This session: {currentReport ? labels[currentReport.action] : linked.completion === 'done' ? 'Done in Google' : 'Not reported yet'}. Session Done does not finish the whole assignment. Moodle submission remains separate.</p>
       <div className="flex flex-wrap gap-2">{(Object.keys(labels) as ProgressAction[]).map(kind => <button key={kind} type="button" onClick={() => choose(kind)} disabled={busy || disabled || unknown || ((linked.completion === 'done' || event.completion === 'done' || currentReport?.action === 'done') && kind !== 'done')}
-        aria-pressed={action === kind} className="min-h-11 rounded-lg border border-[#c8d3c8] px-3 py-2 text-sm disabled:opacity-50">{labels[kind]}</button>)}</div>
-      {action && <div className="space-y-3 rounded-xl bg-[#edf0e7] p-3">
+        aria-pressed={action === kind} className="min-h-11 rounded-lg border border-[#c8d0dc] px-3 py-2 text-sm disabled:opacity-50">{labels[kind]}</button>)}</div>
+      {action && <div className="space-y-3 rounded-xl bg-[#eaeff7] p-3">
         {action === 'done' && <label className="flex min-h-11 items-start gap-2 text-sm"><input type="checkbox" checked={finished} disabled={busy || unknown} onChange={e => { setFinished(e.target.checked); if (e.target.checked) setMinutes(''); setErrors({}); }} />I confirm the entire assignment is finished, not just this session (0 minutes remaining).</label>}
         {action !== 'missed' && !finished && <label className="block text-sm">{action === 'partly_done' ? 'How many minutes remain for the assignment?' : 'Remaining effort — minutes (optional)'}
-          <input ref={minutesInput} type="number" min="1" step="1" value={minutes} disabled={busy || unknown} aria-invalid={Boolean(errors.minutes)} aria-describedby={errors.minutes ? `${id}-minutes-error` : undefined} onChange={e => { setMinutes(e.target.value); setErrors(previous => ({ ...previous, minutes: undefined })); }} className="mt-2 min-h-11 w-full rounded-lg border border-[#c8d3c8] p-2" /></label>}
+          <input ref={minutesInput} type="number" min="1" step="1" value={minutes} disabled={busy || unknown} aria-invalid={Boolean(errors.minutes)} aria-describedby={errors.minutes ? `${id}-minutes-error` : undefined} onChange={e => { setMinutes(e.target.value); setErrors(previous => ({ ...previous, minutes: undefined })); }} className="mt-2 min-h-11 w-full rounded-lg border border-[#c8d0dc] p-2" /></label>}
         {errors.minutes && <p id={`${id}-minutes-error`} role="alert" className="text-sm text-[#9b302b]">{errors.minutes}</p>}
         <label className="block text-sm">{action === 'stuck' ? 'Which question or topic was difficult?' : 'What would you like to remember? (optional)'}
-          <textarea ref={noteInput} value={note} maxLength={2000} disabled={busy || unknown} aria-invalid={Boolean(errors.note)} aria-describedby={errors.note ? `${id}-note-error` : undefined} onChange={e => { setNote(e.target.value); setErrors(previous => ({ ...previous, note: undefined })); }} className="mt-2 min-h-11 w-full rounded-lg border border-[#c8d3c8] p-2" /></label>
+          <textarea ref={noteInput} value={note} maxLength={2000} disabled={busy || unknown} aria-invalid={Boolean(errors.note)} aria-describedby={errors.note ? `${id}-note-error` : undefined} onChange={e => { setNote(e.target.value); setErrors(previous => ({ ...previous, note: undefined })); }} className="mt-2 min-h-11 w-full rounded-lg border border-[#c8d0dc] p-2" /></label>
         {errors.note && <p id={`${id}-note-error`} role="alert" className="text-sm text-[#9b302b]">{errors.note}</p>}
         {action === 'done' && !finished && <p className="text-xs">Save completes this session only; the whole assignment stays open.</p>}
         {action === 'missed' && <p className="text-xs">Remaining work is preserved. You can choose a new time after saving this report.</p>}
         {!unknown && expected && progressDraftIsStale(expected, { assignment: assignment.version, session: linked.sessionRevision, etag: event.etag }) && <div className="text-sm"><p>This draft is stale. Check the current session and assignment before refreshing its references.</p><button type="button" disabled={busy || disabled} onClick={() => { setExpected({ assignment: assignment.version, session: linked.sessionRevision, etag: event.etag }); setMessage('Draft refreshed with current references. Review your preserved answers before saving.'); }} className="min-h-11 underline">I reviewed the changes — refresh this draft</button></div>}
-        <button type="button" onClick={record} disabled={busy || (disabled && !unknown)} className="min-h-11 rounded-lg bg-[#173b32] px-3 py-2 text-sm text-white disabled:opacity-50">{busy ? 'Saving…' : unknown ? 'Retry same report' : 'Save progress'}</button>
+        <button type="button" onClick={record} disabled={busy || (disabled && !unknown)} className="min-h-11 rounded-lg bg-[#08407e] px-3 py-2 text-sm text-white disabled:opacity-50">{busy ? 'Saving…' : unknown ? 'Retry same report' : 'Save progress'}</button>
         {!unknown && <button type="button" disabled={busy} onClick={() => setAction(null)} className="ml-2 min-h-11 text-sm underline">Cancel report</button>}
       </div>}
-      {(receipt?.report.action === 'missed' || currentReport?.action === 'missed') && <button type="button" onClick={onMoveSession} disabled={busy || disabled} className="min-h-11 rounded-lg border border-[#173b32] px-3 py-2 text-sm disabled:opacity-50">Move this session — choose a new time above, then Save</button>}
+      {(receipt?.report.action === 'missed' || currentReport?.action === 'missed') && <button type="button" onClick={onMoveSession} disabled={busy || disabled} className="min-h-11 rounded-lg border border-[#08407e] px-3 py-2 text-sm disabled:opacity-50">Move this session — choose a new time above, then Save</button>}
       {history.length > 0 && <details className="text-sm"><summary className="cursor-pointer">Session progress history</summary><ol className="mt-2 space-y-2">
-        {history.map(report => <li key={report.id} className="rounded-lg bg-[#e8ede5] p-2">{labels[report.action]} · session {report.sessionRevision}
-          <p className="text-xs text-[#617269]">{new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(report.reportedAt))}</p>
+        {history.map(report => <li key={report.id} className="rounded-lg bg-[#e6ecf3] p-2">{labels[report.action]} · session {report.sessionRevision}
+          <p className="text-xs text-[#656e7c]">{new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(report.reportedAt))}</p>
           {report.reportedRemainingMinutes !== null && <p>{report.reportedRemainingMinutes} minutes remaining (reported)</p>}
           {report.note && <p className="whitespace-pre-wrap break-words">{report.note}</p>}
         </li>)}

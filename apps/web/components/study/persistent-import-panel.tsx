@@ -6,8 +6,8 @@ import { initialAssignmentFields, validateAssignmentFields, type AssignmentField
 import { createPersistentImportClient, importAssignmentFields, ImportConfirmationError, validateImportFile } from './calendar-import-client';
 
 const time = (value: string) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
-const control = 'min-h-11 w-full rounded-lg border border-[#c8d3c8] bg-white p-2 text-sm';
-const button = 'min-h-11 rounded-lg border border-[#173b32] px-3 py-2 text-sm disabled:opacity-50';
+const control = 'min-h-11 w-full rounded-lg border border-[#c8d0dc] bg-white p-2 text-sm';
+const button = 'min-h-11 rounded-lg border border-[#08407e] px-3 py-2 text-sm disabled:opacity-50';
 
 export function PersistentImportPanel({ onSaved }: { onSaved?: () => void }) {
   const id = useId(); const [client] = useState(createPersistentImportClient);
@@ -103,7 +103,7 @@ export function PersistentImportPanel({ onSaved }: { onSaved?: () => void }) {
       setMessage(error instanceof Error ? error.message : 'Import could not be confirmed.');
     } finally { inFlight.current = false; setBusy(false); feedback.current?.focus(); }
   }
-  return <section className="space-y-4 rounded-xl border border-[#c8d3c8] p-4" aria-label="Import calendar review" aria-busy={busy || loading}>
+  return <section className="space-y-4 rounded-xl border border-[#c8d0dc] p-4" aria-label="Import calendar review" aria-busy={busy || loading}>
     <h3 className="font-semibold">Import calendar</h3>
     <p className="text-sm">Confirm selected assignments or read-only timetable commitments. Reimport into the same collection to update existing records without duplicates. Nothing is written to Google by this import.</p>
     <p className="text-xs">File exports are snapshots. Missing events are not deleted. Source dates are planning targets, not verified official deadlines. Updating an estimate does not reset remaining effort or reopen completed work.</p>
@@ -124,7 +124,7 @@ export function PersistentImportPanel({ onSaved }: { onSaved?: () => void }) {
       <ul className="list-inside list-disc text-xs text-[#8a5a26]" aria-label="Import warnings">{preview.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
       <ul className="max-h-[36rem] space-y-3 overflow-y-auto" aria-label="Imported event preview">{preview.rows.map((row, index) => {
         const event = row.event; const rowId = `${id}-${index}`; const chosen = selected.has(event.key); const kind = kinds[event.key]; const value = fields[event.key];
-        return <li key={event.key} className="space-y-2 rounded-lg border border-[#dce3db] p-3">
+        return <li key={event.key} className="space-y-2 rounded-lg border border-[#dbe1ea] p-3">
           <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={chosen} disabled={locked} onChange={change => setSelected(previous => { const next = new Set(previous); if (change.target.checked) next.add(event.key); else next.delete(event.key); return next; })} /><span className="break-words"><strong>{event.title}</strong> · {row.change}{row.previousKind && ` · saved ${row.previousKind}`}</span></label>
           <p className="text-xs">{time(event.startAt)}–{time(event.endAt)} {event.allDay && '· All-day; no deadline time specified'}</p>
           {row.assignment && <p className="text-xs">Saved assignment: {row.assignment.remainingMinutes} min remaining · {row.assignment.status}. Progress and linked sessions will be preserved.</p>}
@@ -140,7 +140,7 @@ export function PersistentImportPanel({ onSaved }: { onSaved?: () => void }) {
         </li>;
       })}</ul>
       {pending && <p className="text-sm">Response unconfirmed. Your original selection is frozen. Retry it or reload saved state to recover the receipt; do not start another import.</p>}
-      {!result && <button type="button" className={`${button} bg-[#173b32] text-white`} disabled={busy || (!pending && !selected.size)} onClick={() => void confirm()}>{busy ? 'Saving…' : pending ? 'Retry same import' : 'Confirm selected imports'}</button>}
+      {!result && <button type="button" className={`${button} bg-[#08407e] text-white`} disabled={busy || (!pending && !selected.size)} onClick={() => void confirm()}>{busy ? 'Saving…' : pending ? 'Retry same import' : 'Confirm selected imports'}</button>}
       {result && <p role="status" className="text-sm">Saved: {result.created} new, {result.updated} updated, {result.unchanged} unchanged. {result.assignments.length} assignments and {result.commitments} read-only commitments reviewed. Saved {time(result.savedAt)}.</p>}
     </>}
   </section>;
