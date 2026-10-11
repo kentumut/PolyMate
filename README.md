@@ -24,22 +24,9 @@ Four people: Kent, Dogancem, Catalin, and Yildirim. Final deadline: Sunday 11 Oc
 
 **Status (Sunday 11 October, 10:35):** feature freeze has passed. Since Saturday evening, main gained the direct foreground chat runtime, student onboarding, calendar-home selection, assignments through chat, and agentic semester planning with a scripted demo mode. No release tag exists yet, and none of this work has passed a live acceptance check on the VM. The remaining priority is the final stabilization checklist below, not new features.
 
-### Close iteration 2
-
-- **Catalin:** run the live acceptance journey in [ITERATION_2_HANDOFF.md](docs/ITERATION_2_HANDOFF.md), including the failure cases. *Open.*
-- **Kent:** tag `v0.2-planner` on the deployed main SHA once it passes. *Open.*
-
 ### Iteration 3a: feedback fixes
 
 Feedback: the planning chat is slow, its replies are text-heavy, and the app must recover on the VM by itself.
-
-Done:
-
-- **Crash recovery** (#31): `scripts/watchdog.sh` with a systemd timer in `ops/` restarts containers Docker reports as unhealthy, and skips runs during deploys.
-- **Speed** (#31, #33): thinking level lowered to `low`; per-turn latency telemetry and `pnpm agent:latency`; tool definitions state date formats (no more failed calendar calls); read-only tools run in parallel; upcoming Moodle entries are sent with each turn. Plan prompt p50 went from 14.9 s to 13.1 s locally. Faster models were tested and rejected (see the [agent latency plan](docs/AGENT_LATENCY_PLAN.md)).
-- **Streaming** (#33): per-tool status ("Drafting your timeline…") and streamed reply text in the chat.
-- **Direct chat runtime** (#40, #44): foreground chat moved from OpenClaw to the OpenAI Agents SDK inside the web process (`gpt-6-luna`, reasoning `none`), reusing the owner-bound tool dispatcher, consent checks, write limits, and redaction. OpenClaw keeps the scheduled jobs.
-
 Open:
 
 | Person | Tasks |
@@ -72,48 +59,6 @@ Open:
 | Yildirim | Progress badges on imported deadlines. Calendar selection picker. |
 
 **Gate:** real imported deadline → plan → missed or partial session → updated Google schedule with preserved progress.
-
-### Iteration 4: proactive buddy and Telegram → `v0.4-buddy`
-
-Done:
-
-- **Proactive check-in chats** (#38): PolyMate opens a chat after an unreported session, before an unplanned deadline, after a Stuck report, for a quiet course, or as a general check-in. Respects pause, quiet hours (22:00–08:00), three a day and an hour's gap. Chats are stored per student. Delivery goes through a channel interface ready for Telegram, and `scripts/check-in-tick.sh` opens due check-ins while the app is closed. See [PROACTIVE_CHATS_HANDOFF.md](docs/PROACTIVE_CHATS_HANDOFF.md).
-- **Chat-first coaching workspace** (e3219be): coach inbox, durable memory, and course context for the agent.
-- **Guided demo** (274561c, e8ac7c3, 4fd1b92): deterministic branching demo inside the Chat tab at `/demo`, which also opens the semester planner in demo mode.
-- **Onboarding and workspace** (608b1e3, 3828953, 9ec9286): landing page and student onboarding (migration 0008), chat history separated from the coach inbox, and a collapsible sidebar and chat history on desktop.
-
-Open:
-
-| Person | Tasks |
-|---|---|
-| Kent | Install the check-in tick as a cron job or systemd timer on the VM with `CHECK_IN_TICK_SECRET`. Telegram bot polling and a Telegram `CheckInChannel`, if time allows. |
-| Dogancem | Per-student turn serialization and consent checks for agent tools that reschedule. |
-| Catalin | Test the missed-session check-in, quiet hours, and the daily cap on the VM. Telegram pairing, pause, and settings, if Telegram ships. |
-| Yildirim | Chat panel beside the calendar on desktop. |
-
-**Gate:** a proactive message arrives with the app closed, a reply reschedules safely through existing services, and replies appear as they are written. The calendar still works without the model or Telegram. Telegram is the first item to cut if time runs out; in-app check-ins already cover the demo.
-
-### Iteration 5 (optional): learning and opportunities
-
-Not started; cut, since iterations 3 and 4 had not passed their gates by Sunday 08:00.
-
-| Person | Tasks |
-|---|---|
-| Kent | Private PDF storage and extraction, model budget limits, known-good rollback release. |
-| Dogancem | Exercise-grounded hints and understanding checks; a confirmed outcome can adjust the next study task. |
-| Catalin | Load curated, sourced course/opportunity records; validate one real exercise; prepare the combined demo. |
-| Yildirim | PDF side panel and minimal Explore cards. |
-
-**Gate:** one verified tutoring example and one sourced opportunity without regressing the calendar.
-
-### Final stabilization: Sunday 08:30–11:30
-
-| Person | Tasks |
-|---|---|
-| Kent | Freeze features at 10:00, deploy the final known-good commit, confirm the watchdog is active on the VM, verify migrations and backup/restore, submit by 11:30. |
-| Dogancem | Verify time/conflict correctness, mutation ownership, uncertain-write reconciliation, planner regressions, and Google token refresh. |
-| Catalin | Three full rehearsals including one "kill the app" recovery check, a backup recording, judge access, and a list of what actually shipped. |
-| Yildirim | Fix only release-blocking calendar rendering, navigation, accessibility, or mobile defects. |
 
 ## Development
 
