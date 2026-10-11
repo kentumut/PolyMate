@@ -2,9 +2,9 @@
 
 For real local OpenAI/OpenClaw testing and production configuration, see [LOCAL_AI_TESTING.md](docs/LOCAL_AI_TESTING.md).
 
-An AI study companion for ETH students with a weekly calendar, Moodle calendar subscriptions, and an OpenClaw-backed study chat.
+An AI study companion for ETH students with a weekly calendar, Moodle calendar subscriptions, semester planning, and a streamed study chat. Foreground chat runs in the web process on the OpenAI Agents SDK ([direct chat runtime](docs/DIRECT_CHAT_RUNTIME.md)); OpenClaw remains the scheduler for background jobs.
 
-**Current status:** Iteration 1 is complete: the Google-connected calendar passed live acceptance on 10 October 2026. See the [acceptance results](docs/ITERATION_1_ACCEPTANCE.md). Iteration 2 (deadlines, availability, plan preview, and approved Google study blocks) is implemented and awaiting live acceptance. Much of iterations 3 and 4 (crash recovery, faster streamed chat, ICS import, proactive check-in chats) is merged but not yet accepted on the VM; see the [roadmap](#roadmap-remaining-iterations). Moodle and AI integrations are implemented separately; their live acceptance is not covered by the calendar checks.
+**Current status:** Iteration 1 is complete: the Google-connected calendar passed live acceptance on 10 October 2026. See the [acceptance results](docs/ITERATION_1_ACCEPTANCE.md). Iteration 2 (deadlines, availability, plan preview, and approved Google study blocks) is implemented and awaiting live acceptance. Much of iterations 3 and 4 (crash recovery, direct streamed chat, ICS import, proactive check-in chats, onboarding, semester planning) is merged but not yet accepted on the VM; see the [roadmap](#roadmap-remaining-iterations). Moodle and AI integrations are implemented separately; their live acceptance is not covered by the calendar checks.
 
 - [Roadmap: remaining iterations](#roadmap-remaining-iterations) (four-person split; supersedes the task matrix in TEAM_SCHEDULE.md)
 - [Original five-person schedule](docs/TEAM_SCHEDULE.md)
@@ -12,7 +12,7 @@ An AI study companion for ETH students with a weekly calendar, Moodle calendar s
 - [Kent's handoff](docs/KENT_HANDOFF.md)
 - [VM deployment and recovery](docs/DEPLOYMENT.md)
 - [Product specification](docs/POLYMATE_SPEC.md) and [implementation plan](docs/IMPLEMENTATION_PLAN.md)
-- [AI agent and OpenClaw setup](docs/AI_AGENT_HANDOFF.md)
+- [AI agent and OpenClaw setup](docs/AI_AGENT_HANDOFF.md) and [direct chat runtime](docs/DIRECT_CHAT_RUNTIME.md)
 - [Iteration 2 planner implementation](docs/ITERATION_2_HANDOFF.md)
 - [Full project overview](docs/README.md)
 - [Moodle calendar subscriptions and study planning](docs/MOODLE_AI_INTEGRATION.md)
@@ -22,7 +22,7 @@ An AI study companion for ETH students with a weekly calendar, Moodle calendar s
 
 Four people: Kent, Dogancem, Catalin, and Yildirim. Final deadline: Sunday 11 October 2026, 12:00 Europe/Zurich; feature freeze at 10:00. Do not start the next iteration while the current gate is failing. Present the last stable release honestly if later iterations remain incomplete.
 
-**Status (Saturday 10 October, 20:30):** most of iteration 3a, ICS import from 3b, and the in-app half of the proactive buddy from iteration 4 are merged on main. No release tag exists yet, and none of this work has passed a live acceptance check on the VM. Tonight's priority is closing the open gates below, not starting new features.
+**Status (Sunday 11 October, 10:35):** feature freeze has passed. Since Saturday evening, main gained the direct foreground chat runtime, student onboarding, calendar-home selection, assignments through chat, and agentic semester planning with a scripted demo mode. No release tag exists yet, and none of this work has passed a live acceptance check on the VM. The remaining priority is the final stabilization checklist below, not new features.
 
 ### Close iteration 2
 
@@ -38,6 +38,7 @@ Done:
 - **Crash recovery** (#31): `scripts/watchdog.sh` with a systemd timer in `ops/` restarts containers Docker reports as unhealthy, and skips runs during deploys.
 - **Speed** (#31, #33): thinking level lowered to `low`; per-turn latency telemetry and `pnpm agent:latency`; tool definitions state date formats (no more failed calendar calls); read-only tools run in parallel; upcoming Moodle entries are sent with each turn. Plan prompt p50 went from 14.9 s to 13.1 s locally. Faster models were tested and rejected (see the [agent latency plan](docs/AGENT_LATENCY_PLAN.md)).
 - **Streaming** (#33): per-tool status ("Drafting your timeline…") and streamed reply text in the chat.
+- **Direct chat runtime** (#40, #44): foreground chat moved from OpenClaw to the OpenAI Agents SDK inside the web process (`gpt-6-luna`, reasoning `none`), reusing the owner-bound tool dispatcher, consent checks, write limits, and redaction. OpenClaw keeps the scheduled jobs.
 
 Open:
 
@@ -56,14 +57,16 @@ Done:
 
 - **ICS import** (#36): persistent calendar imports with review, deduplication, safe reimport, and planner integration; open-ended recurring series are previewed for one semester.
 - **Progress controls:** Done / Partly done / Missed / Stuck on study sessions (iteration 2, #21).
-- **Calendar write limits** (#35): server-side caps on agent deletions and created blocks.
-- **Courses and semester planning** (#32, #34): VVZ semester planner, graduation audit, and multi-semester course planning.
+- **Calendar write limits** (#35): server-side caps on agent deletions and created blocks. Agent-created blocks that overlap move to the nearest free slot under a fresh operation ID (#42).
+- **Calendar home** (7b87051): each student chooses Google Calendar or the PolyMate calendar for study blocks; switching moves upcoming blocks under the same IDs (migration 0009). Google is the default on first connect.
+- **Courses and semester planning** (#32, #34, #44, #45, #46): VVZ semester planner, graduation audit, and multi-semester course planning; in-place agentic planning with a workload ceiling and no semester gaps; semester planning exposed to agent tools; and a scripted demo mode that runs without VVZ or model calls.
+- **Assignments** (f427193, 5cc8277): assignments live under their course and can be added through chat.
 
 Open:
 
 | Person | Tasks |
 |---|---|
-| Kent | Retry/reconciliation and a worker restart test. Confirm the latest deploy applied migrations 0005–0007. |
+| Kent | Retry/reconciliation and a worker restart test. Confirm the latest deploy applied migrations 0005–0009. |
 | Dogancem | Missed/partial-work replanning with undo. Invalidate stale proposals while keeping valid blocks. Google scope upgrade for selected calendars. |
 | Catalin | Test ICS import end to end with real Moodle and myStudies files: preview, confirm, reimport. |
 | Yildirim | Progress badges on imported deadlines. Calendar selection picker. |
@@ -76,7 +79,8 @@ Done:
 
 - **Proactive check-in chats** (#38): PolyMate opens a chat after an unreported session, before an unplanned deadline, after a Stuck report, for a quiet course, or as a general check-in. Respects pause, quiet hours (22:00–08:00), three a day and an hour's gap. Chats are stored per student. Delivery goes through a channel interface ready for Telegram, and `scripts/check-in-tick.sh` opens due check-ins while the app is closed. See [PROACTIVE_CHATS_HANDOFF.md](docs/PROACTIVE_CHATS_HANDOFF.md).
 - **Chat-first coaching workspace** (e3219be): coach inbox, durable memory, and course context for the agent.
-- **Guided demo** (274561c, e8ac7c3): deterministic branching demo inside the Chat tab at `/demo`.
+- **Guided demo** (274561c, e8ac7c3, 4fd1b92): deterministic branching demo inside the Chat tab at `/demo`, which also opens the semester planner in demo mode.
+- **Onboarding and workspace** (608b1e3, 3828953, 9ec9286): landing page and student onboarding (migration 0008), chat history separated from the coach inbox, and a collapsible sidebar and chat history on desktop.
 
 Open:
 
@@ -91,7 +95,7 @@ Open:
 
 ### Iteration 5 (optional): learning and opportunities
 
-Not started. Cut unless iterations 3 and 4 pass their gates by Sunday 08:00.
+Not started; cut, since iterations 3 and 4 had not passed their gates by Sunday 08:00.
 
 | Person | Tasks |
 |---|---|
@@ -124,4 +128,4 @@ Open http://127.0.0.1:3000/calendar. The local shell uses a fixed synthetic stud
 
 Open http://127.0.0.1:3000/demo for the deterministic product demo. It runs inside the normal Chat tab with choice-driven onboarding and branching decisions, demonstrating proactive coaching, response capture, durable memory, course-aware planning, explicit calendar approval, and moving an existing study block without external accounts. The complete rehearsal is documented in [docs/CHAT_DEMO_PLAN.md](docs/CHAT_DEMO_PLAN.md).
 
-For Moodle, paste the private URL from Calendar → Export calendar → Get calendar URL into the subscription form. Set `TOKEN_ENCRYPTION_KEY` to a base64-encoded 32-byte key in the ignored `apps/web/.env.local`. The event preview works without Google or OpenClaw. Without `DATABASE_URL`, development stores encrypted subscriptions in ignored `apps/web/.local/`; production uses Postgres and requires `pnpm db:migrate`. Google is required for study planning/calendar writes, and chat requires the OpenClaw setup above.
+For Moodle, paste the private URL from Calendar → Export calendar → Get calendar URL into the subscription form. Set `TOKEN_ENCRYPTION_KEY` to a base64-encoded 32-byte key in the ignored `apps/web/.env.local`. The event preview works without Google or OpenClaw. Without `DATABASE_URL`, development stores encrypted subscriptions in ignored `apps/web/.local/`; production uses Postgres and requires `pnpm db:migrate`. Google Calendar writes require a Google connection; students can instead keep study blocks in the PolyMate calendar. Chat requires `OPENAI_API_KEY` for the web process (see [DIRECT_CHAT_RUNTIME.md](docs/DIRECT_CHAT_RUNTIME.md)); background check-ins and scheduled jobs use the OpenClaw setup in [LOCAL_AI_TESTING.md](docs/LOCAL_AI_TESTING.md).
