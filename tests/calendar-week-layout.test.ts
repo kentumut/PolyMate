@@ -3,7 +3,7 @@ import type { CalendarEvent } from '../packages/contracts/src/calendar';
 import { weekRange } from '../packages/contracts/src/time';
 import { sampleWeekEvents } from '../packages/core/calendar/fake-client';
 import {
-  allDayEventsFor, calendarSelectionRange, formatWeekLabel, nowOffset, placeDayEvents, snappedGridMinute, visibleHours, weekDays,
+  allDayEventsFor, calendarSelectionRange, daysWithItems, fittedHours, formatWeekLabel, nowOffset, placeDayEvents, snappedGridMinute, visibleHours, weekDays,
 } from '../apps/web/components/calendar/week-layout';
 
 const range = weekRange(new Date('2026-10-09T12:00:00Z'));
@@ -69,5 +69,18 @@ describe('week layout', () => {
     expect(calendarSelectionRange(days[0], 10 * 60 + 30, 9 * 60)).toEqual({
       startAt: '2026-10-05T07:00:00.000Z', endAt: '2026-10-05T08:30:00.000Z',
     });
+  });
+
+  it('keeps only days with blocks and fits the hours around them', () => {
+    // Zurich is UTC+2 in October: 10:55–11:55, 12:10–13:10 on Sun 11, 10:00–11:30 and 14:00–15:00 on Mon 12.
+    const blocks = [
+      event('a', '2026-10-11T08:55:00Z', '2026-10-11T09:55:00Z'), event('b', '2026-10-11T10:10:00Z', '2026-10-11T11:10:00Z'),
+      event('c', '2026-10-12T08:00:00Z', '2026-10-12T09:30:00Z'), event('d', '2026-10-12T12:00:00Z', '2026-10-12T13:00:00Z'),
+    ];
+    const shown = daysWithItems(blocks);
+    expect(shown.map(day => `${day.weekday} ${day.dayOfMonth}`)).toEqual(['Sun 11', 'Mon 12']);
+    expect(fittedHours(blocks, shown)).toEqual({ start: 10, end: 15 });
+    expect(fittedHours([blocks[0]], daysWithItems([blocks[0]]))).toEqual({ start: 9, end: 13 });
+    expect(daysWithItems([])).toEqual([]);
   });
 });

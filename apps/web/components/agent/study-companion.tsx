@@ -13,7 +13,8 @@ import Link from 'next/link';
 import { CalendarStudyWorkflow } from '@/components/study/calendar-study-workflow';
 import { GoogleConnection } from '@/components/connections/google-connection';
 import { MoodleConnection } from '@/components/connections/moodle-connection';
-import { MoodleCalendarPreview } from '@/components/connections/moodle-calendar-preview';
+import { DayTimelineGrid } from '@/components/calendar/day-timeline-grid';
+import { MoodleDeadlineList } from '@/components/connections/moodle-calendar-preview';
 import { WorkspaceSidebar, type WorkspaceView } from './workspace-sidebar';
 import { readSemesterPlan, SemesterPlanner } from '@/components/study/semester-planner';
 import { ProgressCardView } from './progress-cards';
@@ -113,7 +114,7 @@ function safeSource(value: unknown): string | null {
 function AssignmentCards({ data }: { data: unknown }) {
   if (!data || typeof data !== 'object') return null;
   const snapshot = data as MoodleSnapshot;
-  if (snapshot.source === 'calendar-subscription') return <section className="mt-3 rounded-xl border border-[#dce3db] bg-white p-4"><h3 className="text-sm font-semibold">Moodle calendar events</h3><MoodleCalendarPreview snapshot={snapshot} /></section>;
+  if (snapshot.source === 'calendar-subscription') return <section className="mt-3 rounded-xl border border-[#dce3db] bg-white px-4 py-3"><div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-sm font-semibold">Moodle deadlines</h3>{typeof snapshot.fetchedAt === 'string' && <p className="text-xs text-[#748278]">Updated {dateTime(snapshot.fetchedAt)}</p>}</div><MoodleDeadlineList snapshot={snapshot} /></section>;
   const assignments = Array.isArray(snapshot.assignments) ? snapshot.assignments : [];
   const announcements = Array.isArray(snapshot.announcements) ? snapshot.announcements : [];
   return <section className="mt-3 space-y-3 rounded-xl border border-[#dce3db] bg-[#fbfcf9] p-4" aria-label="Moodle source results">
@@ -186,10 +187,10 @@ function TimelinePreview({ plan, onSchedule, busy }: { plan: PendingPlan; onSche
     <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[11px] font-semibold uppercase tracking-widest text-[#658071]">Draft timeline</p>
       <p className="mt-1 text-sm text-[#617269]">Effort is an estimate. Times are shown in Europe/Zurich.</p></div>
       <p className="text-xs text-[#748278]">Expires {dateTime(plan.expiresAt)}</p></div>
-    {timeline.blocks.length ? <ol className="mt-4 space-y-2">{timeline.blocks.map((block, index) => <li key={`${block.operationId}-${index}`} className="rounded-xl bg-white p-3">
-      <p className="text-sm font-medium">{block.title}</p><p className="mt-1 text-xs text-[#617269]">{dateTime(block.startAt)}–{dateTime(block.endAt)} · {Math.round((Date.parse(block.endAt) - Date.parse(block.startAt)) / 60_000)} min</p>
-      {safeSource(block.sourceUrl) && <a className="mt-1 inline-block text-xs underline" href={safeSource(block.sourceUrl)!} target="_blank" rel="noreferrer">Moodle source</a>}
-    </li>)}</ol> : <p className="mt-4 rounded-xl bg-white p-3 text-sm">No study blocks fit those constraints.</p>}
+    {timeline.blocks.length ? <div className="mt-4">
+      <p className="mb-2 text-xs text-[#617269]">{timeline.blocks.length} {timeline.blocks.length === 1 ? 'session' : 'sessions'} · {Math.round(timeline.blocks.reduce((sum, block) => sum + Date.parse(block.endAt) - Date.parse(block.startAt), 0) / 60_000 / 6) / 10} h total. Select a block to open its Moodle source.</p>
+      <DayTimelineGrid blocks={timeline.blocks.map((block, index) => ({ id: `${block.operationId}-${index}`, title: block.title, startAt: block.startAt, endAt: block.endAt, allDay: false, href: safeSource(block.sourceUrl) }))} />
+    </div> : <p className="mt-4 rounded-xl bg-white p-3 text-sm">No study blocks fit those constraints.</p>}
     {unscheduled && <div className="mt-3 rounded-xl border border-[#e7d7b9] bg-[#fffaf0] p-3"><h3 className="text-sm font-semibold">Work not scheduled</h3>
       <ul className="mt-2 space-y-1 text-sm">{timeline.unscheduled.map((item, index) => <li key={`${item.assignmentId}-${index}`}>Entry {item.assignmentId}: {item.remainingMinutes} min remain — {item.reason}</li>)}</ul>
     </div>}

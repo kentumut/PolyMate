@@ -1,5 +1,5 @@
 import type { CalendarEvent } from '@polymate/contracts/calendar';
-import { addZonedDays, CALENDAR_TIMEZONE, zonedDateKey, zonedParts, zonedTimeToInstant, type DateRange } from '@polymate/contracts/time';
+import { addZonedDays, CALENDAR_TIMEZONE, startOfZonedDay, zonedDateKey, zonedParts, zonedTimeToInstant, type DateRange } from '@polymate/contracts/time';
 
 export type WeekDay = Readonly<{ key: string; start: string; end: string; weekday: string; dayOfMonth: number }>;
 
@@ -181,4 +181,38 @@ export function calendarSelectionRange(day: WeekDay, anchorMinute: number, focus
     hour: Math.floor(minute / 60), minute: minute % 60,
   }).toISOString();
   return { startAt: instant(startMinute), endAt: instant(endMinute) };
+}
+
+/** Calendar days (in order) that any timed item touches, for views that skip empty days. */
+export function daysWithItems(items: readonly TimedItem[]): WeekDay[] {
+  const starts = new Map<string, Date>();
+  for (const item of items) {
+    if (item.allDay) continue;
+    const last = Date.parse(item.endAt) - 1;
+    for (let day = startOfZonedDay(item.startAt); day.getTime() <= last; day = addZonedDays(day, 1)) starts.set(zonedDateKey(day), day);
+  }
+  return [...starts.values()].sort((a, b) => a.getTime() - b.getTime()).map(start => ({
+    key: zonedDateKey(start), start: start.toISOString(), end: addZonedDays(start, 1).toISOString(),
+    weekday: weekdayFormat.format(start), dayOfMonth: zonedParts(start).day,
+  }));
+}
+
+/** The tightest whole-hour span covering every timed item, at least `minimum` hours long. */
+export function fittedHours(items: readonly TimedItem[], days: readonly WeekDay[], minimum = 4): { start: number; end: number } {
+  let start = 24;
+  let end = 0;
+  for (const item of items) {
+    if (item.allDay) continue;
+    for (const day of days) {
+      const from = Math.max(Date.parse(item.startAt), Date.parse(day.start));
+      const to = Math.min(Date.parse(item.endAt), Date.parse(day.end));
+      if (from >= to) continue;
+      start = Math.min(start, Math.floor(minutesIntoDay(from, day) / 60));
+      end = Math.max(end, Math.ceil(minutesIntoDay(to, day) / 60));
+    }
+  }
+  if (start >= end) return { ...DEFAULT_HOURS };
+  const missing = Math.max(0, minimum - (end - start));
+  start = Math.max(0, start - Math.floor(missing / 2));
+  return { start, end: Math.min(24, Math.max(end + Math.ceil(missing / 2), start + minimum)) };
 }
