@@ -700,7 +700,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
   const onboardingActive = demoOnboarding;
 
   if (studentOnboarding) return <div className="flex min-h-dvh flex-col bg-muted/25">
-    <header className="flex h-16 shrink-0 items-center border-b bg-background px-5 sm:px-8"><Link href="/" className="text-base font-semibold tracking-tight">PolyMate</Link></header>
+    <header className="flex h-16 shrink-0 items-center border-b bg-background px-5 sm:px-8"><Link href="/" className="text-xl font-semibold tracking-tight">PolyMate</Link></header>
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 py-8 sm:px-8">
       {onboardingStatus === 'required' && <StudentOnboarding demo={false} busy={onboardingBusy} error={onboardingError} onComplete={profile => void completeStudentOnboarding(profile)} />}
       {onboardingStatus === 'loading' && <div className="my-auto text-center"><p className="text-sm font-medium">Preparing your study space…</p><p className="mt-2 text-sm text-muted-foreground">Loading your saved preferences.</p></div>}

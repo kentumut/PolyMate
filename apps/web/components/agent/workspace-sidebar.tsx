@@ -44,7 +44,7 @@ export function WorkspaceSidebar({ view, ownerName, demo = false, hrefFor, onNav
 
   return <aside className={cn('sticky top-0 z-30 flex border-b bg-muted/60 px-3 py-2 backdrop-blur md:h-dvh md:shrink-0 md:flex-col md:border-r md:border-b-0 md:bg-muted/35 md:px-3 md:py-4', collapsed ? 'md:w-16 md:px-2' : 'md:w-64')}>
     <div className={cn('flex shrink-0 items-center', collapsed && 'md:flex-col md:gap-2')}>
-      <a href={hrefFor('chat')} onClick={event => onNavigate(event, 'chat')} className={cn('flex h-10 shrink-0 items-center rounded-lg px-2 text-base font-semibold tracking-tight', collapsed && 'md:hidden')} aria-label="PolyMate chat">PolyMate</a>
+      <a href={hrefFor('chat')} onClick={event => onNavigate(event, 'chat')} className={cn('flex h-10 shrink-0 items-center rounded-lg px-2 text-xl font-semibold tracking-tight', collapsed && 'md:hidden')} aria-label="PolyMate chat">PolyMate</a>
       <Button type="button" variant="ghost" size="icon" onClick={toggleCollapsed} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} className={cn('hidden text-muted-foreground md:inline-flex', !collapsed && 'ml-auto')}>
         {collapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
       </Button>
