@@ -30,6 +30,8 @@ export type WeekViewProps = {
   onRetry?: () => void;
   /** Opens creation with a mouse-dragged time range. */
   onTimeRangeSelect?: (startAt: string, endAt: string) => void;
+  /** Hands the uncovered assignments to the planner, e.g. as a chat request. */
+  onPlanUnscheduled?: (items: readonly UnscheduledWork[]) => void;
 };
 
 type DragSelection = { dayIndex: number; anchorMinute: number; focusMinute: number };
@@ -49,7 +51,7 @@ const isProposed = (item: WeekItem): item is ProposedBlock => 'kind' in item && 
 
 export function WeekView({
   range, events, loading = false, error, notice, selectedId, proposed = NO_PROPOSALS, assignmentLabels = NO_LABELS, unscheduled,
-  now: nowProp, onSelect, onRangeChange, onRetry, onTimeRangeSelect,
+  now: nowProp, onSelect, onRangeChange, onRetry, onTimeRangeSelect, onPlanUnscheduled,
 }: WeekViewProps) {
   // The server and browser clocks can differ; reveal live time markers after hydration.
   const hydrated = useSyncExternalStore(subscribeToHydration, clientHydrated, serverHydrated);
@@ -72,6 +74,8 @@ export function WeekView({
   const hourCount = hours.end - hours.start;
   const isCurrentWeek = todayIndex >= 0;
   const [dragSelection, setDragSelection] = useState<DragSelection | null>(null);
+  // Touch has no drag-to-select (dragging scrolls), so a tap on an empty slot starts a block there.
+  const [tap, setTap] = useState<{ dayIndex: number; pointerId: number; x: number; y: number } | null>(null);
   const canDrag = Boolean(onTimeRangeSelect) && !loading && !error;
 
   function changeRange(next: DateRange) {
@@ -86,7 +90,8 @@ export function WeekView({
   }
 
   function startDrag(event: ReactPointerEvent<HTMLDivElement>, dayIndex: number) {
-    if (!canDrag || event.pointerType !== 'mouse' || event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
+    if (!canDrag || event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
+    if (event.pointerType !== 'mouse') { setTap({ dayIndex, pointerId: event.pointerId, x: event.clientX, y: event.clientY }); return; }
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     const minute = Math.min(gridMinute(event), hours.end * 60 - 15);
@@ -99,6 +104,15 @@ export function WeekView({
   }
 
   function finishDrag(event: ReactPointerEvent<HTMLDivElement>, dayIndex: number) {
+    if (tap) {
+      setTap(null);
+      // A scroll cancels the pointer instead of lifting it; anything that moved is not a tap either.
+      if (tap.dayIndex !== dayIndex || tap.pointerId !== event.pointerId || Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 8) return;
+      const minute = Math.min(gridMinute(event), hours.end * 60 - 15);
+      const selection = calendarSelectionRange(days[dayIndex], minute, minute);
+      onTimeRangeSelect?.(selection.startAt, selection.endAt);
+      return;
+    }
     if (!dragSelection || dragSelection.dayIndex !== dayIndex) return;
     const selection = calendarSelectionRange(days[dayIndex], dragSelection.anchorMinute, gridMinute(event));
     setDragSelection(null);
@@ -125,9 +139,9 @@ export function WeekView({
     {proposed.length > 0 && <p className="border-b border-[#f0e3c4] bg-[#fffaf0] px-6 py-2 text-xs text-[#7a5d1c]" role="status">
       <span className="font-semibold">Plan preview.</span> {visibleProposals.length === proposed.length
         ? `${proposed.length} proposed ${proposed.length === 1 ? 'block is' : 'blocks are'} outlined below.`
-        : `${visibleProposals.length} of ${proposed.length} proposed blocks fall in this week.`} They reach Google Calendar only after you apply the plan.
+        : `${visibleProposals.length} of ${proposed.length} proposed blocks fall in this week.`} They are added to your calendar only after you approve the plan.
     </p>}
-    {unscheduled && unscheduled.length > 0 && <UnscheduledStrip items={unscheduled} />}
+    {unscheduled && unscheduled.length > 0 && <UnscheduledStrip items={unscheduled} onPlan={onPlanUnscheduled} />}
     {error && <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f1d9d6] bg-[#fbf0ee] px-6 py-3 text-sm text-[#9e3e38]" role="alert">
       <span>{error}</span>
       {onRetry && <button type="button" onClick={onRetry} className="rounded-lg border border-[#e3c3bf] px-3 py-1 text-xs font-medium">Try again</button>}
@@ -169,8 +183,8 @@ export function WeekView({
           const nowAt = nowProp || hydrated ? nowOffset(current, day, hours) : null;
           return <div key={day.key} role="group" aria-label={day.weekday + ' ' + day.dayOfMonth}
             onPointerDown={event => startDrag(event, index)} onPointerMove={event => moveDrag(event, index)}
-            onPointerUp={event => finishDrag(event, index)} onPointerCancel={() => setDragSelection(null)}
-            className={`relative border-l ${index === todayIndex ? 'bg-muted/30' : ''} ${index === mobileDay ? '' : 'hidden md:block'} ${canDrag ? 'cursor-crosshair select-none' : ''}`}
+            onPointerUp={event => finishDrag(event, index)} onPointerCancel={() => { setDragSelection(null); setTap(null); }}
+            className={`relative border-l ${index === todayIndex ? 'bg-muted/30' : ''} ${index === mobileDay ? '' : 'hidden md:block'} ${canDrag ? 'select-none md:cursor-crosshair' : ''}`}
             style={{ height: hourCount * HOUR_HEIGHT, backgroundImage: `repeating-linear-gradient(to bottom, color-mix(in oklab, var(--border) 70%, transparent) 0 1px, transparent 1px ${HOUR_HEIGHT}px)` }}>
             {dragSelection?.dayIndex === index && <SelectionPreview selection={dragSelection} hours={hours} />}
             {placed.map(item => {
@@ -196,8 +210,8 @@ export function WeekView({
       {events.some(event => event.source === 'google-personal') && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-l-[3px] border-[#9aa79f] bg-[#eef1ec]" />Google events (read-only)</span>}
       <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#2f6b55]" />PolyMate study block</span>
       <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border border-dashed border-[#2f6b55] bg-[#e4efe7]" />Done</span>
-      {proposed.length > 0 && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-2 border-dashed border-[#c08a2b] bg-[#fffaf0]" />Proposed, not in Google yet</span>}
-      {onTimeRangeSelect && <span className="ml-auto hidden md:inline">Drag across an empty time slot to add a block</span>}
+      {proposed.length > 0 && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-2 border-dashed border-[#c08a2b] bg-[#fffaf0]" />Proposed, not added yet</span>}
+      {onTimeRangeSelect && <span className="ml-auto"><span className="hidden md:inline">Drag across an empty time slot to add a block</span><span className="md:hidden">Tap an empty time slot to add a block</span></span>}
     </footer>
   </section>;
 }
@@ -265,12 +279,13 @@ function ProposedTile({ item }: { item: PlacedEvent<ProposedBlock> }) {
   </div>;
 }
 
-function UnscheduledStrip({ items }: { items: readonly UnscheduledWork[] }) {
+function UnscheduledStrip({ items, onPlan }: { items: readonly UnscheduledWork[]; onPlan?: (items: readonly UnscheduledWork[]) => void }) {
   const total = items.reduce((sum, item) => sum + item.minutes, 0);
   return <details className="group border-b border-[#f0e3c4] bg-[#fbf5e6] px-6 py-2 text-xs text-[#7a5d1c]">
     <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
       <span className="font-semibold">Unscheduled work:</span> {total} min across {items.length} {items.length === 1 ? 'assignment' : 'assignments'} {items.length === 1 ? 'is' : 'are'} not covered by a study block.
       <span className="ml-1 underline group-open:hidden">Show</span>
+      {onPlan && <button type="button" onClick={event => { event.preventDefault(); onPlan(items); }} className="ml-3 rounded-md border border-[#d9c48f] bg-white px-2 py-0.5 font-medium hover:bg-[#fffaf0]">Plan with PolyMate</button>}
     </summary>
     <ul className="mt-2 space-y-1" aria-label="Unscheduled work">
       {items.map(item => <li key={item.assignmentId} className="break-words">
