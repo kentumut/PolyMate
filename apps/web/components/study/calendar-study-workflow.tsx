@@ -6,18 +6,32 @@ import { weekRange, zonedParts, zonedTimeToInstant } from '@polymate/contracts/t
 import { FakeCalendarClient } from '@polymate/core/calendar/fake';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarPanel } from '@/components/calendar/calendar-panel';
-import { assignmentLabels, proposedBlocks, unscheduledWork } from '@/components/calendar/plan-overlay';
+import { assignmentLabels, proposedBlocks, unscheduledWork, type ProposedBlock, type UnscheduledWork } from '@/components/calendar/plan-overlay';
 import { StudyBlockDialog } from './study-block-dialog';
 import type { StudyBlockOperationResult } from './study-block-form';
 import { createStudyCalendarClient } from './study-calendar-client';
 import { useStudyWorkspace } from './study-workspace-context';
 import { StudyProgressPanel } from './study-progress-panel';
 
-export function CalendarStudyWorkflow({ sample = false, demo = false, externalReloadKey = 0, initialDate }: { sample?: boolean; demo?: boolean; externalReloadKey?: number; initialDate?: string }) {
+const NO_DRAFT: readonly ProposedBlock[] = [];
+
+export function CalendarStudyWorkflow({ sample = false, demo = false, externalReloadKey = 0, initialDate, draftBlocks = NO_DRAFT, focus, onPlanUnscheduled }: {
+  sample?: boolean; demo?: boolean; externalReloadKey?: number; initialDate?: string;
+  /** Blocks of the chat's unapproved draft, outlined on the week like a planner preview. */
+  draftBlocks?: readonly ProposedBlock[];
+  /** A new object jumps to the week containing its date. */
+  focus?: { date: string };
+  onPlanUnscheduled?: (items: readonly UnscheduledWork[]) => void;
+}) {
   const workspace = useStudyWorkspace();
   const [readClient] = useState(() => workspace?.calendarClient ?? (sample ? new FakeCalendarClient(undefined, 250) : new HttpCalendarClient()));
   const [client] = useState(() => createStudyCalendarClient(sample ? { calendarClient: readClient } : {}));
   const [range, setRange] = useState(() => weekRange(initialDate));
+  const [appliedFocus, setAppliedFocus] = useState(focus);
+  if (focus !== appliedFocus) {
+    setAppliedFocus(focus);
+    if (focus) setRange(weekRange(focus.date));
+  }
   const [reloadKey, setReloadKey] = useState(0);
   const [open, setOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -46,10 +60,10 @@ export function CalendarStudyWorkflow({ sample = false, demo = false, externalRe
   const planning = workspace?.planning;
   const progress = workspace?.data;
   const overlay = useMemo(() => ({
-    proposed: proposedBlocks(planning?.plan, planning?.results ?? [], now),
+    proposed: [...proposedBlocks(planning?.plan, planning?.results ?? [], now), ...draftBlocks],
     assignmentLabels: assignmentLabels(progress?.links ?? [], progress?.assignments ?? []),
     unscheduled: progress ? unscheduledWork({ assignments: progress.assignments, links: progress.links, reports: progress.reports, plan: planning?.plan, now }) : [],
-  }), [planning, progress, now]);
+  }), [planning, progress, now, draftBlocks]);
 
   useEffect(() => {
     let current = true;
@@ -166,7 +180,7 @@ export function CalendarStudyWorkflow({ sample = false, demo = false, externalRe
     {pendingReport && !open && <p role="status" className="rounded-lg border border-[#c8d3c8] bg-white p-3 text-sm">A progress report is unconfirmed. <button type="button" disabled={progressBusy} onClick={retryReport} className="underline">Retry the original report</button></p>}
     {progressNotice && !open && <p role="status" className="text-sm">{progressNotice}</p>}
     {!open && result && !blocking && <p role="status" className="text-sm text-[#617269]">{result.status === 'synced' ? sample ? 'Sample calendar change confirmed.' : 'Calendar change saved.' : result.error?.message}</p>}
-    <CalendarPanel {...overlay} client={readClient} sample={sample} initialDate={initialDate} onSelect={event => show(event)} onRangeChange={setRange}
+    <CalendarPanel {...overlay} client={readClient} sample={sample} initialDate={initialDate} focus={focus} onPlanUnscheduled={onPlanUnscheduled} onSelect={event => show(event)} onRangeChange={setRange}
       onTimeRangeSelect={disabled ? undefined : showRange} reloadKey={reloadKey + externalReloadKey} />
     <StudyBlockDialog open={open} selectedEvent={selectedEvent} initialStartAt={initialStartAt} initialEndAt={initialEndAt}
       onClose={() => setOpen(false)} onCreate={input => perform(async () => {

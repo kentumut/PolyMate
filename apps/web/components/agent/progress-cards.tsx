@@ -47,9 +47,9 @@ export function ProgressCardView({ data, busy, confirmed, onConfirm }: {
         {card.action === 'done' && <p>{card.assignmentFinished ? 'Moodle submission remains separate.' : 'Mark this session done; the whole assignment stays open.'}</p>}
         {card.note && <p className="whitespace-pre-wrap">Difficulty / note: {card.note}</p>}
       </div>}
-      <p className="mt-2 text-xs text-[#617269]">{saved ? 'Confirmed.' : card.recovery ? 'Progress is already saved. Confirm to check Google completion using the original report and operation ID.' : `Not saved until you confirm. New reports expire ${time(card.expiresAt)}. Repeating confirmation retries the same request.`}</p>
+      <p className="mt-2 text-xs text-[#617269]">{saved ? 'Confirmed.' : card.recovery ? 'Progress is already saved. Check again to confirm the session was also marked done in your calendar.' : `Not saved until you confirm. New reports expire ${time(card.expiresAt)}. Confirming twice is safe.`}</p>
       {card.assignmentFinished && !saved && <label className="mt-3 flex items-start gap-2 text-sm"><input type="checkbox" checked={wholeAssignment} onChange={event => setWholeAssignment(event.target.checked)} disabled={busy} />I confirm the entire assignment is finished, not just this session.</label>}
-      <button type="button" disabled={busy || saved || (card.assignmentFinished === true && !wholeAssignment)} onClick={() => onConfirm(card.draftToken, wholeAssignment)} className="mt-3 rounded-xl bg-[#173b32] px-4 py-2 text-sm text-white disabled:opacity-50">{saved ? 'Confirmed' : card.kind === 'link' ? 'Confirm link' : 'Confirm / retry this report'}</button>
+      <button type="button" disabled={busy || saved || (card.assignmentFinished === true && !wholeAssignment)} onClick={() => onConfirm(card.draftToken, wholeAssignment)} className="mt-3 rounded-xl bg-[#173b32] px-4 py-2 text-sm text-white disabled:opacity-50">{saved ? 'Confirmed' : card.kind === 'link' ? 'Confirm link' : card.recovery ? 'Check again' : 'Confirm report'}</button>
       {!saved && <p className="mt-2 text-xs">If the details are wrong, ask PolyMate to revise them before confirming.</p>}
     </section>;
   }

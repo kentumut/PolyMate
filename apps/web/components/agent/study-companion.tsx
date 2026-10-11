@@ -6,8 +6,8 @@ import { currentPlanApproval } from '@polymate/core/agent/contracts';
 import type { AssignmentTimeline, MoodleSnapshot } from '@polymate/contracts/moodle';
 import type { CalendarEvent } from '@polymate/contracts/calendar';
 import type { OnboardingProfile, OnboardingState } from '@polymate/contracts/onboarding';
-import { ArrowLeft, ArrowUp, Check, GraduationCap, RotateCcw, Sparkles, Square } from 'lucide-react';
-import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { ArrowUp, Check, RotateCcw, Sparkles, Square } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CalendarStudyWorkflow } from '@/components/study/calendar-study-workflow';
@@ -15,13 +15,17 @@ import { GoogleConnection } from '@/components/connections/google-connection';
 import { MoodleConnection } from '@/components/connections/moodle-connection';
 import { DayTimelineGrid } from '@/components/calendar/day-timeline-grid';
 import { MoodleDeadlineList } from '@/components/connections/moodle-calendar-preview';
-import { WorkspaceSidebar, type WorkspaceView } from './workspace-sidebar';
+import { ThemeToggle, WorkspaceSidebar, type WorkspaceView } from './workspace-sidebar';
 import { readSemesterPlan, SemesterPlanner } from '@/components/study/semester-planner';
 import { ProgressCardView } from './progress-cards';
 import { useStudyWorkspace } from '@/components/study/study-workspace-context';
 import type { ProgressReceipt } from '@polymate/contracts/study-progress';
 import { CoachInbox, type CoachReplyTarget } from './coach-inbox';
 import { CoursesPanel } from '@/components/study/courses-panel';
+import { AssignmentsPanel } from '@/components/study/assignments-panel';
+import type { ProposedBlock, UnscheduledWork } from '@/components/calendar/plan-overlay';
+import { CoachPreferences } from './coach-preferences';
+import { SetupChecklist } from './setup-checklist';
 import { Button } from '@/components/ui/button';
 import {
   DEMO_COURSES,
@@ -134,6 +138,8 @@ function AssignmentCards({ data }: { data: unknown }) {
   </section>;
 }
 
+const WRITE_STATUS: Record<string, string> = { synced: 'Saved', pending: 'Still saving', unknown: 'Not confirmed yet', failed: 'Not saved' };
+
 function ScheduleCard({ data }: { data: unknown }) {
   if (!data || typeof data !== 'object') return null;
   const value = data as { timeline?: AssignmentTimeline; progressSync?: string; movedBlock?: { title: string; startAt: string; endAt: string }; createdBlock?: { title: string; startAt: string; endAt: string }; relocatedFrom?: { startAt: string; endAt: string }; deletedBlocks?: Array<{ operationId: string; title: string; startAt: string; endAt: string }>; result?: { complete?: boolean; results?: Array<{ operationId: string; status: string; error?: { message?: string } }> } };
@@ -141,13 +147,13 @@ function ScheduleCard({ data }: { data: unknown }) {
   const attempted = new Set(results.map(item => item.operationId));
   const unattempted = value.timeline?.blocks.filter(block => !attempted.has(block.operationId)) ?? [];
   return <section className="mt-3 rounded-xl border border-[#dce3db] bg-[#fbfcf9] p-4" aria-label="Calendar write results">
-    <h3 className="text-sm font-semibold">Calendar sync results</h3>
+    <h3 className="text-sm font-semibold">Calendar changes</h3>
     {results.length ? <ul className="mt-2 space-y-2">{results.map((item, index) => <li key={`${item.operationId}-${index}`} className="flex gap-2 text-sm">
       <span aria-hidden="true">{item.status === 'synced' ? '✓' : item.status === 'unknown' ? '?' : '!'}</span>
       <span>{(() => {
         const block = (value.timeline?.blocks ?? value.deletedBlocks)?.find(block => block.operationId === item.operationId) ?? value.movedBlock ?? value.createdBlock;
         return block ? <span className="block">{block.title} · {dateTime(block.startAt)}–{dateTime(block.endAt)}</span> : null;
-      })()}<strong className="capitalize">{item.status}</strong>{item.error?.message ? ` — ${item.error.message}` : ''}</span>
+      })()}<strong>{WRITE_STATUS[item.status] ?? item.status}</strong>{item.error?.message ? ` — ${item.error.message}` : ''}</span>
     </li>)}</ul> : <p className="mt-2 text-sm text-[#617269]">No calendar writes were confirmed.</p>}
     {value.relocatedFrom && <p className="mt-3 text-sm text-[#617269]">{dateTime(value.relocatedFrom.startAt)} was already taken. {results.length > 0 && results.every(result => result.status === 'synced')
       ? 'This block was placed in the nearest free slot.'
@@ -180,7 +186,7 @@ function OtherCards({ cards, busy, confirmed, onConfirm }: { cards: AgentCard[];
   </>;
 }
 
-function TimelinePreview({ plan, onSchedule, busy }: { plan: PendingPlan; onSchedule: (partial: boolean) => void; busy: boolean }) {
+function TimelinePreview({ plan, onSchedule, onViewCalendar, busy }: { plan: PendingPlan; onSchedule: (partial: boolean) => void; onViewCalendar: () => void; busy: boolean }) {
   const timeline = plan.timeline;
   const unscheduled = timeline.unscheduled.length > 0;
   return <section className="rounded-2xl border border-[#b9cbbd] bg-[#f5f8f2] p-5" aria-label="Current study timeline draft">
@@ -192,12 +198,13 @@ function TimelinePreview({ plan, onSchedule, busy }: { plan: PendingPlan; onSche
       <DayTimelineGrid blocks={timeline.blocks.map((block, index) => ({ id: `${block.operationId}-${index}`, title: block.title, startAt: block.startAt, endAt: block.endAt, allDay: false, href: safeSource(block.sourceUrl) }))} />
     </div> : <p className="mt-4 rounded-xl bg-white p-3 text-sm">No study blocks fit those constraints.</p>}
     {unscheduled && <div className="mt-3 rounded-xl border border-[#e7d7b9] bg-[#fffaf0] p-3"><h3 className="text-sm font-semibold">Work not scheduled</h3>
-      <ul className="mt-2 space-y-1 text-sm">{timeline.unscheduled.map((item, index) => <li key={`${item.assignmentId}-${index}`}>Entry {item.assignmentId}: {item.remainingMinutes} min remain — {item.reason}</li>)}</ul>
+      <ul className="mt-2 space-y-1 text-sm">{timeline.unscheduled.map((item, index) => <li key={`${item.assignmentId}-${index}`}>{item.remainingMinutes} min could not be placed — {item.reason}</li>)}</ul>
     </div>}
     {timeline.warnings.map((warning, index) => <p key={index} className="mt-2 text-xs text-[#8a5a26]">{warning}</p>)}
     <div className="mt-4 flex flex-wrap gap-2">
       {!unscheduled && timeline.blocks.length > 0 && <button type="button" disabled={busy} onClick={() => onSchedule(false)} className="rounded-xl bg-[#173b32] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Add to calendar</button>}
       {unscheduled && timeline.blocks.length > 0 && <button type="button" disabled={busy} onClick={() => onSchedule(true)} className="rounded-xl bg-[#173b32] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Add only the blocks that fit</button>}
+      {timeline.blocks.length > 0 && <button type="button" onClick={onViewCalendar} className="rounded-xl border border-[#cbd7ce] px-4 py-2 text-sm">View on calendar</button>}
       <button type="button" disabled={busy} onClick={() => document.getElementById('agent-message')?.focus()} className="rounded-xl border border-[#cbd7ce] px-4 py-2 text-sm disabled:opacity-50">Revise constraints</button>
     </div>
   </section>;
@@ -309,6 +316,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
   const [coachRefreshKey, setCoachRefreshKey] = useState(0);
   const [coachOutstanding, setCoachOutstanding] = useState(0);
   const [nextEvent, setNextEvent] = useState<CalendarEvent | null>(null);
+  const [calendarFocus, setCalendarFocus] = useState<{ date: string }>();
   const [demoStage, setDemoStage] = useState<DemoStage>(demo ? 'onboarding' : 'brief');
   const [demoProfile, setDemoProfile] = useState<DemoProfile | null>(null);
   const [demoCommitment, setDemoCommitment] = useState<DemoCommitment>('volunteering');
@@ -364,6 +372,30 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
 
   useEffect(() => { messagesEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [busy, messages, pendingPlan]);
 
+  // Opens the conversation named in the address: on load, and when Back/Forward changes it.
+  const urlChatId = searchParams.get('chat');
+  useEffect(() => {
+    if (sample || !urlChatId || urlChatId === chatId) return;
+    let current = true;
+    fetchChat(urlChatId).then(thread => {
+      if (!current) return;
+      setChatId(urlChatId); setCoachReply(null);
+      setMessages(thread.messages.map(item => ({ id: ++nextId.current, role: item.role, text: item.content, cards: [] })));
+    }).catch(() => {
+      if (!current) return;
+      // A stale or foreign link falls back to a fresh conversation.
+      const params = new URLSearchParams(window.location.search);
+      params.delete('chat');
+      window.history.replaceState(null, '', `/calendar?${params.toString()}`);
+    });
+    return () => { current = false; };
+  }, [chatId, sample, urlChatId]);
+
+  const draftBlocks = useMemo<ProposedBlock[]>(() => (pendingPlan?.timeline.blocks ?? []).map(block => ({
+    kind: 'proposed', id: `draft:${block.operationId}`, operationId: block.operationId, title: block.title,
+    startAt: block.startAt, endAt: block.endAt, allDay: false, status: 'proposed',
+  })), [pendingPlan]);
+
   function hrefFor(nextView: WorkspaceView) {
     const params = new URLSearchParams(searchParams.toString());
     params.set('view', nextView);
@@ -380,16 +412,20 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
     }
   }
 
+  /** Keeps the open conversation in the address so a reload or a shared link returns to it. */
+  function chatHref(id: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('view', 'chat');
+    params.delete('google');
+    if (id) params.set('chat', id); else params.delete('chat');
+    return `/calendar?${params.toString()}`;
+  }
+
   function respondToCoach(message: CoachReplyTarget) {
     setCoachReply(message); setInput('');
     window.history.pushState(null, '', hrefFor('chat'));
     window.scrollTo({ top: 0 });
     window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
-  }
-
-  function showChatView() {
-    window.history.pushState(null, '', hrefFor('chat'));
-    window.scrollTo({ top: 0 });
   }
 
   async function openChat(id: string) {
@@ -400,14 +436,16 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
       setChatId(id); setCoachReply(null); setInput('');
       setMessages(thread.messages.map(item => ({ id: ++nextId.current, role: item.role, text: item.content, cards: [] })));
       if (thread.chat.unread) void chats.markRead(id);
-      showChatView();
+      window.history.pushState(null, '', chatHref(id));
+      window.scrollTo({ top: 0 });
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'This chat could not be opened.'); }
   }
 
   function newChat() {
     if (busy) return;
     setChatId(crypto.randomUUID()); setMessages([]); setCoachReply(null); setError('');
-    showChatView();
+    window.history.pushState(null, '', chatHref(null));
+    window.scrollTo({ top: 0 });
     window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
   }
 
@@ -416,9 +454,21 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
     if (id) await openChat(id);
   }
 
+  function planUnscheduled(items: readonly UnscheduledWork[]) {
+    openRecommendation(`Plan study time for my unscheduled work: ${items.map(item => `${item.title} (${item.minutes} min)`).join(', ')}.`);
+  }
+
+  function viewDraftOnCalendar() {
+    const first = pendingPlan?.timeline.blocks.map(block => block.startAt).sort()[0];
+    if (first) setCalendarFocus({ date: first });
+    window.history.pushState(null, '', hrefFor('calendar'));
+    window.scrollTo({ top: 0 });
+  }
+
   function openRecommendation(prompt: string) {
     setInput(prompt);
-    showChatView();
+    window.history.pushState(null, '', hrefFor('chat'));
+    window.scrollTo({ top: 0 });
     window.setTimeout(() => document.getElementById('agent-message')?.focus(), 0);
   }
 
@@ -644,6 +694,11 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
       setMessages(previous => [...previous.filter(message => message.id !== streamId), { id: streamId ?? ++nextId.current, role: 'assistant', text: body.reply, cards: body.cards ?? [] }].slice(-40) as ChatMessage[]);
       setCoachRefreshKey(value => value + 1);
       void chats.refresh();
+      if (searchParams.get('chat') !== chatId) window.history.replaceState(null, '', (() => {
+        const params = new URLSearchParams(window.location.search);
+        params.set('chat', chatId);
+        return `/calendar?${params.toString()}`;
+      })());
       setPendingPlan(body.pendingPlan ?? null);
       if (action && 'draftToken' in action) {
         const result = body.cards?.find(card => card.kind === 'progress')?.data as { receipt?: ProgressReceipt } | undefined;
@@ -671,6 +726,8 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
       }
       const message = reason instanceof Error ? reason.message : 'PolyMate could not answer. Try again.';
       setError(message);
+      // Give the unanswered message back so it can be resent without retyping.
+      if (!action) setInput(current => current || studentText);
       if (action) setMessages(previous => [...previous, { id: ++nextId.current, role: 'assistant', text: message, cards: [] }]);
     } finally {
       if (inFlight.current === controller) inFlight.current = null;
@@ -715,8 +772,6 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4 sm:px-6">
         <p className="truncate text-sm font-medium">{view === 'chat' ? <>Chat {demo && <span className="ml-2 rounded-full bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Demo</span>}</> : <>PolyMate <span className="text-muted-foreground">/ {pageTitle}</span></>}</p>
         <div className="flex items-center gap-1">
-          {view === 'courses' && <Button asChild size="sm" variant="outline"><a href={hrefFor('planner')} aria-label="Open semester plan" onClick={event => navigate(event, 'planner')}><GraduationCap aria-hidden="true" /><span className="hidden sm:inline">Semester plan</span></a></Button>}
-          {view === 'planner' && <Button asChild size="sm" variant="ghost"><a href={hrefFor('courses')} aria-label="Back to courses" onClick={event => navigate(event, 'courses')}><ArrowLeft aria-hidden="true" /><span className="hidden sm:inline">Courses</span></a></Button>}
           <CoachInbox key={demo ? `${demoProfile?.coachCadence ?? 'setup'}:${demoCoachAnswers}:${demoMemories.map(item => item.id).join(':')}` : 'coach'} sample={sample} sampleOverride={demoCoach} refreshKey={coachRefreshKey} onRespond={respondToCoach} onOutstandingChange={setCoachOutstanding} />
         </div>
       </header>
@@ -730,11 +785,12 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
 
         {/* Keep panels mounted so navigation preserves drafts, forms, and calendar state. */}
         <section aria-label="Calendar" className={view === 'calendar' ? 'block' : 'hidden'}>
-          <div className="min-w-0"><CalendarStudyWorkflow sample={sample} demo={demo} externalReloadKey={reloadKey} initialDate={demoRange?.from} /></div>
+          <div className="min-w-0"><CalendarStudyWorkflow sample={sample} demo={demo} externalReloadKey={reloadKey} initialDate={demoRange?.from} draftBlocks={draftBlocks} focus={calendarFocus} onPlanUnscheduled={sample && !demo ? undefined : planUnscheduled} /></div>
         </section>
 
         <section aria-label="Courses" className={view === 'courses' ? 'space-y-6' : 'hidden'}>
           <CoursesPanel sample={sample} demo={demo} onAddAssignment={() => openRecommendation(demo ? DEMO_ASSIGNMENT_CAPTURE_PROMPT : 'I want to add an assignment (use Europe/Zurich time): ')} />
+          <AssignmentsPanel sample={sample} onCalendarChange={() => setReloadKey(value => value + 1)} />
         </section>
 
         <section aria-label="Semester planning" className={view === 'planner' ? '' : 'hidden'}>
@@ -752,8 +808,9 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
                 <h1 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-4xl">{demo ? 'See PolyMate work across your study week' : `How are you feeling, ${firstName}?`}</h1>
                 <p className="mt-3 max-w-xl text-sm leading-5 text-muted-foreground sm:mt-4 sm:leading-6">{demo ? <><span className="sm:hidden">Try the real Chat, memory, approval flow, and calendar.</span><span className="hidden sm:inline">This guided conversation uses the real Chat interface, cards, approval flow, and in-memory calendar contract. Every demonstrated capability also exists in the production agent.</span></> : nextEvent && nextEventTime ? <>Your next event is <span className="font-medium text-foreground">{nextEvent.title}</span> on {nextEventTime}.</> : 'Your calendar is clear for now. What would you like to make progress on?'}</p>
                 {coachOutstanding > 0 && <button type="button" onClick={() => document.getElementById('coach-notifications-trigger')?.click()} className="mt-5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900">Your coach needs {coachOutstanding} response{coachOutstanding === 1 ? '' : 's'} from you</button>}
+                {!demo && !sample && <SetupChecklist active={view === 'chat'} hrefFor={hrefFor} onNavigate={navigate} />}
                 <div className="mt-8 grid w-full gap-2 sm:grid-cols-3">
-                  {!demo && ['Plan my week', 'What should I study next?', 'Show my upcoming deadlines'].map(prompt => <button key={prompt} type="button" disabled={busy || sample} onClick={() => { setInput(prompt); document.getElementById('agent-message')?.focus(); }} className="rounded-xl border bg-card px-4 py-3 text-left text-sm shadow-sm transition-colors hover:bg-accent disabled:opacity-50">{prompt}</button>)}
+                  {!demo && ['Plan my week', 'What should I study next?', 'Show my upcoming deadlines'].map(prompt => <button key={prompt} type="button" disabled={busy || sample} onClick={() => void sendMessage(undefined, undefined, prompt)} className="rounded-xl border bg-card px-4 py-3 text-left text-sm shadow-sm transition-colors hover:bg-accent disabled:opacity-50">{prompt}</button>)}
                 </div>
               </div>}
 
@@ -766,7 +823,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
                   {quickReplies.map(reply => <button key={reply} type="button" onClick={() => void sendMessage(undefined, undefined, reply)} className="rounded-full border bg-card px-3.5 py-1.5 text-sm shadow-sm transition-colors hover:bg-accent">{reply}</button>)}
                 </div>}
                 {busy && streamingId === null && <p className="text-sm text-muted-foreground" role="status">{status}</p>}
-                {pendingPlan && <TimelinePreview plan={pendingPlan} onSchedule={allowPartial => void sendMessage(undefined, { allowPartial })} busy={busy} />}
+                {pendingPlan && <TimelinePreview plan={pendingPlan} onSchedule={allowPartial => void sendMessage(undefined, { allowPartial })} onViewCalendar={viewDraftOnCalendar} busy={busy} />}
                 <div ref={messagesEnd} />
               </div>}
             </div>
@@ -800,9 +857,11 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
         <section aria-label="Settings" className={view === 'settings' ? 'grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]' : 'hidden'}>
           <MoodleConnection />
           <div className="space-y-5">
+            {!sample && <CoachPreferences development={development} onSaved={() => { setCoachRefreshKey(value => value + 1); void chats.refresh(); }} />}
             {!sample && <CheckInSettings paused={chats.checkInsPaused} error={chats.error} disabled={busy} onPause={paused => void chats.setPaused(paused)} onCheckInNow={() => void checkInNow()} />}
-            <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-lg font-medium">Google Calendar</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Connect your primary calendar so PolyMate can protect existing commitments while it plans, and choose whether study blocks are saved there. Personal events remain read-only.</p><GoogleConnection demo={demo} /></section>
-            <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-sm font-medium">Your study space</h2><dl className="mt-4 space-y-4 text-sm"><div><dt className="text-xs text-muted-foreground">Signed in as</dt><dd className="mt-1 break-words">{ownerName}</dd></div><div><dt className="text-xs text-muted-foreground">Calendar timezone</dt><dd className="mt-1">Europe/Zurich</dd></div></dl></section>
+            <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-lg font-medium">Google Calendar</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Connect your primary calendar so PolyMate can protect existing commitments while it plans, and choose whether study blocks are saved there. Personal events remain read-only.</p><GoogleConnection demo={demo} onCalendarChange={() => setReloadKey(value => value + 1)} /></section>
+            <section className="rounded-xl border bg-card p-6 shadow-sm"><h2 className="text-sm font-medium">Your study space</h2><dl className="mt-4 space-y-4 text-sm"><div><dt className="text-xs text-muted-foreground">Signed in as</dt><dd className="mt-1 break-words">{ownerName}</dd></div><div><dt className="text-xs text-muted-foreground">Calendar timezone</dt><dd className="mt-1">Europe/Zurich</dd></div></dl>
+              <div className="mt-4 flex flex-wrap gap-2 border-t pt-4"><ThemeToggle className="border" /></div></section>
           </div>
         </section>
       </div>

@@ -6,10 +6,11 @@ type ConnectionStatus = { connected: boolean; enabled: boolean; csrfToken: strin
 type CalendarHome = 'polymate' | 'google';
 const HOME_LABEL: Record<CalendarHome, string> = { polymate: 'PolyMate calendar', google: 'Google Calendar' };
 
-export function GoogleConnection({ demo = false }: { demo?: boolean }) {
+export function GoogleConnection({ demo = false, onCalendarChange }: { demo?: boolean; onCalendarChange?: () => void }) {
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
+  // Confirmations must not read as errors.
+  const [message, setMessage] = useState<{ text: string; problem: boolean } | null>(null);
   const [home, setHome] = useState<CalendarHome | null>(null);
   const [pendingSwitch, setPendingSwitch] = useState<{ to: CalendarHome; upcomingBlocks: number; csrfToken: string } | null>(null);
 
@@ -24,12 +25,12 @@ export function GoogleConnection({ demo = false }: { demo?: boolean }) {
       })
       .then(data => {
         setStatus(data);
-        if (result === 'connected') setMessage('Google Calendar connected and verified.');
-        if (result === 'error') setMessage('Google Calendar access could not be verified. Allow the requested Calendar permission, then try again.');
-        if (result === 'denied') setMessage('Google connection was cancelled.');
-        if (!result && data.issue === 'needs_reconnect') setMessage('Your Google authorization has expired or was revoked. Reconnect to restore Google Calendar in PolyMate.');
+        if (result === 'connected') setMessage({ text: 'Google Calendar connected and verified.', problem: false });
+        if (result === 'error') setMessage({ text: 'Google Calendar access could not be verified. Allow the requested Calendar permission, then try again.', problem: true });
+        if (result === 'denied') setMessage({ text: 'Google connection was cancelled.', problem: false });
+        if (!result && data.issue === 'needs_reconnect') setMessage({ text: 'Your Google authorization has expired or was revoked. Reconnect to restore Google Calendar in PolyMate.', problem: true });
       })
-      .catch(error => { if (!controller.signal.aborted) setMessage(error.message); });
+      .catch(error => { if (!controller.signal.aborted) setMessage({ text: error.message, problem: true }); });
     fetch('/api/calendar/home', { cache: 'no-store', signal: controller.signal })
       .then(response => response.ok ? response.json() as Promise<{ home: CalendarHome }> : null)
       .then(data => { if (data) setHome(data.home); })
@@ -48,7 +49,7 @@ export function GoogleConnection({ demo = false }: { demo?: boolean }) {
   /** Without confirm, the server only counts the upcoming blocks that would move. */
   async function requestHome(to: CalendarHome, confirm: boolean, csrfToken?: string) {
     setBusy(true);
-    setMessage('');
+    setMessage(null);
     try {
       const token = csrfToken ?? (await (await fetch('/api/calendar/csrf', { cache: 'no-store' })).json() as { csrfToken: string }).csrfToken;
       const response = await fetch('/api/calendar/home', {
@@ -63,10 +64,11 @@ export function GoogleConnection({ demo = false }: { demo?: boolean }) {
       }
       setPendingSwitch(null);
       setHome(body.home ?? to);
-      setMessage(`Study blocks are now saved to your ${HOME_LABEL[to]}${body.moved ? `; ${body.moved} upcoming block${body.moved === 1 ? '' : 's'} moved` : ''}. Reload the calendar to see them.`);
+      setMessage({ text: `Study blocks are now saved to your ${HOME_LABEL[to]}${body.moved ? `; ${body.moved} upcoming block${body.moved === 1 ? '' : 's'} moved` : ''}.`, problem: false });
+      onCalendarChange?.();
     } catch (error) {
       setPendingSwitch(null);
-      setMessage(error instanceof Error ? error.message : 'The calendar could not be changed.');
+      setMessage({ text: error instanceof Error ? error.message : 'The calendar could not be changed.', problem: true });
     } finally {
       setBusy(false);
     }
@@ -75,7 +77,7 @@ export function GoogleConnection({ demo = false }: { demo?: boolean }) {
   async function changeConnection(action: 'start' | 'disconnect') {
     if (!status) return;
     setBusy(true);
-    setMessage('');
+    setMessage(null);
     try {
       const response = await fetch(`/api/integrations/google/${action}`, {
         method: 'POST', headers: { 'x-csrf-token': status.csrfToken }, cache: 'no-store',
@@ -87,10 +89,10 @@ export function GoogleConnection({ demo = false }: { demo?: boolean }) {
         window.location.assign(body.url);
       } else {
         setStatus({ ...status, connected: false });
-        setMessage('Google Calendar disconnected.');
+        setMessage({ text: 'Google Calendar disconnected.', problem: false });
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Google connection request failed.');
+      setMessage({ text: error instanceof Error ? error.message : 'Google connection request failed.', problem: true });
     } finally {
       setBusy(false);
     }
@@ -133,6 +135,6 @@ export function GoogleConnection({ demo = false }: { demo?: boolean }) {
       </div>}
     </fieldset>}
     {status && !status.enabled && <p className="text-xs text-[#617269]">Google connection is not configured yet.</p>}
-    {message && <p className="text-xs text-[#9e3e38]" role="alert">{message}</p>}
+    {message && <p className={message.problem ? 'text-xs text-[#9e3e38]' : 'text-xs text-[#617269]'} role={message.problem ? 'alert' : 'status'}>{message.text}</p>}
   </div>;
 }

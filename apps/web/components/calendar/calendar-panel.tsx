@@ -21,14 +21,21 @@ export type CalendarPanelProps = {
   initialDate?: string;
   onRangeChange?: (range: DateRange) => void;
   onTimeRangeSelect?: (startAt: string, endAt: string) => void;
-} & Pick<WeekViewProps, 'proposed' | 'assignmentLabels' | 'unscheduled'>;
+  /** A new object jumps to the week containing its date, e.g. to show a chat draft. */
+  focus?: { date: string };
+} & Pick<WeekViewProps, 'proposed' | 'assignmentLabels' | 'unscheduled' | 'onPlanUnscheduled'>;
 
 /** Loads the visible week through the shared CalendarClient and owns navigation/selection state. */
-export function CalendarPanel({ client: suppliedClient, sample = false, onSelect, reloadKey, initialDate, onRangeChange, onTimeRangeSelect, ...overlay }: CalendarPanelProps) {
+export function CalendarPanel({ client: suppliedClient, sample = false, onSelect, reloadKey, initialDate, onRangeChange, onTimeRangeSelect, focus, ...overlay }: CalendarPanelProps) {
   const [defaultClient] = useState<CalendarClient>(() => suppliedClient ?? (sample ? new FakeCalendarClient(undefined, 250) : new HttpCalendarClient()));
   const client = suppliedClient ?? defaultClient;
   const [range, setRange] = useState<DateRange>(() => weekRange(initialDate));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [appliedFocus, setAppliedFocus] = useState(focus);
+  if (focus !== appliedFocus) {
+    setAppliedFocus(focus);
+    if (focus) setRange(weekRange(focus.date));
+  }
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState<{ key: string; events: CalendarEvent[]; error: string | null } | null>(null);
   const key = `${range.from}|${reloadKey ?? ''}|${attempt}`;
