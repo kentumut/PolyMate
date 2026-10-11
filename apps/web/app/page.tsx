@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ArrowRight, Brain, CalendarDays, Check, MessageSquareText } from 'lucide-react';
+import { PolyMateMark } from '@/components/brand/polymate-mark';
 
 const features = [
   { icon: MessageSquareText, title: 'Plan through conversation', body: 'Ask what to study next, review deadlines, and shape a realistic week in one chat.' },
@@ -10,7 +11,7 @@ const features = [
 export default function Home() {
   return <main className="min-h-dvh bg-background text-foreground">
     <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8" aria-label="Primary navigation">
-      <Link href="/" className="text-xl font-semibold tracking-tight">PolyMate</Link>
+      <Link href="/" className="flex items-center gap-2.5 text-xl font-semibold tracking-tight" aria-label="PolyMate home"><span className="brand-symbol"><PolyMateMark className="size-5" /></span>PolyMate</Link>
       <div className="flex items-center gap-2"><Link href="/demo" className="rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">View demo</Link><Link href="/calendar" className="rounded-lg bg-foreground px-3.5 py-2 text-sm font-medium text-background transition-opacity hover:opacity-85">Open study space</Link></div>
     </nav>
 
