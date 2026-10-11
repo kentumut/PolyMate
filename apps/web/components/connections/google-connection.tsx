@@ -99,42 +99,42 @@ export function GoogleConnection({ demo = false, onCalendarChange }: { demo?: bo
   }
 
   return <div className="mt-5 space-y-3">
-    <p className="text-sm font-medium text-[#173b32]" role="status">
+    <p className="text-sm font-medium text-[#08407e]" role="status">
       {!status ? 'Checking Google connection…' : status.connected ? 'Google Calendar connected' : 'Google Calendar not connected'}
     </p>
     {status?.enabled && <div className="flex flex-wrap gap-2">
       <button type="button" disabled={busy} onClick={() => changeConnection('start')}
-        className="rounded-xl bg-[#173b32] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+        className="rounded-xl bg-[#08407e] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
         {status.connected || status.issue === 'needs_reconnect' ? 'Reconnect Google' : 'Connect Google'}
       </button>
       {status.connected && <button type="button" disabled={busy} onClick={() => changeConnection('disconnect')}
-        className="rounded-xl border border-[#dce3db] px-4 py-2 text-sm font-medium disabled:opacity-50">
+        className="rounded-xl border border-[#dbe1ea] px-4 py-2 text-sm font-medium disabled:opacity-50">
         Disconnect
       </button>}
     </div>}
-    {status?.enabled && home && <fieldset className="space-y-2 rounded-xl border border-[#dce3db] p-3" disabled={busy}>
-      <legend className="px-1 text-xs font-medium text-[#173b32]">Save study blocks to</legend>
+    {status?.enabled && home && <fieldset className="space-y-2 rounded-xl border border-[#dbe1ea] p-3" disabled={busy}>
+      <legend className="px-1 text-xs font-medium text-[#08407e]">Save study blocks to</legend>
       {(['google', 'polymate'] as const).map(option => <label key={option} className="flex items-start gap-2 text-sm">
         <input type="radio" name="calendar-home" className="mt-1" checked={home === option}
           disabled={option === 'google' && !status.connected && home !== 'google'}
           onChange={() => void requestHome(option, false)} />
-        <span>{HOME_LABEL[option]}<span className="block text-xs text-[#617269]">{option === 'polymate'
+        <span>{HOME_LABEL[option]}<span className="block text-xs text-[#656e7c]">{option === 'polymate'
           ? 'Blocks stay inside PolyMate. Connected Google events show as busy time.'
           : 'Blocks are added to your Google Calendar and also shown in PolyMate.'}</span></span>
       </label>)}
-      {!status.connected && home !== 'google' && <p className="text-xs text-[#617269]">Connect Google to save study blocks there.</p>}
-      {pendingSwitch && <div className="rounded-lg bg-[#edf0eb] p-3 text-xs leading-5 text-[#21362d]" role="status">
+      {!status.connected && home !== 'google' && <p className="text-xs text-[#656e7c]">Connect Google to save study blocks there.</p>}
+      {pendingSwitch && <div className="rounded-lg bg-[#eceff4] p-3 text-xs leading-5 text-[#273141]" role="status">
         <p>{pendingSwitch.upcomingBlocks
           ? `${pendingSwitch.upcomingBlocks} upcoming study block${pendingSwitch.upcomingBlocks === 1 ? '' : 's'} will move to your ${HOME_LABEL[pendingSwitch.to]}. Past blocks stay where they are.`
           : `New study blocks will be saved to your ${HOME_LABEL[pendingSwitch.to]}.`}</p>
         <div className="mt-2 flex gap-2">
           <button type="button" onClick={() => void requestHome(pendingSwitch.to, true, pendingSwitch.csrfToken)}
-            className="rounded-lg bg-[#173b32] px-3 py-1.5 font-medium text-white">Switch</button>
-          <button type="button" onClick={() => setPendingSwitch(null)} className="rounded-lg border border-[#dce3db] px-3 py-1.5 font-medium">Cancel</button>
+            className="rounded-lg bg-[#08407e] px-3 py-1.5 font-medium text-white">Switch</button>
+          <button type="button" onClick={() => setPendingSwitch(null)} className="rounded-lg border border-[#dbe1ea] px-3 py-1.5 font-medium">Cancel</button>
         </div>
       </div>}
     </fieldset>}
-    {status && !status.enabled && <p className="text-xs text-[#617269]">Google connection is not configured yet.</p>}
-    {message && <p className={message.problem ? 'text-xs text-[#9e3e38]' : 'text-xs text-[#617269]'} role={message.problem ? 'alert' : 'status'}>{message.text}</p>}
+    {status && !status.enabled && <p className="text-xs text-[#656e7c]">Google connection is not configured yet.</p>}
+    {message && <p className={message.problem ? 'text-xs text-[#9e3e38]' : 'text-xs text-[#656e7c]'} role={message.problem ? 'alert' : 'status'}>{message.text}</p>}
   </div>;
 }

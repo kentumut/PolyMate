@@ -169,17 +169,17 @@ export function CalendarStudyWorkflow({ sample = false, demo = false, externalRe
         <button type="button" disabled={disabled} onClick={() => show(null)} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">Add study block</button>
       </div>
     </div>
-    {!ready && !recoveryError && <p role="status" className="text-sm text-[#617269]">Checking pending calendar changes…</p>}
+    {!ready && !recoveryError && <p role="status" className="text-sm text-[#656e7c]">Checking pending calendar changes…</p>}
     {recoveryError && <div role="alert" className="rounded-lg border border-[#d9aaa5] bg-white p-3 text-sm text-[#9b302b]">
       {recoveryError} <button type="button" disabled={checking} onClick={retryRecovery} className="ml-2 underline">Retry check</button>
     </div>}
-    {blocking && <div role="status" className="rounded-lg border border-[#c8d3c8] bg-white p-3 text-sm">
+    {blocking && <div role="status" className="rounded-lg border border-[#c8d0dc] bg-white p-3 text-sm">
       {blocking.status === 'unknown' ? 'A calendar change is uncertain.' : 'A calendar change is pending.'} Check its outcome before making another change.
       <button type="button" onClick={reconcile} disabled={busy || checking} className="ml-2 underline disabled:opacity-50">{checking ? 'Checking…' : 'Check change'}</button>
     </div>}
-    {pendingReport && !open && <p role="status" className="rounded-lg border border-[#c8d3c8] bg-white p-3 text-sm">A progress report is unconfirmed. <button type="button" disabled={progressBusy} onClick={retryReport} className="underline">Retry the original report</button></p>}
+    {pendingReport && !open && <p role="status" className="rounded-lg border border-[#c8d0dc] bg-white p-3 text-sm">A progress report is unconfirmed. <button type="button" disabled={progressBusy} onClick={retryReport} className="underline">Retry the original report</button></p>}
     {progressNotice && !open && <p role="status" className="text-sm">{progressNotice}</p>}
-    {!open && result && !blocking && <p role="status" className="text-sm text-[#617269]">{result.status === 'synced' ? sample ? 'Sample calendar change confirmed.' : 'Calendar change saved.' : result.error?.message}</p>}
+    {!open && result && !blocking && <p role="status" className="text-sm text-[#656e7c]">{result.status === 'synced' ? sample ? 'Sample calendar change confirmed.' : 'Calendar change saved.' : result.error?.message}</p>}
     <CalendarPanel {...overlay} client={readClient} sample={sample} initialDate={initialDate} focus={focus} onPlanUnscheduled={onPlanUnscheduled} onSelect={event => show(event)} onRangeChange={setRange}
       onTimeRangeSelect={disabled ? undefined : showRange} reloadKey={reloadKey + externalReloadKey} />
     <StudyBlockDialog open={open} selectedEvent={selectedEvent} initialStartAt={initialStartAt} initialEndAt={initialEndAt}
@@ -204,7 +204,7 @@ export function CalendarStudyWorkflow({ sample = false, demo = false, externalRe
       creationFields={workspace && <label className="block text-sm">Link to assignment (optional)
         <select value={assignmentSelection?.id ?? ''} disabled={busy || Boolean(blocking)}
           onChange={event => { const assignment = workspace.data?.assignments.find(item => item.id === event.target.value); setAssignmentSelection(assignment ? { id: assignment.id, version: assignment.version } : null); }}
-          className="mt-2 w-full rounded-lg border border-[#c8d3c8] bg-white p-2">
+          className="mt-2 w-full rounded-lg border border-[#c8d0dc] bg-white p-2">
           <option value="">No assignment</option>{workspace.data?.assignments.filter(item => !['completed','cancelled'].includes(item.status)).map(item => <option key={item.id} value={item.id}>{item.title} · {item.remainingMinutes} min remaining</option>)}
         </select>
         {workspace.error && <span className="mt-2 block text-xs text-[#9b302b]">{workspace.error}</span>}

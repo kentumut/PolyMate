@@ -12,13 +12,13 @@ export function MoodleCalendarPreview({ snapshot }: { snapshot: MoodleSnapshot }
   const events = snapshot.calendarEvents ?? [];
   const visible = expanded ? events : events.slice(0, 8);
   return <div className="mt-4 space-y-3" aria-label="Moodle calendar events">
-    <p className="text-xs text-[#617269]">{events.length} events · Updated {formatMoodleDate(snapshot.fetchedAt)} · Europe/Zurich</p>
-    {events.length ? <ul className="space-y-2">{visible.map(event => <li key={event.id} className="rounded-xl bg-[#f5f8f2] p-3 text-sm">
-      <p className="text-xs text-[#617269]">{event.courseName}</p><p className="mt-1 font-medium">{event.title}</p>
-      <p className="mt-1 text-xs text-[#617269]">{formatMoodleDate(event.startAt, event.allDay)}{event.allDay ? ' · All day' : event.endAt !== event.startAt ? `–${formatMoodleDate(event.endAt)}` : ' · Calendar date'}</p>
+    <p className="text-xs text-[#656e7c]">{events.length} events · Updated {formatMoodleDate(snapshot.fetchedAt)} · Europe/Zurich</p>
+    {events.length ? <ul className="space-y-2">{visible.map(event => <li key={event.id} className="rounded-xl bg-[#f3f7fd] p-3 text-sm">
+      <p className="text-xs text-[#656e7c]">{event.courseName}</p><p className="mt-1 font-medium">{event.title}</p>
+      <p className="mt-1 text-xs text-[#656e7c]">{formatMoodleDate(event.startAt, event.allDay)}{event.allDay ? ' · All day' : event.endAt !== event.startAt ? `–${formatMoodleDate(event.endAt)}` : ' · Calendar date'}</p>
       {event.description && <details className="mt-2"><summary className="cursor-pointer text-xs underline">Event details</summary><p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5">{event.description}</p></details>}
       <a href={event.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs underline">Open in Moodle</a>
-    </li>)}</ul> : <p className="text-sm text-[#617269]">No events in this export for the recent and upcoming date range. Check your Moodle export filters.</p>}
+    </li>)}</ul> : <p className="text-sm text-[#656e7c]">No events in this export for the recent and upcoming date range. Check your Moodle export filters.</p>}
     {events.length > 8 && <button type="button" onClick={() => setExpanded(value => !value)} className="text-xs underline">{expanded ? 'Show fewer events' : `Show all ${events.length} events`}</button>}
     {snapshot.warnings.map((warning, index) => <p key={index} className="text-xs leading-5 text-[#8a5a26]">{warning}</p>)}
   </div>;
@@ -43,10 +43,10 @@ function DeadlineRow({ event, now, past }: { event: MoodleCalendarEvent; now: Da
   const soon = past ? null : relativeDay(start, now);
   const url = safeMoodleUrl(event.sourceUrl);
   return <li className="flex items-baseline gap-3 py-2 text-sm">
-    <span className={`w-24 shrink-0 tabular-nums ${past ? 'text-[#8a968e]' : 'font-medium'}`}>{dayLabel(start)}<span className="block text-xs font-normal text-[#617269]">{event.allDay ? 'All day' : timeLabel(start)}</span></span>
+    <span className={`w-24 shrink-0 tabular-nums ${past ? 'text-[#8c939e]' : 'font-medium'}`}>{dayLabel(start)}<span className="block text-xs font-normal text-[#656e7c]">{event.allDay ? 'All day' : timeLabel(start)}</span></span>
     <span className="min-w-0 flex-1">
-      {url ? <a href={url} target="_blank" rel="noreferrer" className={`hover:underline ${past ? 'text-[#617269]' : ''}`}>{event.title}</a> : <span className={past ? 'text-[#617269]' : ''}>{event.title}</span>}
-      <span className="block truncate text-xs text-[#748278]">{event.courseName}</span>
+      {url ? <a href={url} target="_blank" rel="noreferrer" className={`hover:underline ${past ? 'text-[#656e7c]' : ''}`}>{event.title}</a> : <span className={past ? 'text-[#656e7c]' : ''}>{event.title}</span>}
+      <span className="block truncate text-xs text-[#767f8b]">{event.courseName}</span>
     </span>
     {soon && <span className="shrink-0 rounded-full bg-[#f3eadb] px-2 py-0.5 text-xs text-[#8a5a26]">{soon}</span>}
   </li>;
@@ -61,13 +61,13 @@ export function MoodleDeadlineList({ snapshot, limit = 5 }: { snapshot: MoodleSn
   const past = events.filter(event => !upcoming.includes(event)).reverse();
   const visible = expanded ? upcoming : upcoming.slice(0, limit);
   return <div aria-label="Moodle deadlines">
-    {upcoming.length ? <ul className="divide-y divide-[#e5eae4]">{visible.map(event => <DeadlineRow key={event.id} event={event} now={now} />)}</ul>
-      : <p className="py-2 text-sm text-[#617269]">Nothing upcoming in your Moodle calendar.</p>}
+    {upcoming.length ? <ul className="divide-y divide-[#e4e9ef]">{visible.map(event => <DeadlineRow key={event.id} event={event} now={now} />)}</ul>
+      : <p className="py-2 text-sm text-[#656e7c]">Nothing upcoming in your Moodle calendar.</p>}
     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
       {upcoming.length > limit && <button type="button" onClick={() => setExpanded(value => !value)} className="underline">{expanded ? 'Show fewer' : `Show all ${upcoming.length} upcoming`}</button>}
     </div>
-    {past.length > 0 && <details className="mt-2 text-xs"><summary className="cursor-pointer text-[#617269]">{past.length} past {past.length === 1 ? 'event' : 'events'}</summary>
-      <ul className="divide-y divide-[#e5eae4]">{past.map(event => <DeadlineRow key={event.id} event={event} now={now} past />)}</ul></details>}
+    {past.length > 0 && <details className="mt-2 text-xs"><summary className="cursor-pointer text-[#656e7c]">{past.length} past {past.length === 1 ? 'event' : 'events'}</summary>
+      <ul className="divide-y divide-[#e4e9ef]">{past.map(event => <DeadlineRow key={event.id} event={event} now={now} past />)}</ul></details>}
     {snapshot.warnings.map((warning, index) => <p key={index} className="mt-2 text-xs leading-5 text-[#8a5a26]">{warning}</p>)}
   </div>;
 }

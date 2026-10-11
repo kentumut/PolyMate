@@ -17,15 +17,15 @@ export function ProgressCardView({ data, busy, confirmed, onConfirm }: {
   const [wholeAssignment, setWholeAssignment] = useState(false);
   if (!data || typeof data !== 'object') return null;
   const card = data as ProgressCard;
-  if (card.phase === 'state') return <section className="mt-3 rounded-xl border border-[#dce3db] bg-white p-4" aria-label="Study progress">
+  if (card.phase === 'state') return <section className="mt-3 rounded-xl border border-[#dbe1ea] bg-white p-4" aria-label="Study progress">
     <h3 className="text-sm font-semibold">Your local study progress</h3>
     {card.refresh?.status === 'unavailable' && <p className="mt-2 text-sm text-[#8a5a26]">{card.refresh.message} The session details below are cached.</p>}
-    {card.refresh?.status === 'cached' && card.sessions.length > 0 && <p className="mt-2 text-xs text-[#617269]">Cached session history. Ask about a specific session to refresh Google details before reporting.</p>}
+    {card.refresh?.status === 'cached' && card.sessions.length > 0 && <p className="mt-2 text-xs text-[#656e7c]">Cached session history. Ask about a specific session to refresh Google details before reporting.</p>}
     {!card.assignments.length && <p className="mt-2 text-sm">No matching local assignments. Add one in Courses → Assignments.</p>}
     <ul className="mt-2 space-y-2 text-sm">{card.assignments.slice(0, 10).map(assignment => <li key={assignment.id}>
       <strong>{assignment.title}</strong> · {assignment.remainingMinutes} min remaining · {assignment.status.replaceAll('_', ' ')}
     </li>)}</ul>
-    <ul className="mt-3 space-y-1 text-xs text-[#617269]">{card.sessions.slice(0, 10).map(session => <li key={session.eventId}>
+    <ul className="mt-3 space-y-1 text-xs text-[#656e7c]">{card.sessions.slice(0, 10).map(session => <li key={session.eventId}>
       {time(session.startAt)} · revision {session.sessionRevision} · {session.deleted ? 'deleted — history retained' : session.completion}
     </li>)}</ul>
     <ul className="mt-3 space-y-2 text-xs">{card.reports.slice(-5).map(report => <li key={report.id}>
@@ -36,9 +36,9 @@ export function ProgressCardView({ data, busy, confirmed, onConfirm }: {
   </section>;
   if (card.phase === 'draft') {
     const saved = confirmed.has(card.draftToken);
-    return <section className="mt-3 rounded-xl border border-[#b9cbbd] bg-[#f5f8f2] p-4" aria-label="Confirm study progress">
+    return <section className="mt-3 rounded-xl border border-[#bbc7d8] bg-[#f3f7fd] p-4" aria-label="Confirm study progress">
       <h3 className="text-sm font-semibold">{card.kind === 'link' ? 'Link this session' : card.recovery ? 'Recover Google completion' : 'Review progress report'} · {card.assignmentTitle}</h3>
-      <p className="mt-2 break-all text-xs text-[#617269]">Session: {card.eventId}</p>
+      <p className="mt-2 break-all text-xs text-[#656e7c]">Session: {card.eventId}</p>
       <p className="mt-1 text-sm">{time(card.startAt)}–{time(card.endAt)}</p>
       {card.sessionRevision && <p className="mt-1 text-xs">Report session revision: {card.sessionRevision}.{card.recovery && ' This is the original saved report; a moved session may now have different times or a newer revision.'}</p>}
       {card.kind === 'report' && <div className="mt-2 space-y-1 text-sm">
@@ -47,13 +47,13 @@ export function ProgressCardView({ data, busy, confirmed, onConfirm }: {
         {card.action === 'done' && <p>{card.assignmentFinished ? 'Moodle submission remains separate.' : 'Mark this session done; the whole assignment stays open.'}</p>}
         {card.note && <p className="whitespace-pre-wrap">Difficulty / note: {card.note}</p>}
       </div>}
-      <p className="mt-2 text-xs text-[#617269]">{saved ? 'Confirmed.' : card.recovery ? 'Progress is already saved. Check again to confirm the session was also marked done in your calendar.' : `Not saved until you confirm. New reports expire ${time(card.expiresAt)}. Confirming twice is safe.`}</p>
+      <p className="mt-2 text-xs text-[#656e7c]">{saved ? 'Confirmed.' : card.recovery ? 'Progress is already saved. Check again to confirm the session was also marked done in your calendar.' : `Not saved until you confirm. New reports expire ${time(card.expiresAt)}. Confirming twice is safe.`}</p>
       {card.assignmentFinished && !saved && <label className="mt-3 flex items-start gap-2 text-sm"><input type="checkbox" checked={wholeAssignment} onChange={event => setWholeAssignment(event.target.checked)} disabled={busy} />I confirm the entire assignment is finished, not just this session.</label>}
-      <button type="button" disabled={busy || saved || (card.assignmentFinished === true && !wholeAssignment)} onClick={() => onConfirm(card.draftToken, wholeAssignment)} className="mt-3 rounded-xl bg-[#173b32] px-4 py-2 text-sm text-white disabled:opacity-50">{saved ? 'Confirmed' : card.kind === 'link' ? 'Confirm link' : card.recovery ? 'Check again' : 'Confirm report'}</button>
+      <button type="button" disabled={busy || saved || (card.assignmentFinished === true && !wholeAssignment)} onClick={() => onConfirm(card.draftToken, wholeAssignment)} className="mt-3 rounded-xl bg-[#08407e] px-4 py-2 text-sm text-white disabled:opacity-50">{saved ? 'Confirmed' : card.kind === 'link' ? 'Confirm link' : card.recovery ? 'Check again' : 'Confirm report'}</button>
       {!saved && <p className="mt-2 text-xs">If the details are wrong, ask PolyMate to revise them before confirming.</p>}
     </section>;
   }
-  if (card.phase === 'saved') return <section className="mt-3 rounded-xl border border-[#dce3db] bg-white p-4" aria-label="Saved progress result">
+  if (card.phase === 'saved') return <section className="mt-3 rounded-xl border border-[#dbe1ea] bg-white p-4" aria-label="Saved progress result">
     {card.kind === 'link' ? <p className="text-sm">Assignment link saved.</p> : <>
       <p className="text-sm"><strong>{label(card.receipt.report.action)} report saved.</strong> This report recorded {card.receipt.assignment.remainingMinutes} min remaining.</p>
       <p className="mt-2 text-xs">{card.receipt.report.assignmentFinished ? 'Assignment completed; Moodle submission is separate.' : 'Whole-assignment completion was not reported.'}</p>

@@ -65,7 +65,7 @@ export function CalendarPanel({ client: suppliedClient, sample = false, onSelect
       notice={sample ? FAKE_CALENDAR_LABEL : undefined}
       onSelect={select} onRangeChange={next => { setRange(next); onRangeChange?.(next); }} onRetry={() => setAttempt(n => n + 1)}
       onTimeRangeSelect={onTimeRangeSelect} />
-    {selected && !onSelect && <p className="rounded-xl border border-[#dce3db] bg-white px-4 py-3 text-sm" role="status">
+    {selected && !onSelect && <p className="rounded-xl border border-[#dbe1ea] bg-white px-4 py-3 text-sm" role="status">
       {eventLabel(selected, overlay.assignmentLabels?.get(selected.id))}
     </p>}
   </div>;

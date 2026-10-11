@@ -8,8 +8,8 @@ import { createImportFixtureAdapter, ImportConfirmationError, importAssignmentFi
 import { PersistentImportPanel } from './persistent-import-panel';
 
 const time = (value: string) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zurich', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
-const control = 'min-h-11 w-full rounded-lg border border-[#c8d3c8] bg-white p-2 text-sm';
-const button = 'min-h-11 rounded-lg border border-[#173b32] px-3 py-2 text-sm disabled:opacity-50';
+const control = 'min-h-11 w-full rounded-lg border border-[#c8d0dc] bg-white p-2 text-sm';
+const button = 'min-h-11 rounded-lg border border-[#08407e] px-3 py-2 text-sm disabled:opacity-50';
 
 export function CalendarImportPanel({ fixture = false, onSaved }: { fixture?: boolean; onSaved?: () => void }) {
   return fixture ? <FixtureImportPanel /> : <PersistentImportPanel onSaved={onSaved} />;
@@ -64,9 +64,9 @@ function FixtureImportPanel() {
       setMessage(error instanceof Error ? error.message : 'Confirmation failed; your edits are preserved.');
     } finally { inFlight.current = false; setBusy(false); feedback.current?.focus(); }
   }
-  return <section className="space-y-4 rounded-xl border border-[#c8d3c8] p-4" aria-label="Import calendar review" aria-busy={busy}>
+  return <section className="space-y-4 rounded-xl border border-[#c8d0dc] p-4" aria-label="Import calendar review" aria-busy={busy}>
     <h3 className="font-semibold">Import calendar — review prototype</h3>
-    <p className="text-sm text-[#617269]">Upload a Moodle or myStudies ICS export. Parsing is real; confirmation is a labelled fixture, in memory only. It does not create assignments or calendar events. Reload clears this review.</p>
+    <p className="text-sm text-[#656e7c]">Upload a Moodle or myStudies ICS export. Parsing is real; confirmation is a labelled fixture, in memory only. It does not create assignments or calendar events. Reload clears this review.</p>
     <p className="text-xs">Every event starts unselected. Lectures and personal commitments are not automatically assignments. File exports are snapshots; use a new export to review changes.</p>
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="text-sm">Source<select className={control} disabled={busy || Boolean(preview) || Boolean(pending)} value={source} onChange={event => setSource(event.target.value as ImportSource)}><option value="moodle">Moodle</option><option value="mystudies">myStudies</option></select></label>
@@ -84,7 +84,7 @@ function FixtureImportPanel() {
       {preview.warnings.length > 0 && <ul aria-label="Import warnings" className="list-inside list-disc space-y-1 text-xs text-[#8a5a26]">{preview.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>}
       <ul className="max-h-[36rem] space-y-3 overflow-y-auto" aria-label="Imported event preview">{preview.events.map((event, index) => {
         const rowId = `${id}-${index}`; const value = fields[event.key]; const chosen = selected.has(event.key);
-        return <li key={event.key} className="space-y-2 rounded-lg border border-[#dce3db] p-3">
+        return <li key={event.key} className="space-y-2 rounded-lg border border-[#dbe1ea] p-3">
           <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={chosen} disabled={locked} onChange={change => setSelected(previous => {
             const next = new Set(previous); if (change.target.checked) next.add(event.key); else next.delete(event.key); return next;
           })} /><span className="break-words">Prepare as assignment: <strong>{event.title}</strong></span></label>
@@ -102,7 +102,7 @@ function FixtureImportPanel() {
           <option value="success">Success</option><option value="failure">Failed save</option><option value="conflict">Source conflict</option><option value="unknown">Lost reply — same-request retry</option><option value="slow">Slow confirmation</option>
         </select></label>
         {pending && <p className="text-sm">Unconfirmed fixture request. Your original selection is frozen; retry it before replacing the file.</p>}
-        <button type="button" className={`${button} bg-[#173b32] text-white`} disabled={busy || (!pending && !selected.size)} onClick={() => void confirm()}>{busy ? 'Confirming…' : pending ? 'Retry same fixture request' : 'Confirm selection — fixture only'}</button>
+        <button type="button" className={`${button} bg-[#08407e] text-white`} disabled={busy || (!pending && !selected.size)} onClick={() => void confirm()}>{busy ? 'Confirming…' : pending ? 'Retry same fixture request' : 'Confirm selection — fixture only'}</button>
       </>}
       {result && <p role="status" className="text-sm">Fixture result: {result.created} new, {result.updated} changed, {result.unchanged} unchanged. This adapter deduplicates reviewed assignments within this tab only; persistent reimport is not connected.</p>}
     </>}

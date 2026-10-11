@@ -203,13 +203,13 @@ export function WeekView({
       {loading && <div className="absolute inset-0 z-30 grid place-items-center bg-background/60">
         <span className="rounded-full border bg-card px-4 py-2 text-xs font-medium shadow-sm" role="status">Loading your week…</span>
       </div>}
-      {!loading && !error && items.length === 0 && <p className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-sm text-[#748278]">Nothing planned this week yet.</p>}
+      {!loading && !error && items.length === 0 && <p className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-sm text-[#767f8b]">Nothing planned this week yet.</p>}
     </div>
 
     <footer className="flex flex-wrap gap-4 border-t px-4 py-2.5 text-[11px] text-muted-foreground" aria-label="Legend">
-      {events.some(event => event.source === 'google-personal') && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-l-[3px] border-[#9aa79f] bg-[#eef1ec]" />Personal Google events · view only</span>}
-      <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#2f6b55]" />PolyMate study block</span>
-      <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border border-dashed border-[#2f6b55] bg-[#e4efe7]" />Done</span>
+      {events.some(event => event.source === 'google-personal') && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-l-[3px] border-[#9ca4af] bg-[#edf0f5]" />Personal Google events · view only</span>}
+      <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#215caf]" />PolyMate study block</span>
+      <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border border-dashed border-[#215caf] bg-[#e5ecf7]" />Done</span>
       {proposed.length > 0 && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border-2 border-dashed border-[#c08a2b] bg-[#fffaf0]" />Proposed, not added yet</span>}
       {onTimeRangeSelect && <span className="ml-auto"><span className="hidden md:inline">Drag across an empty time slot to add a block</span><span className="md:hidden">Tap an empty time slot to add a block</span></span>}
     </footer>
@@ -221,7 +221,7 @@ function SelectionPreview({ selection, hours }: { selection: DragSelection; hour
   const end = selection.anchorMinute === selection.focusMinute ? start + 50 : Math.max(selection.anchorMinute, selection.focusMinute);
   const span = (hours.end - hours.start) * 60;
   const label = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
-  return <div className="pointer-events-none absolute inset-x-0 z-10 mx-0.5 rounded-md border border-[#2f6b55] bg-[#dcebe1]/90 px-1.5 py-1 text-[11px] font-semibold text-[#173b32] shadow-sm"
+  return <div className="pointer-events-none absolute inset-x-0 z-10 mx-0.5 rounded-md border border-[#215caf] bg-[#dee7f5]/90 px-1.5 py-1 text-[11px] font-semibold text-[#08407e] shadow-sm"
     style={{ top: `${((start - hours.start * 60) / span) * 100}%`, height: `${Math.max(((end - start) / span) * 100, 1)}%` }} aria-hidden="true">
     {label(start)}–{label(end)}
   </div>;
@@ -230,9 +230,9 @@ function SelectionPreview({ selection, hours }: { selection: DragSelection; hour
 function eventClasses(event: CalendarEvent, selected: boolean): string {
   const base = 'w-full overflow-hidden rounded-md text-left text-[11px] leading-tight transition focus-visible:z-30 focus-visible:outline-offset-1';
   const ring = selected ? ' ring-2 ring-[#d49a2f] ring-offset-1 z-20' : '';
-  if (event.source === 'google-personal') return `${base} border-l-[3px] border-[#9aa79f] bg-[#eef1ec] text-[#3d4c44] hover:bg-[#e5eae2]${ring}`;
-  if (event.completion === 'done') return `${base} border border-dashed border-[#2f6b55] bg-[#e4efe7] text-[#2f6b55] hover:bg-[#d9e8dd]${ring}`;
-  return `${base} bg-[#2f6b55] text-white shadow-sm hover:bg-[#245a47]${ring}`;
+  if (event.source === 'google-personal') return `${base} border-l-[3px] border-[#9ca4af] bg-[#edf0f5] text-[#404855] hover:bg-[#e3e9f0]${ring}`;
+  if (event.completion === 'done') return `${base} border border-dashed border-[#215caf] bg-[#e5ecf7] text-[#215caf] hover:bg-[#dbe4f2]${ring}`;
+  return `${base} bg-[#215caf] text-white shadow-sm hover:bg-[#1a4f99]${ring}`;
 }
 
 type EventButtonProps = { event: CalendarEvent; assignment?: string; selected: boolean; onSelect: (id: string) => void; compact?: boolean };
