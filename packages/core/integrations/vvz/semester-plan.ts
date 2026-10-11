@@ -50,7 +50,8 @@ export function parseSemesterPlan(value: unknown): SemesterPlan {
   if (!Array.isArray(input.courses) || input.courses.length > 50) throw new Error('A semester plan may contain at most 50 courses.');
   const courses = input.courses.map((value, index): SemesterPlanCourse => {
     const course = record(value, `course ${index + 1}`);
-    exact(course, ['id', 'semester', 'number', 'title', 'credits', 'officialVvzUrl', 'status', 'sourceSemester'], `course ${index + 1}`);
+    // Search and recommendation results retain display-only catalogue metadata in localStorage.
+    // Read only the plan contract fields instead of rejecting those harmless extra properties.
     if (typeof course.id !== 'number' || !Number.isSafeInteger(course.id) || course.id <= 0) throw new Error('Every course needs a positive VVZ unit ID.');
     if (course.number !== null && typeof course.number !== 'string') throw new Error('Course numbers must be text or null.');
     if (course.title !== null && typeof course.title !== 'string') throw new Error('Course titles must be text or null.');

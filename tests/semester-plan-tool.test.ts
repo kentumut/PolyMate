@@ -13,8 +13,10 @@ const course = {
 
 describe('semester-plan agent tool contract', () => {
   it('validates the browser plan and preserves only the bounded contract', () => {
-    const plan = { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [course] };
-    expect(parseSemesterPlan(plan)).toEqual(plan);
+    const plan = { major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30, courses: [{
+      ...course, reason: 'Suggested by the planner.', language: 'English', scrapedAt: '2026-10-10T08:00:00.000Z',
+    }] };
+    expect(parseSemesterPlan(plan)).toEqual({ ...plan, courses: [course] });
     expect(() => parseSemesterPlan({ ...plan, ownerId: 'forged' })).toThrow('unsupported fields');
     expect(() => parseSemesterPlan({ ...plan, courses: [course, course] })).toThrow('only once');
   });
