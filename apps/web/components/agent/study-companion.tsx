@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent }
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CalendarStudyWorkflow } from '@/components/study/calendar-study-workflow';
+import { PolyMateMark } from '@/components/brand/polymate-mark';
 import { GoogleConnection } from '@/components/connections/google-connection';
 import { MoodleConnection } from '@/components/connections/moodle-connection';
 import { DayTimelineGrid } from '@/components/calendar/day-timeline-grid';
@@ -758,7 +759,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
   const onboardingActive = demoOnboarding;
 
   if (studentOnboarding) return <div className="flex min-h-dvh flex-col bg-muted/25">
-    <header className="flex h-16 shrink-0 items-center border-b bg-background px-5 sm:px-8"><Link href="/" className="text-xl font-semibold tracking-tight">PolyMate</Link></header>
+    <header className="flex h-16 shrink-0 items-center border-b bg-background px-5 sm:px-8"><Link href="/" className="flex items-center gap-2.5 text-xl font-semibold tracking-tight" aria-label="PolyMate home"><span className="brand-symbol"><PolyMateMark className="size-5" /></span>PolyMate</Link></header>
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 py-8 sm:px-8">
       {onboardingStatus === 'required' && <StudentOnboarding demo={false} busy={onboardingBusy} error={onboardingError} onComplete={profile => void completeStudentOnboarding(profile)} />}
       {onboardingStatus === 'loading' && <div className="my-auto text-center"><p className="text-sm font-medium">Preparing your study space…</p><p className="mt-2 text-sm text-muted-foreground">Loading your saved preferences.</p></div>}
@@ -805,6 +806,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
             <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 pb-8 pt-6 sm:px-6">
               {demoOnboarding && <StudentOnboarding demo onComplete={completeDemoOnboarding} />}
               {!onboardingActive && !messages.length && <div className="my-auto flex flex-col items-center py-5 text-center sm:py-10">
+                <span className="brand-symbol mb-6" aria-hidden="true"><PolyMateMark className="size-5" /></span>
                 <h1 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-4xl">{demo ? 'See PolyMate work across your study week' : `How are you feeling, ${firstName}?`}</h1>
                 <p className="mt-3 max-w-xl text-sm leading-5 text-muted-foreground sm:mt-4 sm:leading-6">{demo ? <><span className="sm:hidden">Try the real Chat, memory, approval flow, and calendar.</span><span className="hidden sm:inline">This guided conversation uses the real Chat interface, cards, approval flow, and in-memory calendar contract. Every demonstrated capability also exists in the production agent.</span></> : nextEvent && nextEventTime ? <>Your next event is <span className="font-medium text-foreground">{nextEvent.title}</span> on {nextEventTime}.</> : 'Your calendar is clear for now. What would you like to make progress on?'}</p>
                 {coachOutstanding > 0 && <button type="button" onClick={() => document.getElementById('coach-notifications-trigger')?.click()} className="mt-5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900">Your coach needs {coachOutstanding} response{coachOutstanding === 1 ? '' : 's'} from you</button>}
