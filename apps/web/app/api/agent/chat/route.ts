@@ -16,13 +16,14 @@ import { ContractError } from '@polymate/contracts/calendar';
 import { chatRouteError } from '@/lib/chats';
 
 export const runtime = 'nodejs';
-export const maxDuration = 120;
+// Semester-plan improvement can run the existing bounded planner workflow before the chat resumes.
+export const maxDuration = 300;
 
 async function readBody(request: NextRequest): Promise<unknown> {
   if (!request.headers.get('content-type')?.startsWith('application/json')) throw new AgentRequestError('Send a JSON message.');
-  if (Number(request.headers.get('content-length')) > 16_000) throw new AgentRequestError('That message is too large.');
+  if (Number(request.headers.get('content-length')) > 64_000) throw new AgentRequestError('That message is too large.');
   let raw: string;
-  try { raw = await readBoundedText(request.body, 16_000); } catch { throw new AgentRequestError('That message is too large or incomplete.'); }
+  try { raw = await readBoundedText(request.body, 64_000); } catch { throw new AgentRequestError('That message is too large or incomplete.'); }
   try { return JSON.parse(raw) as unknown; } catch { throw new AgentRequestError('Send valid JSON.'); }
 }
 

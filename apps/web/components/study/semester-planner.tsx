@@ -29,7 +29,7 @@ function validStoredPlan(value: unknown): value is SemesterPlan {
     && typeof plan.targetCredits === 'number' && plan.targetCredits >= 10 && plan.targetCredits <= 45 && Array.isArray(plan.courses);
 }
 
-function readPlan(): SemesterPlan {
+export function readSemesterPlan(): SemesterPlan {
   if (cachedPlan) return cachedPlan;
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey) ?? 'null') as unknown;
@@ -51,8 +51,8 @@ function savePlan(plan: SemesterPlan) {
 }
 
 function useSemesterPlan() {
-  const plan = useSyncExternalStore(subscribePlan, readPlan, () => initialPlan);
-  return [plan, (update: (current: SemesterPlan) => SemesterPlan) => savePlan(update(readPlan()))] as const;
+  const plan = useSyncExternalStore(subscribePlan, readSemesterPlan, () => initialPlan);
+  return [plan, (update: (current: SemesterPlan) => SemesterPlan) => savePlan(update(readSemesterPlan()))] as const;
 }
 
 export function SemesterPlanner({ sample }: { sample: boolean }) {

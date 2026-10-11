@@ -15,7 +15,7 @@ import { GoogleConnection } from '@/components/connections/google-connection';
 import { MoodleConnection } from '@/components/connections/moodle-connection';
 import { MoodleCalendarPreview } from '@/components/connections/moodle-calendar-preview';
 import { WorkspaceSidebar, type WorkspaceView } from './workspace-sidebar';
-import { SemesterPlanner } from '@/components/study/semester-planner';
+import { readSemesterPlan, SemesterPlanner } from '@/components/study/semester-planner';
 import { ProgressCardView } from './progress-cards';
 import { useStudyWorkspace } from '@/components/study/study-workspace-context';
 import type { ProgressReceipt } from '@polymate/contracts/study-progress';
@@ -71,6 +71,7 @@ const TOOL_STATUS: Record<string, string> = {
   vvz_search_courses: 'Searching the course catalogue…',
   vvz_get_course_details: 'Reading course details…',
   msc_cs_check_graduation: 'Checking graduation requirements…',
+  polymate_semester_plan: 'Reviewing your semester plan…',
 };
 
 /** Reads the chat NDJSON stream until `done`; the done event carries the authoritative reply and cards. */
@@ -619,7 +620,7 @@ export function StudyCompanion({ sample, ownerName, demo = false, demoNow, devel
       }
       const response = await fetch('/api/agent/chat', {
         method: 'POST', headers, credentials: 'same-origin', cache: 'no-store',
-        body: JSON.stringify({ ...(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text }), conversationId: chatId }),
+        body: JSON.stringify({ ...(action ? 'draftToken' in action ? { action: 'confirm_progress', draftToken: action.draftToken, confirmAssignmentFinished: action.confirmAssignmentFinished } : { action: 'schedule_current_plan', allowPartial: action.allowPartial, timelineId: pendingPlan?.timeline.id } : scheduleAction ?? { message: text, semesterPlan: readSemesterPlan() }), conversationId: chatId }),
         signal: controller?.signal,
       });
       let body: ChatResponse;

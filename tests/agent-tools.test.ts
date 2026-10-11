@@ -97,6 +97,9 @@ describe('PolyMate agent tool routing', () => {
     expect(() => parseAgentToolArguments('vvz_get_course_details', { unitId: '204421' })).toThrow('positive VVZ unitId');
     expect(() => parseAgentToolArguments('msc_cs_check_graduation', { major: 'Machine Intelligence', minor: 'Computer Vision', courses: [{ unitId: 204421, status: 'in_progress' }] })).not.toThrow();
     expect(() => parseAgentToolArguments('msc_cs_check_graduation', { major: 'Machine Intelligence', minor: 'Machine Learning', courses: [] })).toThrow('1 to 50');
+    expect(() => parseAgentToolArguments('polymate_semester_plan', { action: 'get_plan' })).not.toThrow();
+    expect(() => parseAgentToolArguments('polymate_semester_plan', { action: 'suggest_alternative' })).toThrow('positive courseId');
+    expect(() => parseAgentToolArguments('polymate_semester_plan', { action: 'get_plan', courseId: 204421 })).toThrow('only supported');
     expect(() => parseAgentToolArguments('moodle_plan_assignment_timeline', {
       work: [{ assignmentId: 8, estimatedMinutes: 25 }], availability: [{ startAt: '2026-10-13T08:00:00Z', endAt: '2026-10-13T09:00:00Z', timezone: 'UTC' }],
     })).toThrow('only a start and end');
@@ -197,6 +200,26 @@ describe('PolyMate agent tool routing', () => {
     });
     expect(publicPendingPlan(owner.userId)).toBeNull();
     endAgentTurn(turn.sessionKey);
+  });
+
+  it('exposes the authenticated browser semester plan without accepting it as a tool argument', async () => {
+    const request = new NextRequest('https://poly.example/api/agent/chat', { method: 'POST', headers: { origin: 'https://poly.example' }, body: '{}' });
+    const semesterPlan = {
+      major: 'Machine Intelligence', minor: 'Computer Graphics', activeSemester: '2026W', targetCredits: 30,
+      courses: [{
+        id: 204421, semester: '2026W', number: '263-0001-00L', title: 'Visual Intelligence', credits: 6,
+        officialVvzUrl: 'https://www.vvz.ethz.ch/Vorlesungsverzeichnis/lerneinheit.view?lerneinheitId=204421', status: 'planned',
+      }],
+    };
+    const { turn } = beginAgentTurn(request, owner, { message: 'Which course am I planning?', semesterPlan });
+    const result = await signedCall(turn.sessionKey, 'polymate_semester_plan', { action: 'get_plan' });
+    expect(result.result).toMatchObject({ plan: semesterPlan, totalCredits: 6 });
+    endAgentTurn(turn.sessionKey);
+
+    const withoutPlan = beginAgentTurn(request, owner, { message: 'Which course am I planning?' }).turn;
+    const missing = await signedCall(withoutPlan.sessionKey, 'polymate_semester_plan', { action: 'get_plan' });
+    expect(missing.error).toMatchObject({ status: 409, message: expect.stringContaining('did not supply a semester plan') });
+    endAgentTurn(withoutPlan.sessionKey);
   });
 
   it('blocks model-initiated writes without explicit consent and requires separate partial consent', async () => {

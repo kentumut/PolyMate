@@ -4,6 +4,7 @@ import { AGENT_DELETE_LIMIT_PER_TURN } from './contracts';
 import { MOODLE_AGENT_TOOL_DEFINITIONS } from '../integrations/moodle/tools';
 import { VVZ_AGENT_TOOL_DEFINITIONS } from '../integrations/vvz/client';
 import { MSC_CS_GRADUATION_TOOL_DEFINITION } from '../integrations/vvz/graduation';
+import { SEMESTER_PLAN_TOOL_DEFINITION } from '../integrations/vvz/semester-plan';
 
 export const POLYMATE_CONNECTIONS_TOOL_DEFINITION = {
   name: 'polymate_check_connections',
@@ -16,6 +17,7 @@ export const AGENT_TOOL_DEFINITIONS = [
   ...MOODLE_AGENT_TOOL_DEFINITIONS,
   ...VVZ_AGENT_TOOL_DEFINITIONS,
   MSC_CS_GRADUATION_TOOL_DEFINITION,
+  SEMESTER_PLAN_TOOL_DEFINITION,
   POLYMATE_CONNECTIONS_TOOL_DEFINITION,
   {
     name: 'polymate_remember_student_context',
