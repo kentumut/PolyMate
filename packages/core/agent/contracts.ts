@@ -11,6 +11,7 @@ export const AGENT_TOOL_NAMES = [
   'vvz_search_courses',
   'vvz_get_course_details',
   'msc_cs_check_graduation',
+  'polymate_semester_plan',
   'polymate_check_connections',
   'polymate_remember_student_context',
   'polymate_create_assignment',
@@ -25,17 +26,17 @@ export const AGENT_TOOL_NAMES = [
 ] as const;
 
 export type AgentToolName = typeof AGENT_TOOL_NAMES[number];
-export type AgentChatRequest = Readonly<{ message: string }>;
+export type AgentChatRequest = Readonly<{ message: string; semesterPlan?: unknown }>;
 export type AgentToolCard = Readonly<{ name: AgentToolName; result: unknown }>;
 
 export function parseAgentChatRequest(value: unknown): AgentChatRequest {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Send a JSON object.');
   const body = value as Record<string, unknown>;
-  if (Object.keys(body).some(key => key !== 'message') || typeof body.message !== 'string') throw new Error('Send a message.');
+  if (Object.keys(body).some(key => !['message', 'semesterPlan'].includes(key)) || typeof body.message !== 'string') throw new Error('Send a message.');
   const message = body.message.trim();
   if (!message) throw new Error('Write a message first.');
   if (message.length > AGENT_MESSAGE_MAX_LENGTH) throw new Error(`Keep messages under ${AGENT_MESSAGE_MAX_LENGTH} characters.`);
-  return { message };
+  return { message, ...(body.semesterPlan === undefined ? {} : { semesterPlan: body.semesterPlan }) };
 }
 
 export function isExplicitCalendarConsent(message: string): boolean {

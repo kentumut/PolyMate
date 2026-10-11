@@ -25,6 +25,7 @@
     "./moodle/calendar-feed": "./integrations/moodle/calendar-feed.ts",
     "./vvz": "./integrations/vvz/client.ts",
     "./vvz/graduation": "./integrations/vvz/graduation.ts",
+    "./vvz/semester-plan": "./integrations/vvz/semester-plan.ts",
     "./agent/context": "./agent/context.ts",
     "./agent/http": "./agent/http.ts",
     "./agent/contracts": "./agent/contracts.ts",

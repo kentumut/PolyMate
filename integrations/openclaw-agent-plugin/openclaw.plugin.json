@@ -19,6 +19,7 @@
       "vvz_search_courses",
       "vvz_get_course_details",
       "msc_cs_check_graduation",
+      "polymate_semester_plan",
       "polymate_check_connections",
       "polymate_remember_student_context",
       "polymate_create_assignment",

@@ -293,6 +293,33 @@
     }
   },
   {
+    "name": "polymate_semester_plan",
+    "description": "Use the student’s current browser semester plan. get_plan answers which courses are passed, in progress, or planned. check_graduation evaluates the current plan. improve_plan proposes verified additions without changing the saved plan. suggest_alternative proposes a replacement for one planned courseId without changing the saved plan. The plan is supplied by the authenticated PolyMate app; never ask the model for or accept an owner ID.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "get_plan",
+            "check_graduation",
+            "improve_plan",
+            "suggest_alternative"
+          ]
+        },
+        "courseId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Required only for suggest_alternative; use an ID returned by get_plan."
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "polymate_check_connections",
     "description": "Check whether this student has a Moodle calendar subscription and Google Calendar connection. Moodle calendar subscriptions also work in registered background runs.",
     "parameters": {
