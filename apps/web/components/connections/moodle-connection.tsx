@@ -60,22 +60,22 @@ export function MoodleConnection() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not disconnect Moodle.'); }
     finally { setBusy(false); }
   }
-  return <section className="rounded-2xl border border-[#dce3db] bg-white p-6">
+  return <section className="rounded-2xl border border-[#dbe1ea] bg-white p-6">
     <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-medium">Moodle calendar subscription</h2>
-      {connected && <span className="rounded-full bg-[#edf0e7] px-3 py-1 text-xs">Connected</span>}</div>
-    <p className="mt-2 text-sm leading-6 text-[#617269]">Bring your course dates into PolyMate, then choose which entries need study time.</p>
-    <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm leading-6 text-[#617269]">
+      {connected && <span className="rounded-full bg-[#eaeff7] px-3 py-1 text-xs">Connected</span>}</div>
+    <p className="mt-2 text-sm leading-6 text-[#656e7c]">Bring your course dates into PolyMate, then choose which entries need study time.</p>
+    <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm leading-6 text-[#656e7c]">
       <li>Open your calendar in Moodle and choose <strong>Export calendar</strong>.</li>
       <li>Select events related to your courses and <strong>Recent and next 60 days</strong>.</li>
       <li>Choose <strong>Get calendar URL</strong> and paste the link below.</li>
     </ol>
     <form onSubmit={connect} className="mt-4 space-y-3">
       <label className="block text-sm">Private subscription URL
-        <input type="password" autoComplete="off" spellCheck={false} required maxLength={4096} value={subscriptionUrl} onChange={event => setSubscriptionUrl(event.target.value)} placeholder="https://…/calendar/export_execute.php?…" className="mt-2 w-full rounded-lg border border-[#dce3db] p-2" />
+        <input type="password" autoComplete="off" spellCheck={false} required maxLength={4096} value={subscriptionUrl} onChange={event => setSubscriptionUrl(event.target.value)} placeholder="https://…/calendar/export_execute.php?…" className="mt-2 w-full rounded-lg border border-[#dbe1ea] p-2" />
       </label>
-      <p className="text-xs leading-5 text-[#748278]">This link grants access to your calendar. PolyMate stores it encrypted on the server. Keep it private.</p>
+      <p className="text-xs leading-5 text-[#767f8b]">This link grants access to your calendar. PolyMate stores it encrypted on the server. Keep it private.</p>
       <div className="flex flex-wrap items-center gap-3">
-        <button disabled={busy} className="rounded-lg bg-[#173b32] px-4 py-2 text-sm text-white disabled:opacity-50">{busy ? 'Working…' : connected ? 'Replace subscription' : 'Connect calendar'}</button>
+        <button disabled={busy} className="rounded-lg bg-[#08407e] px-4 py-2 text-sm text-white disabled:opacity-50">{busy ? 'Working…' : connected ? 'Replace subscription' : 'Connect calendar'}</button>
         {connected && <><button type="button" disabled={busy} onClick={refresh} className="text-sm underline disabled:opacity-50">Refresh</button>
           <button type="button" disabled={busy} onClick={disconnect} className="text-sm underline disabled:opacity-50">Disconnect</button></>}
       </div>

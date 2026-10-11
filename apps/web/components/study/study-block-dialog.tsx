@@ -182,7 +182,7 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, initialEndAt, onC
     : status === 'failed' ? currentResult?.error?.message || `The block could not be ${successLabel.toLowerCase()}. Review your connection and try again.`
     : '';
 
-  const inputClass = 'mt-2 w-full rounded-lg border border-[#c8d3c8] bg-white px-3 py-2.5 text-sm disabled:bg-[#edf0eb]';
+  const inputClass = 'mt-2 w-full rounded-lg border border-[#c8d0dc] bg-white px-3 py-2.5 text-sm disabled:bg-[#eceff4]';
   function input(field: keyof StudyBlockFields, label: string, type: string) {
     return <div>
       <label htmlFor={`${id}-${field}`} className="text-sm font-medium">{label}</label>
@@ -195,7 +195,7 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, initialEndAt, onC
   }
 
   const feedback = <div role="status" aria-live="polite" aria-atomic="true">
-    {message && <p className={`rounded-lg border p-3 text-sm ${status === 'failed' ? 'border-[#d9aaa5] text-[#9b302b]' : 'border-[#c8d3c8]'}`}>
+    {message && <p className={`rounded-lg border p-3 text-sm ${status === 'failed' ? 'border-[#d9aaa5] text-[#9b302b]' : 'border-[#c8d0dc]'}`}>
       {status === 'unknown' && <strong>Uncertain: </strong>}{message}
     </p>}
     {status === 'failed' && currentResult?.error?.code === 'conflict' && <p className="mt-2 text-sm">Close this dialog, refresh the calendar, and reopen the block to review its latest saved values.</p>}
@@ -205,19 +205,19 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, initialEndAt, onC
 
   return <dialog ref={dialogRef} aria-labelledby={`${id}-heading`} aria-describedby={`${id}-description`}
     onCancel={event => { event.preventDefault(); if (!submitting && !reconciling && !externalSubmitting) { if (confirmingDelete) cancelDelete(); else onClose(); } }}
-    className="fixed inset-0 m-auto max-h-[calc(100dvh-1rem)] w-[calc(100%_-_1rem)] max-w-lg overflow-y-auto rounded-2xl border border-[#dce3db] bg-[#f6f7f3] p-4 text-[#173b32] shadow-xl backdrop:bg-black/35 sm:max-h-[90dvh] sm:w-[calc(100%_-_2rem)] sm:p-6">
+    className="fixed inset-0 m-auto max-h-[calc(100dvh-1rem)] w-[calc(100%_-_1rem)] max-w-lg overflow-y-auto rounded-2xl border border-[#dbe1ea] bg-[#f4f7fa] p-4 text-[#08407e] shadow-xl backdrop:bg-black/35 sm:max-h-[90dvh] sm:w-[calc(100%_-_2rem)] sm:p-6">
     <h2 id={`${id}-heading`} className="text-2xl font-semibold">{confirmingDelete ? 'Delete study block?' : readOnly ? 'Event details' : editing ? 'Edit study block' : 'Create a study block'}</h2>
-    <p id={`${id}-description`} className="mt-2 text-sm leading-6 text-[#617269]">{confirmingDelete ? 'Review the saved block before deleting it.' : readOnly ? 'This event is read-only here.' : editing ? 'Change the title or move this study block.' : 'Choose your study time.'} All times are in Europe/Zurich.</p>
-    {editing && <p className="mt-2 text-sm text-[#617269]">Completion: {completed ? 'Done' : 'Open'}</p>}
-    {loadedEvent?.allDay && <p className="mt-2 text-sm text-[#617269]">All-day commitment. The end date is exclusive.</p>}
-    {fixtureMode && <p className="mt-3 rounded-lg bg-[#e8ede5] p-3 text-sm">Development fixture — changes are not persisted.</p>}
+    <p id={`${id}-description`} className="mt-2 text-sm leading-6 text-[#656e7c]">{confirmingDelete ? 'Review the saved block before deleting it.' : readOnly ? 'This event is read-only here.' : editing ? 'Change the title or move this study block.' : 'Choose your study time.'} All times are in Europe/Zurich.</p>
+    {editing && <p className="mt-2 text-sm text-[#656e7c]">Completion: {completed ? 'Done' : 'Open'}</p>}
+    {loadedEvent?.allDay && <p className="mt-2 text-sm text-[#656e7c]">All-day commitment. The end date is exclusive.</p>}
+    {fixtureMode && <p className="mt-3 rounded-lg bg-[#e6ecf3] p-3 text-sm">Development fixture — changes are not persisted.</p>}
     {confirmingDelete && loadedEvent ? <section className="mt-6 space-y-5" aria-label="Deletion confirmation">
       <p className="font-medium">Delete “{loadedEvent.title}” from {fixtureMode ? 'the fixture calendar' : 'your calendar'}?</p>
-      <p className="text-sm text-[#617269]">{savedTimeFormatter.format(new Date(loadedEvent.startAt))} – {savedTimeFormatter.format(new Date(loadedEvent.endAt))} (Europe/Zurich)</p>
-      {dirty && <p className="text-sm text-[#617269]">Unsaved edits will not be saved. Delete applies to the saved block shown above.</p>}
+      <p className="text-sm text-[#656e7c]">{savedTimeFormatter.format(new Date(loadedEvent.startAt))} – {savedTimeFormatter.format(new Date(loadedEvent.endAt))} (Europe/Zurich)</p>
+      {dirty && <p className="text-sm text-[#656e7c]">Unsaved edits will not be saved. Delete applies to the saved block shown above.</p>}
       {feedback}
-      <div className="flex flex-wrap justify-end gap-3 border-t border-[#dce3db] pt-4">
-        <button ref={deleteCancelRef} type="button" onClick={cancelDelete} disabled={submitting || reconciling || externalSubmitting} className="rounded-lg border border-[#c8d3c8] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
+      <div className="flex flex-wrap justify-end gap-3 border-t border-[#dbe1ea] pt-4">
+        <button ref={deleteCancelRef} type="button" onClick={cancelDelete} disabled={submitting || reconciling || externalSubmitting} className="rounded-lg border border-[#c8d0dc] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
           {status === 'synced' || status === 'unknown' || status === 'pending' ? 'Close' : 'Cancel'}
         </button>
         {status !== 'synced' && <button type="button" onClick={confirmDelete} disabled={locked} className="rounded-lg bg-[#9b302b] px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">
@@ -233,25 +233,25 @@ function StudyBlockDialogForm({ selectedEvent, initialStartAt, initialEndAt, onC
         {input('endDate', 'End date', 'date')}
         {input('endTime', 'End time', 'time')}
       </div>
-      {!readOnly && <p className="text-xs text-[#617269]">{editing ? 'Moving the start preserves the current duration until you edit the end.' : 'We suggest 50 minutes. You can change the end date and time.'}</p>}
-      {target && onComplete && !completed && <p id={`${id}-completion-note`} className="text-sm text-[#617269]">
+      {!readOnly && <p className="text-xs text-[#656e7c]">{editing ? 'Moving the start preserves the current duration until you edit the end.' : 'We suggest 50 minutes. You can change the end date and time.'}</p>}
+      {target && onComplete && !completed && <p id={`${id}-completion-note`} className="text-sm text-[#656e7c]">
         {dirty ? 'You have unsaved edits. Mark done applies to the saved block; these edits will not be saved.' : 'Mark done records that you completed this study session, not the entire assignment.'}
       </p>}
       {feedback}
-      <div className="flex flex-wrap justify-end gap-3 border-t border-[#dce3db] pt-4">
-        <button type="button" onClick={onClose} disabled={submitting || reconciling || externalSubmitting} className="rounded-lg border border-[#c8d3c8] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
+      <div className="flex flex-wrap justify-end gap-3 border-t border-[#dbe1ea] pt-4">
+        <button type="button" onClick={onClose} disabled={submitting || reconciling || externalSubmitting} className="rounded-lg border border-[#c8d0dc] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
           {readOnly || status === 'synced' || status === 'unknown' || status === 'pending' ? 'Close' : 'Cancel'}
         </button>
         {deleteTarget && onDelete && status !== 'synced' && <button ref={deleteTriggerRef} type="button" onClick={requestDelete} disabled={locked} className="rounded-lg border border-[#9b302b] px-4 py-2.5 text-sm font-medium text-[#9b302b] disabled:opacity-50">Delete</button>}
         {target && onComplete && !completed && status !== 'synced' && <button type="button" onClick={markDone} disabled={locked}
-          aria-describedby={`${id}-completion-note`} className="rounded-lg border border-[#173b32] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
+          aria-describedby={`${id}-completion-note`} className="rounded-lg border border-[#08407e] px-4 py-2.5 text-sm font-medium disabled:opacity-50">
           {status === 'pending' && action === 'complete' ? 'Marking done…' : 'Mark done'}
         </button>}
-        {!readOnly && (!editing || onUpdate) && status !== 'synced' && <button type="submit" disabled={locked} className="rounded-lg bg-[#173b32] px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+        {!readOnly && (!editing || onUpdate) && status !== 'synced' && <button type="submit" disabled={locked} className="rounded-lg bg-[#08407e] px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">
           {status === 'pending' && action !== 'complete' ? pendingLabel : editing ? 'Save' : 'Create'}
         </button>}
       </div>
     </form>}
-    {!confirmingDelete && extraContent && <div className="mt-6 border-t border-[#dce3db] pt-5">{extraContent}</div>}
+    {!confirmingDelete && extraContent && <div className="mt-6 border-t border-[#dbe1ea] pt-5">{extraContent}</div>}
   </dialog>;
 }

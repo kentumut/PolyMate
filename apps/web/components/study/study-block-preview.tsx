@@ -60,13 +60,13 @@ export function StudyBlockPreview() {
   }
 
   return <main className="mx-auto max-w-2xl px-6 py-12">
-    <p className="text-xs font-semibold uppercase tracking-widest text-[#658071]">Development fixture</p>
+    <p className="text-xs font-semibold uppercase tracking-widest text-[#6b7a90]">Development fixture</p>
     <h1 className="mt-3 text-3xl font-semibold">Study-block dialog preview</h1>
-    <p className="mt-4 text-sm leading-6 text-[#617269]">Test creation, edit/move, Mark done, and confirmed deletion with fake callbacks. No Google events are loaded or saved. This page is available only with pnpm dev.</p>
-    <section className="mt-6 space-y-5 rounded-2xl border border-[#dce3db] bg-white p-6" aria-label="Fixture controls">
+    <p className="mt-4 text-sm leading-6 text-[#656e7c]">Test creation, edit/move, Mark done, and confirmed deletion with fake callbacks. No Google events are loaded or saved. This page is available only with pnpm dev.</p>
+    <section className="mt-6 space-y-5 rounded-2xl border border-[#dbe1ea] bg-white p-6" aria-label="Fixture controls">
       <div>
         <label htmlFor="fixture-mode" className="text-sm font-medium">Dialog mode</label>
-        <select id="fixture-mode" value={mode} onChange={event => setMode(event.target.value as typeof mode)} className="mt-2 block w-full rounded-lg border border-[#c8d3c8] bg-white p-3 text-sm">
+        <select id="fixture-mode" value={mode} onChange={event => setMode(event.target.value as typeof mode)} className="mt-2 block w-full rounded-lg border border-[#c8d0dc] bg-white p-3 text-sm">
           <option value="create">Create a new block</option>
           <option value="edit">Edit/move the saved fixture block (initially 75 minutes)</option>
           <option value="personal">View a read-only personal event</option>
@@ -74,7 +74,7 @@ export function StudyBlockPreview() {
       </div>
       <div>
         <label htmlFor="fixture-outcome" className="text-sm font-medium">Submission outcome</label>
-        <select id="fixture-outcome" value={scenario} onChange={event => setScenario(event.target.value as Scenario)} className="mt-2 block w-full rounded-lg border border-[#c8d3c8] bg-white p-3 text-sm">
+        <select id="fixture-outcome" value={scenario} onChange={event => setScenario(event.target.value as Scenario)} className="mt-2 block w-full rounded-lg border border-[#c8d0dc] bg-white p-3 text-sm">
           <option value="success">Success after 1.2 seconds</option>
           <option value="failure">Failed — simulated conflict</option>
           <option value="unknown">Uncertain — unconfirmed write</option>
@@ -86,17 +86,17 @@ export function StudyBlockPreview() {
         <input type="checkbox" checked={prefill} onChange={event => setPrefill(event.target.checked)} />
         Prefill 9 October 2026 at 09:00 Zurich time
       </label>}
-      <button type="button" onClick={() => { setOpenedEvent(fixtureEvent ? { ...fixtureEvent } : null); setOperationResult(undefined); setOpen(true); }} disabled={mode === 'edit' && !fixtureEvent} className="rounded-lg bg-[#173b32] px-4 py-3 text-sm font-medium text-white disabled:opacity-50">Open study-block dialog</button>
-      <button type="button" onClick={() => { setFixtureEvent({ ...initialEvent }); setOperationResult(undefined); }} className="ml-3 rounded-lg border border-[#c8d3c8] px-4 py-3 text-sm font-medium">Reset saved fixture</button>
-      {!fixtureEvent && <p className="text-sm text-[#617269]">The fixture block was deleted. Reset the saved fixture to test it again.</p>}
+      <button type="button" onClick={() => { setOpenedEvent(fixtureEvent ? { ...fixtureEvent } : null); setOperationResult(undefined); setOpen(true); }} disabled={mode === 'edit' && !fixtureEvent} className="rounded-lg bg-[#08407e] px-4 py-3 text-sm font-medium text-white disabled:opacity-50">Open study-block dialog</button>
+      <button type="button" onClick={() => { setFixtureEvent({ ...initialEvent }); setOperationResult(undefined); }} className="ml-3 rounded-lg border border-[#c8d0dc] px-4 py-3 text-sm font-medium">Reset saved fixture</button>
+      {!fixtureEvent && <p className="text-sm text-[#656e7c]">The fixture block was deleted. Reset the saved fixture to test it again.</p>}
     </section>
     <section className="mt-6" aria-label="Callback inspection">
       <h2 className="text-lg font-semibold">Callback calls: {calls}</h2>
-      <p className="mt-2 text-sm text-[#617269]">Invalid submissions should not increase this count. Valid submissions send the following data:</p>
-      <pre className="mt-3 overflow-x-auto rounded-xl border border-[#dce3db] bg-white p-4 text-xs">{lastRequest ? JSON.stringify(lastRequest, null, 2) : 'No callback invoked yet.'}</pre>
+      <p className="mt-2 text-sm text-[#656e7c]">Invalid submissions should not increase this count. Valid submissions send the following data:</p>
+      <pre className="mt-3 overflow-x-auto rounded-xl border border-[#dbe1ea] bg-white p-4 text-xs">{lastRequest ? JSON.stringify(lastRequest, null, 2) : 'No callback invoked yet.'}</pre>
       <h2 className="mt-5 text-lg font-semibold">Saved fixture block</h2>
-      <p className="mt-2 text-sm text-[#617269]">Only confirmed mutations change or remove this in-memory record. Close and reopen edit mode to see saved changes.</p>
-      <pre className="mt-3 overflow-x-auto rounded-xl border border-[#dce3db] bg-white p-4 text-xs">{fixtureEvent ? JSON.stringify(fixtureEvent, null, 2) : 'No saved fixture block — confirmed deletion.'}</pre>
+      <p className="mt-2 text-sm text-[#656e7c]">Only confirmed mutations change or remove this in-memory record. Close and reopen edit mode to see saved changes.</p>
+      <pre className="mt-3 overflow-x-auto rounded-xl border border-[#dbe1ea] bg-white p-4 text-xs">{fixtureEvent ? JSON.stringify(fixtureEvent, null, 2) : 'No saved fixture block — confirmed deletion.'}</pre>
     </section>
     <StudyBlockDialog open={open} selectedEvent={mode === 'create' ? null : mode === 'edit' ? fixtureEvent ?? openedEvent : {
       ...initialEvent, id: 'fixture-personal-event', title: 'Lunch with friends', source: 'google-personal', editable: false,
